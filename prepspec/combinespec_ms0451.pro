@@ -15,6 +15,8 @@ pro combinespec_ms0451,rematch=rematch,plot=plot
    if file_test(outdir,/directory) eq 0 then file_mkdir,outdir
    npix = 4096
 
+   readcol, '/scr2/nichal/workspace2/sps_fit/lines.txt', linestart, lineend, linetype, format='D,D,A,X', /silent, comment='#'
+
    if keyword_set(rematch) then begin
       cat = mrdfits('/scr2/nichal/keck/deimos/Cl0024MS0451/MS0451master_specz.fits.gz',1)
       badcat = where(cat.ra eq 99., complement=goodcat)
@@ -153,6 +155,23 @@ pro combinespec_ms0451,rematch=rematch,plot=plot
                  strout.contdiv[wdup[ii]]=wmean(contdivarr[wdup[ii],*],dcontdiv,error=contdivivar,/nan)
                  strout.contdivivar[wdup[ii]]=contdivivar
              endfor
+             ;signal to noise
+             ;create mask
+             contmask = bytarr(npix)+1
+             lambdarest = lambdafull/(1.+cat[iobj].z)
+             for i=0,n_elements(linestart)-1 do begin
+                w = where(lambdarest ge linestart[i] and lambdarest le lineend[i], c)
+                if c gt 0 then contmask[w] = 0
+             endfor
+             w = where(~finite(strout.contdiv) or ~finite(strout.contdivivar), c)
+             if c gt 0 then contmask[w]=0          
+             ;calculate the deviation
+             wcont = where(contmask eq 1)
+             dev = abs(strout.contdiv[wcont] - 1.)
+             avgdev = mean(dev)
+             w = where(dev lt 3.0*avgdev, c)
+             if c gt 0 then strout.sn = 1.0/mean(dev[w])
+             print, 'final SN:', strout.sn
              if keyword_set(plot) then begin
                 colors = ['purple','cyan','green','yellow','orange','red','brown']
                 z=cat[iobj].z

@@ -1695,7 +1695,6 @@ pro sps_fit::getscience, files=files
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Initializing ...'
 
     common mask_in, mask_in
-    common mosfire, mosflag, deimosflag, lrisflag
    
     vdispfile = '/scr2/nichal/keck/deimos/Cl0024MS0451/MS0451_sigmas.txt'
     readcol, vdispfile, vd_objname, vd_vdisp, vd_vdisperr, format='A,D,D', comment='#', /silent
@@ -1738,8 +1737,6 @@ pro sps_fit::getscience, files=files
         wgood = bytarr(nspec)+1
 
         for i=0,nspec-1 do begin
-            deimosflag = 1
-            lrisflag = 0
             science = {science}
             science.skyfit = -1
             science.skylinemask = -1
@@ -1756,25 +1753,8 @@ pro sps_fit::getscience, files=files
                 datafull = datafull[locmax]
             endif
             airmass = sxpar(hdr, 'AIRMASS')
-            ras = sxpar(hdr, 'RA_OBJ')
-            decs = sxpar(hdr, 'DEC_OBJ')
-            decs_mask = sxpar(hdr, 'DEC')
-            decssplit = strsplit(decs, ':', /extract)
-            if stregex(decssplit[0], '\*', /boolean) eq 1 then begin
-               decssplit_mask = strsplit(decs_mask, ':', /extract)
-               decssplit[0] = decssplit_mask[0]
-               decs = strjoin(decssplit, ':')
-            endif
-            if stregex(decssplit[1], '\*', /boolean) eq 1 then begin
-               decssplit_mask = strsplit(decs_mask, ':', /extract)
-               decssplit[0] = '-00'
-               decssplit[1] = '00'
-               decs = strjoin(decssplit, ':')
-            endif
-            get_coords, coords, instring=ras+'  '+decs
-            science.ra = coords[0]*15.
-            science.dec = coords[1]
-            science.jdobs = double(sxpar(hdr, 'MJD-OBS')) + 2400000.5
+            science.ra = phot.ra
+            science.dec = phot.dec
             
             lambda = data1.lambda
             contdiv = data1.contdiv
@@ -1794,7 +1774,7 @@ pro sps_fit::getscience, files=files
             science.z = phot.z
             science.zquality = phot.zquality
             science.zspec = science.z
-            science.zsource = phot.zsource
+            science.zcat = phot.zsource
             science.b = phot.b_auto
             science.v = phot.v_auto
             science.r = phot.r_auto
@@ -1868,8 +1848,6 @@ pro sps_fit::getscience, files=files
                 continue
             endif
 
-            science.lrisflag = lrisflag
-            science.deimosflag = deimosflag
 
             science.lambda = lambda
             science.dlam = dlam
@@ -1937,7 +1915,6 @@ end
 
 
 pro sps_fit::initialize_directory, directory=directory
-    common mosfire, mosflag, deimosflag, lrisflag
     common mask_in, mask_in
 
     newdirectory = '/scr2/nichal/workspace2/sps_fit/data/'+mask_in+'/'
@@ -2158,7 +2135,6 @@ pro science__define
                slit:0L, $
                ra:-999d, $
                dec:-999d, $
-               jdobs:-999d, $
                lambda:dblarr(npix), $
                telldiv:dblarr(npix), $
                telldivivar:dblarr(npix), $
@@ -2177,13 +2153,12 @@ pro science__define
                skylinemask:lonarr(nsky), $
                goodsky:0, $
                airmass:-999d, $
-               zobs:-999d, $
-               zobserr:-999d, $
+               zoii:-999d, $
                zspec:-999d, $
                zfit:-999d, $
                z:-999d, $
                zquality:-999d, $
-               zsource:0, $
+               zcat:0, $
                phot_color:'', $
                b:-999d, $
                v:-999d, $
@@ -2235,20 +2210,14 @@ pro science__define
                wlfail_blue:0B,$
                wlfail_red:0B,$
                nloop:0, $
-               lrisflag: 0B, $
-               deimosflag: 0B}
 end
 
 
 pro sps_fit_ms0451
-    common mosfire, mosflag, deimosflag, lrisflag
     common mask_in, mask_in
-    mask = 'combined_uniq_ms0451'
+    mask = 'combined_uniq_ms0451_spline'
     mask_in = mask
-    mosflag = 0
-    deimosflag = 0
-    lrisflag   = 0
-    directory = '/scr2/nichal/keck/deimos/Cl0024MS0451/nicha_reduced/ms0451/'+mask
+    directory = '/scr2/nichal/workspace4/prepspec/'+mask
     if ~file_test(directory) then message, 'Mask not found.'
     n = obj_new('sps_fit', directory=directory)
 end
