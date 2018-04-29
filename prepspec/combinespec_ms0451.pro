@@ -47,6 +47,7 @@ pro combinespec_ms0451,rematch=rematch,plot=plot
    cat  = mrdfits('matched_ms0451obj_members.fits',2)  
    distance = mrdfits('matched_ms0451obj_members.fits',3) 
    mass = mrdfits('matched_ms0451obj_members.fits',4)
+   makems0451regionfile,list,cat
    nobjs = n_elements(list)
    for iobj=0,nobjs-1 do begin ;loop over the list of uniq gals
       obj = list[iobj]
@@ -60,6 +61,7 @@ pro combinespec_ms0451,rematch=rematch,plot=plot
       print,iobj,nobjs-1,format='("now doing ",I3,"/",I3)'
       print, 'specname    catname   redshift   distance'
       print,name,' ',strtrim(cat[iobj].SPECNAME,2),cat[iobj].z,distance[iobj]
+      print, obj.mask[0:ndup-1]
       ;;;;;;;;;;;
       fileout = outdir+'spec1d.combinedmasks.'+string(iobj,format='(I03)')+'.'+name+'.fits'
 
@@ -152,8 +154,8 @@ pro combinespec_ms0451,rematch=rematch,plot=plot
                  if cnan gt 0 then dcontdiv(wnan) = 1./0.
                  err = abs(dcontdiv/contdivarr[wdup[ii],*])
                  strout.dlam[wdup[ii]] = wmean(dlamarr[wdup[ii],*],abs(err*dlamarr[wdup[ii],*]),/nan) 
-                 strout.contdiv[wdup[ii]]=wmean(contdivarr[wdup[ii],*],dcontdiv,error=contdivivar,/nan)
-                 strout.contdivivar[wdup[ii]]=contdivivar
+                 strout.contdiv[wdup[ii]]=wmean(contdivarr[wdup[ii],*],dcontdiv,error=contdiverr,/nan)
+                 strout.contdivivar[wdup[ii]]=1./contdiverr^2
              endfor
              ;signal to noise
              ;create mask
@@ -172,13 +174,29 @@ pro combinespec_ms0451,rematch=rematch,plot=plot
              w = where(dev lt 3.0*avgdev, c)
              if c gt 0 then strout.sn = 1.0/mean(dev[w])
              print, 'final SN:', strout.sn
-             if keyword_set(plot) then begin
+             if keyword_set(plot) and iframe eq 1 then begin
+                !p.font=0
+                window,0,xsize=1600,ysize=800 
                 colors = ['purple','cyan','green','yellow','orange','red','brown']
+                lines = [3727.,3933.,3968.,4861.]
+                linenames = ['OII','CaK', 'CaH', 'Hb']
                 z=cat[iobj].z
-                plot,strout.lambda/(1.+z),strout.contdiv,xtitle='lambda',ytitle='contdiv',title=name,yrange=[-4,4]
+                plot,strout.lambda,strout.contdiv,xtitle='lambda',ytitle='contdiv',title=name+' '+string(iobj),yrange=[-3,3],position=[0.05,0.6,0.95,0.95],/normal,xrange=[5500,8500]
+                for iplot=ndup-1,0,-1 do oplot,strall[iplot].lambda,strall[iplot].contdiv,color=fsc_color(colors[iplot])
+                oplot,strout.lambda,strout.contdiv,color=fsc_color('white') 
+                for iline =0,n_elements(lines)-1 do xyouts,lines[iline]*(1.+z),0.07*!Y.CRANGE[0]+0.93*!Y.CRANGE[1],linenames[iline],orientation=90, alignment=1, color=fsc_color('yellow')
+
+                plot,strout.lambda/(1.+z),strout.contdiv,xrange=[3700,3760],title='OII',position=[0.05,0.05,0.32,0.5],/noerase,/normal
                 for iplot=ndup-1,0,-1 do oplot,strall[iplot].lambda/(1.+z),strall[iplot].contdiv,color=fsc_color(colors[iplot])
                 oplot,strout.lambda/(1.+z),strout.contdiv,color=fsc_color('white')
-                wait,1
+                plot,strout.lambda/(1.+z),strout.contdiv,xrange=[3900,4000],title='CaII',position=[0.37,0.05,0.64,0.5],/noerase,/normal
+                for iplot=ndup-1,0,-1 do oplot,strall[iplot].lambda/(1.+z),strall[iplot].contdiv,color=fsc_color(colors[iplot])
+                oplot,strout.lambda/(1.+z),strout.contdiv,color=fsc_color('white')
+                plot,strout.lambda/(1.+z),strout.contdiv,xrange=[4830,4890],title='Hb',position=[0.69,0.05,0.96,0.5],/noerase,/normal
+                for iplot=ndup-1,0,-1 do oplot,strall[iplot].lambda/(1.+z),strall[iplot].contdiv,color=fsc_color(colors[iplot])
+                oplot,strout.lambda/(1.+z),strout.contdiv,color=fsc_color('white')
+                print, cat[iobj].ra,cat[iobj].dec,format='(f12.8)'
+                stop
              endif    
          endif ;if ndup gt 1
 

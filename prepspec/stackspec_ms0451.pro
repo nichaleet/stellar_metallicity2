@@ -15,6 +15,7 @@ pro stackspec_ms0451,retrieve=retrieve
       redshift = fltarr(cspec)
       oiiew = fltarr(cspec)
       oiiewerr = fltarr(cspec)
+      zsource = fltarr(cspec)
       for i=0,cspec-1 do begin
          spec = mrdfits(files[i],1)
          fits_open,files[i],fitsinfo
@@ -26,6 +27,8 @@ pro stackspec_ms0451,retrieve=retrieve
          sn[i] = spec.sn
          f814w[i] = cat.f814w_auto
          redshift[i] = cat.z
+         zsource[i] = cat.zsource
+         print,'zsource,zquality:',cat.zsource,cat.zquality
          oiiew[i] = oii_ew_new(spec.contdiv,spec.lambda,spec.contdivivar,cat.z,widtherr=widtherr,znew=znew)
          oiiewerr[i] = widtherr
          if znew ne redshift[i] then redshift[i] = znew
