@@ -1,3 +1,325 @@
+
+
+; ============== COMBOBOX  =============
+pro sps_fit::handle_combobox, ev
+    self.i = ev.index
+    self->statusbox
+    self.ylim = minmax(((*self.spec)[self.i].indiv_contdiv)*((*self.spec)[self.i].indiv_continuum),/nan)
+    self.keystate = 0
+    self->redraw
+    widget_control, widget_info(self.base, find_by_uname='spec'), /input_focus
+end
+
+
+
+; ============= DRAW CLICK =============
+pro combspec::handle_draw_click, ev
+    click_coords = convert_coord(ev.x, ev.y, /device, /to_data)
+    widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
+    if mode lt 1 then click_coords /= 1d + (*self.spec)[self.i].z
+    case ev.modifiers of
+        0: begin
+            case ev.press of
+                1: lrange = (self.lambdalim[1] - self.lambdalim[0]) / 2.
+                4: lrange = (self.lambdalim[1] - self.lambdalim[0]) * 2.
+                else: begin
+                    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Mouse click not recognized.'
+                    return
+                end
+            endcase
+            llownew = click_coords[0] - lrange/2.
+            lhighnew = click_coords[0] + lrange/2.
+            zl = mode lt 2 ? (*self.spec)[self.i].z : 0.0
+            widget_control, widget_info(self.base, find_by_uname='lambdalow'), set_value=strcompress(string(self.lambdalim[0]*(1d + zl), format='(D7.1)'), /rem)
+            widget_control, widget_info(self.base, find_by_uname='lambdahigh'), set_value=strcompress(string(self.lambdalim[1]*(1d + zl), format='(D7.1)'), /rem)
+            self->lambdalow, llownew, /noredraw
+            self->lambdahigh, lhighnew
+        end
+        1: begin  ;shift and click
+            if ev.press ne 1 then begin
+                widget_control, widget_info(self.base, find_by_uname='status'), set_value='Mouse click not recognized.'
+                return
+            endif
+            lrange = self.lambdalim[1] - self.lambdalim[0]
+            llownew = click_coords[0] - lrange/2.
+            lhighnew = click_coords[0] + lrange/2.
+            zl = mode lt 1 ? (*self.spec)[self.i].z : 0.0
+            widget_control, widget_info(self.base, find_by_uname='lambdalow'), set_value=strcompress(string(self.lambdalim[0]*(1d + zl), format='(D7.1)'), /rem)
+            widget_control, widget_info(self.base, find_by_uname='lambdahigh'), set_value=strcompress(string(self.lambdalim[1]*(1d + zl), format='(D7.1)'), /rem)
+            self->lambdalow, llownew, /noredraw
+            self->lambdahigh, lhighnew
+        end
+        2: begin  ;control and click
+            widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
+            case mode of
+                mode le 0: ylim = self.ylim
+                mode eq 1: ylim = self.divylim
+            endcase
+            case ev.press of
+                1: yrange = (ylim[1] - ylim[0]) / 2.
+                4: yrange = (ylim[1] - ylim[0]) * 2.
+                else: begin
+                    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Mouse click not recognized.'
+                    return
+                end
+            endcase
+            ylownew = click_coords[1] - yrange/2.
+            yhighnew = click_coords[1] + yrange/2.
+            case 1 of
+                mode le 0: begin
+                    widget_control, widget_info(self.base, find_by_uname='ylow'), set_value=strcompress(string(ylownew, format='(g8.2)'), /rem)
+                    widget_control, widget_info(self.base, find_by_uname='yhigh'), set_value=strcompress(string(yhighnew, format='(g8.1)'), /rem)
+                end
+                else: begin
+                    widget_control, widget_info(self.base, find_by_uname='ylow'), set_value=strcompress(string(ylownew, format='(D5.2)'), /rem)
+                    widget_control, widget_info(self.base, find_by_uname='yhigh'), set_value=strcompress(string(yhighnew, format='(D5.1)'), /rem)
+                end
+            endcase
+            self->ylow, ylownew, /noredraw
+            self->yhigh, yhighnew
+        end
+        else: begin
+            widget_control, widget_info(self.base, find_by_uname='status'), set_value='Mouse click not recognized.'
+            return
+        end
+    endcase
+end
+
+
+; ============= DRAW KEYS ==============
+pro compspec::handle_draw_key, ev
+   common npixcom, npix,ndup 
+   if ev.press ne 1 then return
+   key = string(ev.ch)
+   coords = convert_coord(ev.x, ev.y, /device, /to_data)
+   widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
+   spec= (*self.spec.[self.i]
+   case mode of
+      0: begin        ;continuum fit
+          widget_control, widget_info(self.base, find_by_uname='iplotcont'), get_value=wplotcon
+          case key of
+              'b': begin
+                  case self.keystate of
+                      0: begin
+                          self->newspec, increment=-1
+                      end
+                      else: widget_control, widget_info(self.base, find_by_uname='status'), set_value='Key not recognized.'
+                  endcase
+              end
+              'n': begin
+                  case self.keystate of
+                      0: begin
+                          self->newspec, increment=1
+                      end
+                      else: widget_control, widget_info(self.base, find_by_uname='status'), set_value='Key not recognized.'
+                  endcase
+              end
+              'f': begin
+                  case self.keystate of
+                      0: begin
+                          self->default_range
+                          self->redraw
+                      end
+                      else: widget_control, widget_info(self.base, find_by_uname='status'), set_value='Key not recognized.'
+                  endcase
+              end
+              'q': begin
+                  case 1 of
+                      self.keystate eq 1 or self.keystate eq 2: begin
+                          self.keystate = 0
+                          widget_control, widget_info(self.base, find_by_uname='status'), set_value='Continuum mask modification cancelled.'
+                      end
+                      else: widget_control, widget_info(self.base, find_by_uname='status'), set_value='Key not recognized.'
+                  endcase
+              end
+              'e': begin
+                  case self.keystate of
+                      0: begin
+                          self.lambda1 = coords[0]
+                          self.keystate = 1
+                          widget_control, widget_info(self.base, find_by_uname='status'), set_value="Press 'e' again to exclude wavelength region from continuum mask."
+                      end
+                      1: begin
+                          widget_control, widget_info(self.base, find_by_uname='status'), set_value='Updating database ...'
+                          lambda1 = self.lambda1 < coords[0]
+                          lambda2 = self.lambda1 > coords[0]
+                          self.keystate = 0
+                          specall = *self.spec
+                          w = where(specall[self.i].indiv_lambda[*,wplotcon] gt lambda1 and specall[self.i].indiv_lambda[*,wplotcon] lt lambda2, c)
+                          if c eq 0 then begin
+                              widget_control, widget_info(self.base, find_by_uname='status'), set_value='This wavelength region is invalid.'
+                          endif else begin
+                              specall[self.i].indiv_contmask[w,wplotcon] = 0
+                              ptr_free, self.spec
+                              self.spec = ptr_new(specall)
+                              self->redraw
+                          endelse
+                      end
+                      else: widget_control, widget_info(self.base, find_by_uname='status'), set_value='Key not recognized.'
+                  endcase
+              end
+              'i': begin
+                  case self.keystate of
+                      0: begin
+                          self.lambda1 = coords[0]
+                          self.keystate = 2
+                          widget_control, widget_info(self.base, find_by_uname='status'), set_value="Press 'i' again to include wavelength region in continuum mask."
+                      end
+                      2: begin
+                          widget_control, widget_info(self.base, find_by_uname='status'), set_value='Updating database ...'
+                          lambda1 = self.lambda1 < coords[0]
+                          lambda2 = self.lambda1 > coords[0]
+                          self.keystate = 0
+                          specall = *self.spec
+                          w = where(specall[self.i].indiv_lambda[*,wplotcon] gt lambda1 and specall[self.i].indiv_lambda[*,wplotcon] lt lambda2, c)
+                          if c eq 0 then begin
+                              widget_control, widget_info(self.base, find_by_uname='status'), set_value='This wavelength region is invalid.'
+                          endif else begin
+                              specall[self.i].indiv_contmask[w,wplotcon] = 1
+                              ptr_free, self.spec
+                              self.spec = ptr_new(specall)
+                              self->redraw
+                          endelse
+                      end
+                      else: widget_control, widget_info(self.base, find_by_uname='status'), set_value='Key not recognized.'
+                  endcase
+
+              end
+              else: widget_control, widget_info(self.base, find_by_uname='status'), set_value='Key not recognized.'
+          endcase
+      end
+
+      1: begin        ;pixel mask
+          case key of
+              '0': begin
+                  case self.keystate of
+                      0: begin
+                          widget_control, widget_info(self.base, find_by_uname='good'), set_value=[~spec.indiv_good[0],spec.indiv_good[1:ndup-1]]
+                          self->toggle_good
+                      end
+                      else: widget_control, widget_info(self.base, find_by_uname='status'), set_value='Key not recognized.'
+                  endcase
+              end
+
+              '1': begin
+                  case self.keystate of
+                      0: begin
+                          widget_control, widget_info(self.base, find_by_uname='good'), set_value=[spec.indiv_good[0],~spec.indiv_good[1],spec.indiv_good[2:ndup-1]]
+                          self->toggle_good
+                      end
+                      else: widget_control, widget_info(self.base, find_by_uname='status'), set_value='Key not recognized.'
+                  endcase
+              end
+
+              '2': begin
+                  case self.keystate of
+                      0: begin
+                          widget_control, widget_info(self.base, find_by_uname='good'), set_value=[spec.indiv_good[0:1],~spec.indiv_good[2],spec.indiv_good[3:ndup-1]]
+                          self->toggle_good
+                      end
+                      else: widget_control, widget_info(self.base, find_by_uname='status'), set_value='Key not recognized.'
+                  endcase
+              end
+
+              '3': begin
+                  case self.keystate of
+                      0: begin
+                          widget_control, widget_info(self.base, find_by_uname='good'), set_value=[spec.indiv_good[0:2],~spec.indiv_good[3],spec.indiv_good[4:ndup-1]]
+                          self->toggle_good
+                      end
+                      else: widget_control, widget_info(self.base, find_by_uname='status'), set_value='Key not recognized.'
+                  endcase
+              end
+
+              '4': begin
+                  case self.keystate of
+                      0: begin
+                          widget_control, widget_info(self.base, find_by_uname='good'), set_value=[spec.indiv_good[0:3],~spec.indiv_good[4],spec.indiv_good[5:ndup-1]]
+                          self->toggle_good
+                      end
+                      else: widget_control, widget_info(self.base, find_by_uname='status'), set_value='Key not recognized.'
+                  endcase
+              end
+
+              '5': begin
+                  case self.keystate of
+                      0: begin
+                          widget_control, widget_info(self.base, find_by_uname='good'), set_value=[spec.indiv_good[0:4],~spec.indiv_good[5],spec.indiv_good[6]]
+                          self->toggle_good
+                      end
+                      else: widget_control, widget_info(self.base, find_by_uname='status'), set_value='Key not recognized.'
+                  endcase
+              end
+
+              '6': begin
+                  case self.keystate of
+                      0: begin
+                          widget_control, widget_info(self.base, find_by_uname='good'), set_value=[spec.indiv_good[0:5],~spec.indiv_good[6]]
+                          self->toggle_good
+                      end
+                      else: widget_control, widget_info(self.base, find_by_uname='status'), set_value='Key not recognized.'
+                  endcase
+              end
+
+
+              'b': begin
+                  case self.keystate of
+                      0: begin
+                          self->newspec, increment=-1
+                      end
+                      else: widget_control, widget_info(self.base, find_by_uname='status'), set_value='Key not recognized.'
+                  endcase
+              end
+              'n': begin
+                  case self.keystate of
+                      0: begin
+                          self->newspec, increment=1
+                      end
+                      else: widget_control, widget_info(self.base, find_by_uname='status'), set_value='Key not recognized.'
+                  endcase
+              end
+              'f': begin
+                  case self.keystate of
+                      0: begin
+                          self->default_range
+                          self->redraw
+                      end
+                      else: widget_control, widget_info(self.base, find_by_uname='status'), set_value='Key not recognized.'
+                  endcase
+              end
+              'h': begin
+                  self.lambdalim = [6513, 6613]
+                  self->redraw
+              end
+              'q': begin
+                  case 1 of
+                      self.keystate eq 1 or self.keystate eq 2: begin
+                          self.keystate = 0
+                          widget_control, widget_info(self.base, find_by_uname='status'), set_value='Pixel mask modification cancelled.'
+                      end
+                      else: widget_control, widget_info(self.base, find_by_uname='status'), set_value='Key not recognized.'
+                  endcase
+              end
+              else: widget_control, widget_info(self.base, find_by_uname='status'), set_value='Key not recognized.'
+          endcase
+      end
+   endcase
+end
+
+
+; ============== DESTROY ===============
+pro compspec_cleanup, ev
+    widget_control, ev, get_uvalue=obj
+    obj_destroy, obj
+end
+
+
+pro cospec::cleanup
+    ptr_free, self.science
+end
+
+
+
 pro combspec::newspec, increment=increment, noredraw=noredraw
     newi = self.i
     newi += increment
@@ -287,137 +609,109 @@ end
 
 ; ============== REDRAW ===============
 pro sps_fit::redraw
-    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Redrawing ...'
-    self->default_range, /update
-    widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
-    widget_control, widget_info(self.base, find_by_uname='spec'), get_value=index
-    wset, index
-    science = (*self.science)[self.i]
+   common npixcom, npix,ndup
+   widget_control, widget_info(self.base, find_by_uname='status'), set_value='Redrawing ...'
+   self->default_range, /update
+   widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
+   widget_control, widget_info(self.base, find_by_uname='spec'), get_value=index
+   wset, index
+   spec = (*self.spec)[self.i]
 
-    case mode of
-        ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-        0: begin                ;continuum fit
-           ;;making the highlight region
-           t = round(-1*ts_diff(science.contmask, 1))
-           wstart = where(t eq 1, cstart)+1
-           wend = where(t eq -1, cend)
-           if science.contmask[0] eq 1 then begin
-              if cstart eq 0 then begin
-                 wstart = 0
-              endif else begin
-                 wstart = [0, wstart]
+   case mode of
+       ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+       0: begin ;continuum fit
+          widget_control, widget_info(self.base, find_by_uname='iplotcont'), get_value=wplotcon
+          if wplotcon lt spec.indiv_count then begin
+             plot, spec.indiv_lambda[*,wplotcon], spec.indiv_contdiv[*,wplotcon]*spec.indiv_continuum[*,wplotcon], xrange=self.lambdalim*(1d + spec.z), yrange=self.ylim, xstyle=5, ystyle=5, background=fsc_color('white'), color=fsc_color('black'), /nodata
+         
+             ;;making the highlight region
+             t = round(-1*ts_diff(spec.indiv_contmask[*,wplotcon], 1))
+             wstart = where(t eq 1, cstart)+1
+             wend = where(t eq -1, cend)
+             if spec.indiv_contmask[0,wplotcon] eq 1 then begin
+                if cstart eq 0 then begin
+                   wstart = 0
+                endif else begin
+                   wstart = [0, wstart]
+                  endelse
+                cstart += 1
+             endif
+             if spec.indiv_contmask[n_elements(t)-1,wplotcon] eq 1 then begin
+                if cend eq 0 then begin
+                   wend = n_elements(t)-1
+                endif else begin
+                   wend = [wend, n_elements(t)-1]
                 endelse
-              cstart += 1
-           endif
-           if science.contmask[n_elements(t)-1] eq 1 then begin
-              if cend eq 0 then begin
-                 wend = n_elements(t)-1
-              endif else begin
-                 wend = [wend, n_elements(t)-1]
-              endelse
-              cend += 1
-           endif
-           if cstart ne cend then message, 'There are a different number of starting and ending continuum wavelengths.'
-           ;; if cstart eq 0 or cend eq 0 then message, 'There are no continuum regions.'
+                cend += 1
+             endif
+             if cstart ne cend then message, 'There are a different number of starting and ending continuum wavelengths.'
+             ;; if cstart eq 0 or cend eq 0 then message, 'There are no continuum regions.'
 
-           plot, science.lambda, science.contdiv*science.spscontfull, xrange=self.lambdalim*(1d + science.zspec), yrange=self.ylim, xstyle=5, ystyle=5, background=fsc_color('white'), color=fsc_color('black'), /nodata
-           for i=0,cstart-1 do begin
-              x = ([science.lambda[wstart[i]], science.lambda[wstart[i]], science.lambda[wend[i]], science.lambda[wend[i]]] > (self.lambdalim[0] * (1d + science.zspec))) < (self.lambdalim[1] * (1d + science.zspec))
-              y = [self.ylim[0], self.ylim[1], self.ylim[1], self.ylim[0]]
-              polyfill, x, y, color=fsc_color('light cyan')
-           endfor
-           ;;finish highlighting masked regions
-           ;;start ploting
-           ;;plot the data(*spscontfull) and full model
-           oplot, science.lambda, science.contdiv*science.spscontfull, color=fsc_color('black')
-           if science.feh ne -999. then begin
-              oplot, science.lambda,science.spsspecfull,color=fsc_color('red')
-              oplot, science.lambda,science.spscontfull,color=fsc_color('orange')
-           endif
-           ;;make the axes labels
-           plot, science.lambda, science.contdiv*science.spscontfull, xrange=self.lambdalim * (1d + science.zspec), yrange=self.ylim, xstyle=1, ystyle=1, background=fsc_color('white'), color=fsc_color('black'), xtitle='!6observed wavelength (!sA!r!u!9 %!6!n)!3', ytitle='!6flux (e!E-!N/hr)!3', /nodata, /noerase
-           ;;highlight the telluric region and write line names
-           n = n_elements(*self.tellstart)
-           for i=0,n-1 do begin
-              oplot, [(*self.tellstart)[i], (*self.tellend)[i]], 0.04*!Y.CRANGE[0]+0.96*!Y.CRANGE[1]+[0, 0], color=fsc_color('green'), thick=(*self.tellthick)[i]
-           endfor
-           n = n_elements(*self.linewaves)
-           for i=0,n-1 do begin
-              if (*self.linewaves)[i] * (1d + science.zspec) le !X.CRANGE[0] or (*self.linewaves)[i] * (1d + science.zspec) ge !X.CRANGE[1] then continue
-              oplot, [(*self.linewaves)[i], (*self.linewaves)[i]] * (1d + science.zspec), [0.06*!Y.CRANGE[0]+0.94*!Y.CRANGE[1], 0.02*!Y.CRANGE[0]+0.98*!Y.CRANGE[1]], color=fsc_color((*self.linecolors)[i])
-              xyouts, ((*self.linewaves)[i] * (1d + science.zspec))+0.002*(!X.CRANGE[1]-!X.CRANGE[0]), 0.07*!Y.CRANGE[0]+0.93*!Y.CRANGE[1], (*self.linenames)[i], orientation=90, alignment=1, color=fsc_color((*self.linecolors)[i])
-           endfor
+             for i=0,cstart-1 do begin
+                x = ([spec.indiv_lambda[wstart[i],wplotcon], spec.indiv_lambda[wstart[i],wplotcon], spec.indiv_lambda[wend[i],wplotcon], $
+                      spec.indiv_lambda[wend[i],wplotcon]] > (self.lambdalim[0] * (1d + spec.z))) < (self.lambdalim[1] * (1d + spec.z))
+                y = [self.ylim[0], self.ylim[1], self.ylim[1], self.ylim[0]]
+                polyfill, x, y, color=fsc_color(*self.indivcolors[wplotcon])
+             endfor
+             ;;finish highlighting masked regions
+
+             ;;start ploting
+             for idup=0,ndup-1 do begin 
+                if spec.indiv_good[idup] eq 1 then begin
+                   oplot, spec.indiv_lambda[*,idup], spec.indiv_contdiv[*,idup]*spec.indiv_continuum[*,idup], color=fsc_color(*self.indivcolors[idup])
+                endif
+             endfor
+             oplot, spec.indiv_lambda[*,wplotcon], spec.indiv_contdiv[*,wplotcon]*spec.indiv_continuum[*,wplotcon], color=fsc_color(*self.indivcolors[wplotcon])
+ 
+             ;;make the axes labels
+             plot, spec.indiv_lambda[*,wplotcon], spec.indiv_contdiv[*,wplotcon]*spec.indiv_continuum[*,wplotcon], xrange=self.lambdalim * (1d + spec.z), yrange=self.ylim, xstyle=1, ystyle=1, background=fsc_color('white'), color=fsc_color('black'), xtitle='!6observed wavelength (!sA!r!u!9 %!6!n)!3', ytitle='!6flux (e!E-!N/hr)!3', /nodata, /noerase
+             ;;highlight the telluric region and write line names
+             n = n_elements(*self.tellstart)
+             for i=0,n-1 do begin
+                oplot, [(*self.tellstart)[i], (*self.tellend)[i]], 0.04*!Y.CRANGE[0]+0.96*!Y.CRANGE[1]+[0, 0], color=fsc_color('green'), thick=(*self.tellthick)[i]
+             endfor
+             n = n_elements(*self.linewaves)
+             for i=0,n-1 do begin
+                if (*self.linewaves)[i] * (1d + spec.z) le !X.CRANGE[0] or (*self.linewaves)[i] * (1d + spec.z) ge !X.CRANGE[1] then continue
+                oplot, [(*self.linewaves)[i], (*self.linewaves)[i]] * (1d + spec.z), [0.06*!Y.CRANGE[0]+0.94*!Y.CRANGE[1], 0.02*!Y.CRANGE[0]+0.98*!Y.CRANGE[1]], color=fsc_color((*self.linecolors)[i])
+                xyouts, ((*self.linewaves)[i] * (1d + spec.z))+0.002*(!X.CRANGE[1]-!X.CRANGE[0]), 0.07*!Y.CRANGE[0]+0.93*!Y.CRANGE[1], (*self.linenames)[i], orientation=90, alignment=1, color=fsc_color((*self.linecolors)[i])
+             endfor
+          endif
+       end
+       ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+       1: begin                ;rest frame
+          ;;make reference axis of contdiv with applied fake continuum
+          znow = spec.z
+          plot, spec.lambda/(1d + znow), spec.contdiv, xrange=self.lambdalim, yrange=self.divylim, xstyle=5, ystyle=5, background=fsc_color('white'), color=fsc_color('black'), /nodata
+          oplot, [-1d6, 1d6], [0.0, 0.0], color=fsc_color('pink')
+          oplot, [-1d6, 1d6], [1.0, 1.0], color=fsc_color('pale green')
+
+          for idup=0,ndup-1 do begin
+             if spec.indiv_good eq 1 then oplot,spec.indiv_lambda[*,idup],spec.indiv_contdiv[*,idup],color=fsc_color(*self.indivcolors[idup])
+          endfor
+   
+          ;;plot the contdiv with applied fake continuum
+          oplot, spec.lambda/(1d +znow), spec.contdiv, color=fsc_color('black')
+
+          ;;highlighting the telluric bands and label line names
+          n = n_elements(*self.tellstart)
+          for i=0,n-1 do begin
+             oplot, [(*self.tellstart)[i], (*self.tellend)[i]] / (1d + znow), 0.04*!Y.CRANGE[0]+0.96*!Y.CRANGE[1]+[0, 0], color=fsc_color('green'), thick=(*self.tellthick)[i]
+          endfor
+          n = n_elements(*self.linewaves)
+          for i=0,n-1 do begin
+             if (*self.linewaves)[i] le !X.CRANGE[0] or (*self.linewaves)[i] ge !X.CRANGE[1] then continue
+             oplot, [(*self.linewaves)[i], (*self.linewaves)[i]], [0.06*!Y.CRANGE[0]+0.94*!Y.CRANGE[1], 0.02*!Y.CRANGE[0]+0.98*!Y.CRANGE[1]], color=fsc_color((*self.linecolors)[i])
+             xyouts, (*self.linewaves)[i]+0.002*(!X.CRANGE[1]-!X.CRANGE[0]), 0.07*!Y.CRANGE[0]+0.93*!Y.CRANGE[1], (*self.linenames)[i], orientation=90, alignment=1, color=fsc_color((*self.linecolors)[i])
+          endfor
         end
-        ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    endcase
+   zl = mode lt 2 ? (*self.spec)[self.i].z : 0.0
+   widget_control, widget_info(self.base, find_by_uname='lambdalow'), set_value=strcompress(string(self.lambdalim[0]*(1d + zl), format='(D7.1)'), /rem)
+   widget_control, widget_info(self.base, find_by_uname='lambdahigh'), set_value=strcompress(string(self.lambdalim[1]*(1d + zl), format='(D7.1)'), /rem)
 
-        1: begin                ;rest frame
-           ;;Highlight the fit mask regions
-           t = round(-1*ts_diff(science.fitmask, 1))
-           wstart = where(t eq 1, cstart)+1
-           wend = where(t eq -1, cend)
-           if science.fitmask[0] eq 1 then begin
-              if cstart eq 0 then begin
-                 wstart = 0
-              endif else begin
-                 wstart = [0, wstart]
-              endelse
-              cstart += 1
-           endif
-           if science.fitmask[n_elements(t)-1] eq 1 then begin
-              if cend eq 0 then begin
-                 wend = n_elements(t)-1
-              endif else begin
-                 wend = [wend, n_elements(t)-1]
-              endelse
-              cend += 1
-           endif
-           if cstart ne cend then message, 'There are a different number of starting and ending fitmask wavelengths.'
-           ;;make reference axis of contdiv with applied fake continuum
-           plot, science.lambda/(1d + science.zspec), science.contdiv/science.spscont, xrange=self.lambdalim, yrange=self.divylim, xstyle=5, ystyle=5, background=fsc_color('white'), color=fsc_color('black'), /nodata
-
-           if cstart eq 0 or cend eq 0 then message, 'There are no fitmask regions.', /info else begin
-              for i=0,cstart-1 do begin
-                 x = ([science.lambda[wstart[i]], science.lambda[wstart[i]], science.lambda[wend[i]], science.lambda[wend[i]]]/(1d + science.zspec) > self.lambdalim[0]) < self.lambdalim[1]
-                 y = [self.divylim[0], self.divylim[1], self.divylim[1], self.divylim[0]]
-                 polyfill, x, y, color=fsc_color('light cyan')
-              endfor
-             endelse
-           ;;finish highligting fit mask
-           oplot, [-1d6, 1d6], [0.0, 0.0], color=fsc_color('pink')
-           oplot, [-1d6, 1d6], [1.0, 1.0], color=fsc_color('pale green')
-            if science.zfit ne 0 and finite(science.zfit) then znow=science.zfit else znow = science.zspec
-            ;;plot the contdiv with applied fake continuum
-            oplot, science.lambda/(1d +znow), science.contdiv/science.spscont, color=fsc_color('black')
-            nfull = n_elements(science.lambda)
-            nhalf = fix(nfull/2)-1
-            if science.wlfail_blue eq 1 then oplot, science.lambda[0:nhalf]/(1d +znow), science.contdiv[0:nhalf]/science.spscont[0:nhalf], color=fsc_color('darkgray')
-            if science.wlfail_red eq 1 then oplot, science.lambda[nhalf:nfull-1]/(1d +znow), science.contdiv[nhalf:nfull-1]/science.spscont[nhalf:nfull-1], color=fsc_color('darkgray')
-
-            ;;highlighting the telluric bands and label line names
-            n = n_elements(*self.tellstart)
-            for i=0,n-1 do begin
-               oplot, [(*self.tellstart)[i], (*self.tellend)[i]] / (1d + science.zspec), 0.04*!Y.CRANGE[0]+0.96*!Y.CRANGE[1]+[0, 0], color=fsc_color('green'), thick=(*self.tellthick)[i]
-            endfor
-            n = n_elements(*self.linewaves)
-            for i=0,n-1 do begin
-               if (*self.linewaves)[i] le !X.CRANGE[0] or (*self.linewaves)[i] ge !X.CRANGE[1] then continue
-               oplot, [(*self.linewaves)[i], (*self.linewaves)[i]], [0.06*!Y.CRANGE[0]+0.94*!Y.CRANGE[1], 0.02*!Y.CRANGE[0]+0.98*!Y.CRANGE[1]], color=fsc_color((*self.linecolors)[i])
-               xyouts, (*self.linewaves)[i]+0.002*(!X.CRANGE[1]-!X.CRANGE[0]), 0.07*!Y.CRANGE[0]+0.93*!Y.CRANGE[1], (*self.linenames)[i], orientation=90, alignment=1, color=fsc_color((*self.linecolors)[i])
-            endfor
-
-            ;;plot the models
-            plot, science.lambda/(1d + science.zspec), science.contdiv/science.spscont, xrange=self.lambdalim, yrange=self.divylim, xstyle=1, ystyle=1, background=fsc_color('white'), color=fsc_color('black'), xtitle='!6rest wavelength (!sA!r!u!9 %!6!n)!3', ytitle='!6flux (normalized)!3', /nodata, /noerase
-            if (science.feh gt -10 and science.age gt 0.0) or total(science.spsspec gt 0.0) then begin
-               oplot, science.lambda/(1d + science.zspec), science.spsspecfull, color=fsc_color('red')
-            endif
-;           oplot,science.lambda/(1.+science.zspec),science.contdiv*sqrt(science.contdivivar)/30.,color=fsc_color('pink')
-         end
-     endcase
-    zl = mode lt 2 ? (*self.science)[self.i].z : 0.0
-    widget_control, widget_info(self.base, find_by_uname='lambdalow'), set_value=strcompress(string(self.lambdalim[0]*(1d + zl), format='(D7.1)'), /rem)
-    widget_control, widget_info(self.base, find_by_uname='lambdahigh'), set_value=strcompress(string(self.lambdalim[1]*(1d + zl), format='(D7.1)'), /rem)
-
-    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Ready.'
+   widget_control, widget_info(self.base, find_by_uname='status'), set_value='Ready.'
 end
 
 
@@ -633,8 +927,9 @@ function combspec::INIT, directory=directory
     wcombine = widget_button(wprepbase, value='Re-stack', uvalue='combine', uname='combine', tab_mode=1, xsize=100)
     wdefaultmaskbase = widget_base(wleft,/row,/align_center)
     wdefaultmask = widget_button(wdefaultmaskbase,value='Default Mask',uvalue='default_mask',uname='default_mask',tab_mode=1,xsize=100)
-    wincludebase = widget_base(wleft, /column, /align_center,/frame)
-    wincluderadio = cw_bgroup(wincludebase,['0','1','2','3','4','5','6'],/nonexclusive,set_value=[1,1,1,1,1,1,1],uname='include',uvalue='include')
+    wincludebase = widget_base(wleft, /row, /align_center,/frame)
+    wincluderadio = cw_bgroup(wincludebase,['0','1','2','3','4','5','6'],/column,/nonexclusive,set_value=[1,1,1,1,1,1,1],uname='include',uvalue='include',label_top='include in stack')
+    wplotconradio = cw_bgroup(wincludebase,['0','1','2','3','4','5','6'],/column,/exclusive,set_value=0,uname='iplotcon',uvalue='iplotcon',label_top='plot')
     wcurobj = widget_base(wleft, /column, /align_center, tab_mode=0, /frame)
     widbase = widget_base(wcurobj, /align_left, /row, xsize=235)
     widlabel = widget_label(widbase, value='object ID:', /align_right, uname='idlabel', xsize=65)
@@ -696,7 +991,8 @@ function combspec::INIT, directory=directory
     self.linestart = ptr_new(linestart)
     self.lineend = ptr_new(lineend)
     self.linetype = ptr_new(linetype)
-
+    self.indivcolors = ptr_new(['blueviolet','blue','seagreen','springgreen','gold','chocolate','firebrick'])
+    self.indivbgcolors = ptr_new('pbg1','blu1','ryb5','grn1','wt4','org1','red2')
     common random, seed
     seed = systime(1)
 
@@ -727,7 +1023,9 @@ pro combspec__define
              nspec:0L, $
              i:0L, $
              keystate:0, $
-             lambda1:0d}
+             lambda1:0d, $
+             indivcolors:ptr_new(),$
+             indivbgcolors:ptr_new()}
 end
 
 pro spec__define
