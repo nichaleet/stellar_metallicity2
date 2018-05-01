@@ -76,21 +76,22 @@ pro combspec::combine,spec
 end
 
 pro combspec::combine_all
-    specinfo = *self.specinfo
+    specall = *self.spec
     curi = self.i
     for i=0,self.nspec-1 do begin
         self.i = i
         self->default_range
-        self->readspecindiv
-        spec = *self.spec
+        spec = specall[self.i]
+        if spec.good eq 0 then continue
+        ;if spec.good eq 0 and spec.goodfit eq 0 then continue
         self->combine, spec
-        ptr_free, self.spec
-        self.spec = ptr_new(spec)
-        self->writespecindiv,spec
+        specall[self.i] = spec
     endfor
+    ptr_free, self.spec
+    self.spec = ptr_new(specall)
+    self->writespec
     self.i = curi
-    self->readspecindiv
-    spec = *self.spec
+    spec = specall[self.i]
     self->statusbox, spec=spec
     self->redraw
 end
@@ -145,31 +146,30 @@ pro combspec::handle_button, ev
             self->redraw
         end
         'fitcont': begin
-           spec = *self.spec
+           specall = *self.spec
+           spec = specall[self.i]
            self->indivcontinuum,spec
+           specall[self.i] = spec
            ptr_free, self.spec
-           self.spec = ptr_new(spec)
+           self.spec = ptr_new(specall)
            self->redraw
         end
         'combine': begin
-           spec = *self.spec
+           specall = *self.spec
+           spec = specall[self.i]
            self->combine, spec, /noredraw
+           specall[self.i] = spec
            ptr_free, self.spec
-           self.spec = ptr_new(spec)
+           self.spec = ptr_new(specall)
            self->redraw
         end
         'default_mask': self->default_mask
         'combine_all': self->combine_all
         'backward': self->step, -1
         'forward': self->step, 1
-        'save': begin
-            self->writespecinfo
-            self->writespecindiv
-        end
-        'savespec':self->writespecindiv
+        'save': self->writespec
         'exit': begin
-            self->writespecindiv
-            slef->writespecinfo
+            self->writespec
             widget_control, ev.top, /destroy
         end
         else:
@@ -178,7 +178,7 @@ pro combspec::handle_button, ev
 end
 
 
-pro combspec::step, increment ;for backward and forward button
+pro combspec::step, increment
     nmodes = 2
     widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
     case 1 of
@@ -207,13 +207,12 @@ end
 
 pro combspec::toggle_good
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Updating database ...'
-    spec = *self.spec
+    specall = *self.spec
     widget_control, widget_info(self.base, find_by_uname='include'), get_value=good
-    spec.indiv_good = good
+    specall[self.i].indiv_good = good
     ptr_free, self.spec
-    self.spec = ptr_new(spec)
+    self.spec = ptr_new(specall)
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Ready.'
-    
 end
 
 pro combspec::newspec, increment=increment, noredraw=noredraw
@@ -230,9 +229,8 @@ pro combspec::newspec, increment=increment, noredraw=noredraw
 
     widget_control, widget_info(self.base, find_by_uname='filelist'), set_combobox_select=newi
     self.i = newi
-    self->readspecindiv
-    self->statusbox    
-    self.ylim = minmax(*self.spec.indiv_spec,/nan)/median(*self.spec.indiv_spec)
+    self->statusbox
+    self.ylim = minmax((*self.spec)[self.i].indiv_spec,/nan)/median((*self.spec)[self.i].indiv_spec)
 
     self.keystate = 0
     if ~keyword_set(noredraw) then self->redraw
@@ -1024,7 +1022,9 @@ pro combspec::getspec, list=list, cat=cat, distance=distance, mass=mass
     if ~file_test(specfits) then begin 
        nspec = n_elements(list)
        self.nspec = nspec
-       specinfo = replicate({mask:'',slit:'',objname:''},nspec)
+
+       specall = replicate({spec}, nspec)
+
        masks = strarr(nspec)
        slits = strarr(nspec)
        objnames = strarr(nspec)
@@ -1036,9 +1036,6 @@ pro combspec::getspec, list=list, cat=cat, distance=distance, mass=mass
           spec.mask = masks[i]
           spec.slit = slits[i]
           spec.objname = objnames[i]
-          specinfo[i].mask = masks[i]
-          specinfo[i].slit = slits[i]
-          specinfo[i].objanme = objnames[i]
           spec.indiv_skyfit = -1
           spec.indiv_skylinemask = -1
           obj = list[i]
@@ -1087,24 +1084,23 @@ pro combspec::getspec, list=list, cat=cat, distance=distance, mass=mass
           self->indivmask,spec
           self->indivcontinuum,spec
           self->statusbox, spec=spec
-          self->writespecindiv,spec
+          specall[i] = spec
       endfor
       speclist = masks+' '+slits+' '+objnames
       widget_control, widget_info(self.base, find_by_uname='filelist'), set_value=speclist
       self.i = 0
-      ptr_free, self.specinfo
-      self.specinfo = ptr_new(specinfo)
+      ptr_free, self.spec
+      self.spec = ptr_new(specall)
       self.nspec = nspec
-      self->writespecinfo
+      self->writespec
       speclist = masks+' '+strtrim(string(slits), 2)+' '+objnames
       widget_control, widget_info(self.base, find_by_uname='filelist'), set_value=speclist
-      self->readspecindiv
       widget_control, widget_info(self.base, find_by_uname='mode'), set_value=1
    endif else begin
-      specinfo = mrdfits(specfits, 1, /silent)
+      specall = mrdfits(specfits, 1, /silent)
 
-      self.nspec = n_elements(specinfo)
-      speclist = specinfo.mask+' '+strtrim(string(specinfo.slit), 2)+' '+specinfo.objname
+      self.nspec = n_elements(specall)
+      speclist = specall.mask+' '+strtrim(string(specall.slit), 2)+' '+specall.objname
       widget_control, widget_info(self.base, find_by_uname='filelist'), set_value=speclist
 
       tell = (mrdfits('/scr2/nichal/workspace2/telluric/deimos_telluric_1.0.fits', 1, /silent))
@@ -1112,39 +1108,19 @@ pro combspec::getspec, list=list, cat=cat, distance=distance, mass=mass
       tell = tell[wtell]
       ptr_free, self.tell
       self.tell = ptr_new(tell)
-
-      self.i = 0
-      self->readspecindiv
-
+      ptr_free, self.spec
+      self.spec = ptr_new(specall)
       widget_control, widget_info(self.base, find_by_uname='mode'), set_value=1
    endelse
 end
 
-pro combspec::writespecinfo
-    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Writing info to database ...'
-    specinfo = *self.specinfo
+pro combspec::writespec
+    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Writing to database ...'
+    specall = *self.spec
     specfits = self.directory+'combspec_out.fits' 
-    mwrfits, specinfo, specfits, /create, /silent
+    mwrfits, specall, specfits, /create, /silent
     spawn, 'gzip -f '+specfits
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Ready.'
-end
-
-pro combspec::writespecindiv,spec
-    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Writing spectrum to database ...'
-    specfits = self.directory+strcompress(spec.mask)+'_'+spec.slit+'_'+spec.objname+'.fits'
-    mwrfits, spec, specfits, /create, /silent
-    spawn, 'gzip -f '+specfits
-    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Ready.'
-end
-
-pro combspec::readspecindiv
-    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Reading spectrum from database ...'
-    i=self.i
-    specinfo = *self.specinfo
-    specfits = self.directory+strcompress(specinfo[i].mask)+'_'+specinfo[i].slit+'_'+specinfo[i].objname+'.fits.gz'
-    spec = mrdfits(specfits,1,/silent)
-    ptr_free,self.spec
-    self.spec = ptr_new(spec)    
 end
 
 pro combspec::initialize_directory, directory=directory,rematch=rematch
@@ -1170,6 +1146,7 @@ pro combspec::initialize_directory, directory=directory,rematch=rematch
       distance = distance(goodz)
       ;calculate mass
       mass = getms0451mass(cat)
+      stop
       ;writefits
       mwrfits,list,'matched_ms0451obj_members.fits',/create,/silent
       mwrfits,cat,'matched_ms0451obj_members.fits',/silent
@@ -1188,13 +1165,14 @@ pro combspec::initialize_directory, directory=directory,rematch=rematch
 
    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Reading directory ...'
 
+   countfiles:
    specfits = newdirectory+'combspec_out.fits.gz'
+
    self.directory = newdirectory
 
    self->getspec, list=list, cat=cat, distance=distance, mass=mass
    self.i = 0
-   self->readspecindiv
-   spec = *self.spec
+   spec = (*self.spec)[self.i]
    self->statusbox, spec=spec
    self->default_range
    self.lambdalim = [3300, 7000]
@@ -1306,7 +1284,6 @@ pro combspec__define
     state = {combspec, $
              base:0L, $
              directory:'', $
-             specfile:ptr_new(), $
              spec:ptr_new(), $
              tell:ptr_new(), $
              lambdalim:[-100d, 100d], $
