@@ -1,7 +1,244 @@
+pro combspec::combine
+
+end
+
+pro combspec::fit_all
+    specall = *self.spec
+    curi = self.i
+    for i=0,self.nspec-1 do begin
+        self.i = i
+        self->default_range
+        spec = specall[self.i]
+        if spec.good eq 0 then continue
+        ;if spec.good eq 0 and spec.goodfit eq 0 then continue
+        self->combine, spec
+        specall[self.i] = spec
+    endfor
+    ptr_free, self.spec
+    self.spec = ptr_new(specall)
+    self->writespec
+    self.i = curi
+    spec = specall[self.i]
+    self->statusbox, spec=spec
+    self->redraw
+end
+
+
+
+; =================
+pro combspec_event, ev
+    widget_control, ev.top, get_uvalue=obj
+    widget_control, ev.id, get_uvalue=value
+    if (n_elements(value) eq 0) then value = ''
+    name = strmid(tag_names(ev, /structure_name), 7, 4)
+
+    case (name) of
+        'BUTT': obj->handle_button, ev
+        'TEXT': obj->handle_text, ev
+        'TRAC': obj->handle_tracking, ev
+        'COMB': obj->handle_combobox, ev
+        'DRAW': begin
+            if ev.type eq 0 then obj->handle_draw_click, ev
+            if ev.type eq 2 then obj->handle_motion, ev
+            if ev.type eq 5 then obj->handle_draw_key, ev
+        end
+        'DONE': widget_control, ev.top, /destroy
+        else: begin
+            case (value) of
+                'good': obj->toggle_good
+                else: obj->redraw
+            endcase
+            widget_control, widget_info(ev.top, find_by_uname='spec'), /input_focus
+        end
+    endcase
+end
+
+
+
+; ================ BUTTONS ================
+function line_event, ev
+    self->redraw
+end
+
+
+pro combspec::handle_button, ev
+    widget_control, ev.top, get_uvalue=obj
+    widget_control, ev.id, get_uvalue=uvalue
+
+    case (uvalue) of
+        'back': self->newspec, increment=-1
+        'next': self->newspec, increment=1
+        'default_range': begin
+            self->default_range
+            self->redraw
+        end
+        'fitcont': begin
+           specall = *self.spec
+           spec = specall[self.i]
+           self->indivcontinuum,spec
+           specall[self.i] = spec
+           ptr_free, self.spec
+           self.spec = ptr_new(specall)
+           self->redraw
+        end
+        'combine': begin
+           specall = *self.spec
+           spec = specall[self.i]
+           self->combine, spec, /noredraw
+           specall[self.i] = spec
+           ptr_free, self.spec
+           self.spec = ptr_new(specall)
+           self->redraw
+        end
+        'combine_all': self->combine_all
+        'backward': self->step, -1
+        'forward': self->step, 1
+        'save': self->writescience
+        'exit': begin
+            self->writescience
+            widget_control, ev.top, /destroy
+        end
+        else:
+    endcase
+    widget_control, widget_info(self.base, find_by_uname='spec'), /input_focus
+end
+
+
+pro combspec::step, increment
+    nmodes = 2
+    widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
+    case 1 of
+        mode eq nmodes-1 and increment gt 0: mode = 0
+        mode eq 0 and increment lt 0: mode = nmodes-1
+        else: mode += increment
+    endcase
+    curi = self.i
+    if mode eq -1 then begin
+        self->newspec, increment=-1, /noredraw
+        if self.i eq curi then return
+        mode = nmodes-1
+        ;self->default_range
+    endif
+    if mode eq nmodes then begin
+        self->newspec, increment=1, /noredraw
+        if self.i eq curi then return
+        mode = 1
+        ;self->default_range
+    endif
+    widget_control, widget_info(self.base, find_by_uname='mode'), set_value=mode
+    self.keystate = 0
+    self->redraw
+end
+
+
+pro combspec::toggle_good
+    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Updating database ...'
+    specall = *self.spec
+    widget_control, widget_info(self.base, find_by_uname='include'), get_value=good
+    specall[self.i].indiv_good = good
+    ptr_free, self.spec
+    self.spec = ptr_new(specall)
+    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Ready.'
+end
+
+pro combspec::newspec, increment=increment, noredraw=noredraw
+    newi = self.i
+    newi += increment
+    if newi lt 0 then begin
+        widget_control, widget_info(self.base, find_by_uname='status'), set_value='This is the first spectrum.'
+        return
+    endif
+    if newi gt self.nspec-1 then begin
+        widget_control, widget_info(self.base, find_by_uname='status'), set_value='This is the last spectrum.'
+        return
+    endif
+
+    widget_control, widget_info(self.base, find_by_uname='filelist'), set_combobox_select=newi
+    self.i = newi
+    self->statusbox
+    self.ylim = minmax((*self.spec)[self.i].indiv_spec,/nan)/median((*self.spec)[self.i].indiv_spec)
+
+    self.keystate = 0
+    if ~keyword_set(noredraw) then self->redraw
+end
+
+
+pro combspec::default_range, update=update
+    if ~keyword_set(update) then begin
+        self.ylim = minmax((*self.spec)[self.i].indiv_telldiv)
+        self.ylim[1] *= 1.1
+        self.divylim = [-1.0, 2.5]
+        self.lambdalim = (minmax((*self.spec)[self.i].lambda / (1d + (*self.spec)[self.i].z)) < 9100) > 2000
+        self.lambdalim[0] >= 2000.
+        self.lambdalim[1] <= 8938. / (1d + (*self.spec)[self.i].z)
+    endif
+    widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
+    case 1 of
+        mode eq 0: begin
+            widget_control, widget_info(self.base, find_by_uname='ylow'), set_value=strcompress(string(self.ylim[0], format='(g8.2)'), /rem)
+            widget_control, widget_info(self.base, find_by_uname='yhigh'), set_value=strcompress(string(self.ylim[1], format='(g8.2)'), /rem)
+        end
+        else: begin
+            widget_control, widget_info(self.base, find_by_uname='ylow'), set_value=strcompress(string(self.divylim[0], format='(D5.2)'), /rem)
+            widget_control, widget_info(self.base, find_by_uname='yhigh'), set_value=strcompress(string(self.divylim[1], format='(D5.2)'), /rem)
+        end
+    endcase
+    widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
+    zl = mode lt 1 ? (*self.spec)[self.i].z : 0.0
+    widget_control, widget_info(self.base, find_by_uname='lambdalow'), set_value=strcompress(string(self.lambdalim[0]*(1d + zl), format='(D7.1)'), /rem)
+    widget_control, widget_info(self.base, find_by_uname='lambdahigh'), set_value=strcompress(string(self.lambdalim[1]*(1d + zl), format='(D7.1)'), /rem)
+end
+
+; ============== TEXT BOXES =============
+pro combspec::handle_text, ev
+    widget_control, ev.id, get_uvalue=uvalue
+    widget_control, ev.top, get_uvalue=obj
+    widget_control, ev.id, get_value=val
+
+    case (uvalue) of
+        'ylow': self->ylow, val
+        'yhigh': self->yhigh, val
+        'lambdalow': self->lambdalow, val
+        'lambdahigh': self->lambdahigh, val
+        else:
+    end
+    widget_control, widget_info(self.base, find_by_uname='spec'), /input_focus
+end
+
+pro combspec::lambdalow, lambdalow, noredraw=noredraw
+    self.lambdalim[0] = lambdalow
+    if ~keyword_set(noredraw) then self->redraw
+end
+
+
+pro combspec::lambdahigh, lambdahigh, noredraw=noredraw
+    self.lambdalim[1] = lambdahigh
+    if ~keyword_set(noredraw) then self->redraw
+end
+
+
+pro combspec::ylow, ylow, noredraw=noredraw
+    widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
+    case 1 of
+        mode eq 0: self.ylim[0] = ylow
+        else: self.divylim[0] = ylow
+    endcase
+    if ~keyword_set(noredraw) then self->redraw
+end
+
+
+pro combspec::yhigh, yhigh
+    widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
+    case 1 of
+        mode eq 0: self.ylim[1] = yhigh
+        else: self.divylim[1] = yhigh
+    endcase
+    self->redraw
+end
 
 
 ; ============== COMBOBOX  =============
-pro sps_fit::handle_combobox, ev
+pro combspec::handle_combobox, ev
     self.i = ev.index
     self->statusbox
     self.ylim = minmax(((*self.spec)[self.i].indiv_contdiv)*((*self.spec)[self.i].indiv_continuum),/nan)
@@ -320,53 +557,6 @@ end
 
 
 
-pro combspec::newspec, increment=increment, noredraw=noredraw
-    newi = self.i
-    newi += increment
-    if newi lt 0 then begin
-        widget_control, widget_info(self.base, find_by_uname='status'), set_value='This is the first spectrum.'
-        return
-    endif
-    if newi gt self.nspec-1 then begin
-        widget_control, widget_info(self.base, find_by_uname='status'), set_value='This is the last spectrum.'
-        return
-    endif
-
-    widget_control, widget_info(self.base, find_by_uname='filelist'), set_combobox_select=newi
-    self.i = newi
-    self->statusbox
-    self.ylim = minmax((*self.spec)[self.i].indiv_spec,/nan)/median((*self.spec)[self.i].indiv_spec)
-
-    self.keystate = 0
-    if ~keyword_set(noredraw) then self->redraw
-end
-
-
-pro combspec::default_range, update=update
-    if ~keyword_set(update) then begin
-        self.ylim = minmax((*self.spec)[self.i].indiv_telldiv)
-        self.ylim[1] *= 1.1
-        self.divylim = [-1.0, 2.5]
-        self.lambdalim = (minmax((*self.spec)[self.i].lambda / (1d + (*self.spec)[self.i].z)) < 9100) > 2000
-        self.lambdalim[0] >= 2000.
-        self.lambdalim[1] <= 8938. / (1d + (*self.spec)[self.i].z)
-    endif
-    widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
-    case 1 of
-        mode eq 0: begin
-            widget_control, widget_info(self.base, find_by_uname='ylow'), set_value=strcompress(string(self.ylim[0], format='(g8.2)'), /rem)
-            widget_control, widget_info(self.base, find_by_uname='yhigh'), set_value=strcompress(string(self.ylim[1], format='(g8.2)'), /rem)
-        end
-        else: begin
-            widget_control, widget_info(self.base, find_by_uname='ylow'), set_value=strcompress(string(self.divylim[0], format='(D5.2)'), /rem)
-            widget_control, widget_info(self.base, find_by_uname='yhigh'), set_value=strcompress(string(self.divylim[1], format='(D5.2)'), /rem)
-        end
-    endcase
-    widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
-    zl = mode lt 1 ? (*self.spec)[self.i].z : 0.0
-    widget_control, widget_info(self.base, find_by_uname='lambdalow'), set_value=strcompress(string(self.lambdalim[0]*(1d + zl), format='(D7.1)'), /rem)
-    widget_control, widget_info(self.base, find_by_uname='lambdahigh'), set_value=strcompress(string(self.lambdalim[1]*(1d + zl), format='(D7.1)'), /rem)
-end
 
 pro combspec::indivcontinuum, spec
    common npixcom, npix,ndup
@@ -409,7 +599,7 @@ pro combspec::indivcontinuum, spec
       avgdev = mean(dev)
       w = where(dev lt 3.0*avgdev, c)
       if c gt 0 then spec.indiv_sn[i] = 1.0/mean(dev[w])
-   endif
+   endfor
 end
 
 pro combspec::indivmask,spec
@@ -608,7 +798,7 @@ pro combspec::indivspecres, spec
 end
 
 ; ============== REDRAW ===============
-pro sps_fit::redraw
+pro combspec::redraw
    common npixcom, npix,ndup
    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Redrawing ...'
    self->default_range, /update
@@ -715,7 +905,7 @@ pro sps_fit::redraw
 end
 
 
-pro sps_fit::statusbox, spec=spec
+pro combspec::statusbox, spec=spec
     common npixcom, npix,ndup
     if ~keyword_set(spec) then spec = (*self.spec)[self.i]
     unknown = '???'
@@ -835,7 +1025,7 @@ pro combspec::getspec, list=list, cat=cat, distance=distance, mass=mass
    endelse
 end
 
-pro sps_fit::writespec
+pro combspec::writespec
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Writing to database ...'
     specall = *self.spec
     specfits = self.directory+'combspec_out.fits.gz' 
@@ -911,10 +1101,7 @@ function combspec::INIT, directory=directory
     wexit = widget_button(file_menu, value='Save', uvalue='save', uname='save')
     wexit = widget_button(file_menu, value='Exit', uvalue='exit', uname='exit')
     tools_menu = widget_button(menu, value='Tools', /menu)
-    wdefaultrange = widget_button(tools_menu, value='Default Spectrum Settings', uname='default_range', uvalue='default_range')
-    wdefault_cont = widget_button(tools_menu, value='Default Continuum Regions', uname='default_cont', uvalue='default_cont')
-    wdefault_maskall = widget_button(tools_menu, value='Default Pixel Mask All', uname='default_maskall', uvalue='default_maskall')
-    wdefault_goodspec = widget_button(tools_menu, value='Default Good Spectrum', uname='default_goodspec', uvalue='default_goodspec')
+    wcombineall = widget_button(tools_menu, value = 'combine all spectra',uname='combine_all',uvalue='combine_all')
 
     wleft = widget_base(base, /column, uname='left')
     wright = widget_base(base, /column, uname='right')
