@@ -1,8 +1,8 @@
-pro combspec::combine,spec
+pro combspec::combine,spec,noredraw=noredraw
    common npixcom, npix,ndup
    wgood = where(spec.indiv_good eq 1, cgood)
    if cgood eq 1 then begin
-       spec.lambda = spec.indiv_lambda[*,wgood[0]]
+       spec.lambda = spec.indiv_lambda[*,wgood[0]]*(1.+spec.indiv_vhelio[wgood[0]]/3.e5)
        spec.dlam = spec.indiv_dlam[*,wgood[0]]
        spec.contdiv = spec.indiv_contdiv[*,wgood[0]]
        spec.contdivivar = spec.indiv_contdivivar[*,wgood[0]]
@@ -11,6 +11,7 @@ pro combspec::combine,spec
    endif
 
    if cgood gt 1 then begin ;stack continuum and make output structure (strout)
+       spec.exptime = total(spec.indiv_exptime[wgood])
        sn = spec.indiv_sn[wgood]
        ;shift velocity to heliocentric frame
        lambdaarr = spec.indiv_lambda[*,wgood] ;[npix,cgood]
@@ -24,6 +25,7 @@ pro combspec::combine,spec
 
        ;use the lambda of the spec with max sn as ref
        lambdafull = lambdaarr[*,ref]
+       spec.lambda = lambdafull
        ;get data in and interpolate
        contdivarr=fltarr(npix,cgood)+1./0.
        contdivivararr = fltarr(npix,cgood)+1./0.
@@ -61,7 +63,7 @@ pro combspec::combine,spec
        contmask = bytarr(npix)+1
        lambdarest = lambdafull/(1.+spec.z)
        for i=0,n_elements(*self.linestart)-1 do begin
-          w = where(lambdarest ge *self.linestart[i] and lambdarest le *self.lineend[i], c)
+          w = where(lambdarest ge (*self.linestart)[i] and lambdarest le (*self.lineend)[i], c)
           if c gt 0 then contmask[w] = 0
        endfor
        w = where(~finite(spec.contdiv) or ~finite(spec.contdivivar), c)
@@ -73,6 +75,12 @@ pro combspec::combine,spec
        w = where(dev lt 3.0*avgdev, c)
        if c gt 0 then spec.sn = 1.0/mean(dev[w])
    endif
+   self->statusbox, spec=spec
+
+   if ~keyword_set(noredraw) then begin
+      self->redraw
+   endif
+
 end
 
 pro combspec::combine_all
@@ -117,7 +125,10 @@ pro combspec_event, ev
         'DONE': widget_control, ev.top, /destroy
         else: begin
             case (value) of
-                'good': obj->toggle_good
+                'include': begin 
+                    obj->toggle_good
+                    obj->redraw
+                end
                 else: obj->redraw
             endcase
             widget_control, widget_info(ev.top, find_by_uname='spec'), /input_focus
@@ -163,13 +174,18 @@ pro combspec::handle_button, ev
         'backward': self->step, -1
         'forward': self->step, 1
         'save': begin
+            spec = *self.spec
             self->writespecinfo
-            self->writespecindiv
+            self->writespecindiv,spec
         end
-        'savespec':self->writespecindiv
+        'savespec':begin
+            spec = *self.spec
+            self->writespecindiv,spec
+        end
         'exit': begin
+            spec = *self.spec
             self->writespecindiv
-            slef->writespecinfo
+            slef->writespecinfo,spec
             widget_control, ev.top, /destroy
         end
         else:
@@ -232,21 +248,38 @@ pro combspec::newspec, increment=increment, noredraw=noredraw
     self.i = newi
     self->readspecindiv
     self->statusbox    
-    self.ylim = minmax(*self.spec.indiv_spec,/nan)/median(*self.spec.indiv_spec)
+    self.ylim = minmax((*self.spec).indiv_spec,/nan)
 
     self.keystate = 0
     if ~keyword_set(noredraw) then self->redraw
+    widget_control, widget_info(self.base, find_by_uname='zoom'), get_value=index
+    wset, index
+    spec = *self.spec
+    z = spec.z
+    plot,spec.lambda/(1.+z),spec.contdiv,xrange=[3700,3760],title='OII',position=[0.05,0.05,0.32,0.95],/normal, background=fsc_color('white'), color=fsc_color('black')
+    for iplot=spec.indiv_count-1,0,-1 do oplot,spec.indiv_lambda[*,iplot]/(1.+z)*(1.+spec.indiv_vhelio[iplot]/3e5),spec.indiv_contdiv[*,iplot],color=fsc_color((*self.indivcolors)[iplot])
+    oplot,spec.lambda/(1.+z),spec.contdiv,color=fsc_color('black'),thick=2
+
+    plot,spec.lambda/(1.+z),spec.contdiv,xrange=[3900,4000],title='CaII',position=[0.37,0.05,0.64,0.95],/noerase,/normal, background=fsc_color('white'), color=fsc_color('black')
+    for iplot=spec.indiv_count-1,0,-1 do oplot,spec.indiv_lambda[*,iplot]/(1.+z)*(1.+spec.indiv_vhelio[iplot]/3e5),spec.indiv_contdiv[*,iplot],color=fsc_color((*self.indivcolors)[iplot])
+    oplot,spec.lambda/(1.+z),spec.contdiv,color=fsc_color('black'),thick=2
+
+    plot,spec.lambda/(1.+z),spec.contdiv,xrange=[4830,4890],title='Hb',position=[0.69,0.05,0.96,0.95],/noerase,/normal, background=fsc_color('white'), color=fsc_color('black')
+    for iplot=spec.indiv_count-1,0,-1 do oplot,spec.indiv_lambda[*,iplot]/(1.+z)*(1.+spec.indiv_vhelio[iplot]/3e5),spec.indiv_contdiv[*,iplot],color=fsc_color((*self.indivcolors)[iplot])
+    oplot,spec.lambda/(1.+z),spec.contdiv,color=fsc_color('black'),thick=2
+
+
 end
 
 
 pro combspec::default_range, update=update
     if ~keyword_set(update) then begin
-        self.ylim = minmax((*self.spec)[self.i].indiv_telldiv)
+        self.ylim = minmax((*self.spec).indiv_telldiv,/nan)
         self.ylim[1] *= 1.1
         self.divylim = [-1.0, 2.5]
-        self.lambdalim = (minmax((*self.spec)[self.i].lambda / (1d + (*self.spec)[self.i].z)) < 9100) > 2000
+        self.lambdalim = (minmax((*self.spec).lambda / (1d + (*self.spec).z)) < 9100) > 2000
         self.lambdalim[0] >= 2000.
-        self.lambdalim[1] <= 8938. / (1d + (*self.spec)[self.i].z)
+        self.lambdalim[1] <= 8938. / (1d +(*self.spec).z)
     endif
     widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
     case 1 of
@@ -260,7 +293,7 @@ pro combspec::default_range, update=update
         end
     endcase
     widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
-    zl = mode lt 1 ? (*self.spec)[self.i].z : 0.0
+    zl = mode lt 1 ? (*self.spec).z : 0.0
     widget_control, widget_info(self.base, find_by_uname='lambdalow'), set_value=strcompress(string(self.lambdalim[0]*(1d + zl), format='(D7.1)'), /rem)
     widget_control, widget_info(self.base, find_by_uname='lambdahigh'), set_value=strcompress(string(self.lambdalim[1]*(1d + zl), format='(D7.1)'), /rem)
 end
@@ -317,7 +350,7 @@ end
 pro combspec::handle_combobox, ev
     self.i = ev.index
     self->statusbox
-    self.ylim = minmax(((*self.spec)[self.i].indiv_contdiv)*((*self.spec)[self.i].indiv_continuum),/nan)
+    self.ylim = minmax(((*self.spec).indiv_contdiv)*((*self.spec).indiv_continuum),/nan)
     self.keystate = 0
     self->redraw
     widget_control, widget_info(self.base, find_by_uname='spec'), /input_focus
@@ -329,7 +362,7 @@ end
 pro combspec::handle_draw_click, ev
     click_coords = convert_coord(ev.x, ev.y, /device, /to_data)
     widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
-    if mode lt 1 then click_coords /= 1d + (*self.spec)[self.i].z
+    if mode lt 1 then click_coords /= 1d + (*self.spec).z
     case ev.modifiers of
         0: begin
             case ev.press of
@@ -342,7 +375,7 @@ pro combspec::handle_draw_click, ev
             endcase
             llownew = click_coords[0] - lrange/2.
             lhighnew = click_coords[0] + lrange/2.
-            zl = mode lt 2 ? (*self.spec)[self.i].z : 0.0
+            zl = mode lt 2 ? (*self.spec).z : 0.0
             widget_control, widget_info(self.base, find_by_uname='lambdalow'), set_value=strcompress(string(self.lambdalim[0]*(1d + zl), format='(D7.1)'), /rem)
             widget_control, widget_info(self.base, find_by_uname='lambdahigh'), set_value=strcompress(string(self.lambdalim[1]*(1d + zl), format='(D7.1)'), /rem)
             self->lambdalow, llownew, /noredraw
@@ -356,7 +389,7 @@ pro combspec::handle_draw_click, ev
             lrange = self.lambdalim[1] - self.lambdalim[0]
             llownew = click_coords[0] - lrange/2.
             lhighnew = click_coords[0] + lrange/2.
-            zl = mode lt 1 ? (*self.spec)[self.i].z : 0.0
+            zl = mode lt 1 ? (*self.spec).z : 0.0
             widget_control, widget_info(self.base, find_by_uname='lambdalow'), set_value=strcompress(string(self.lambdalim[0]*(1d + zl), format='(D7.1)'), /rem)
             widget_control, widget_info(self.base, find_by_uname='lambdahigh'), set_value=strcompress(string(self.lambdalim[1]*(1d + zl), format='(D7.1)'), /rem)
             self->lambdalow, llownew, /noredraw
@@ -400,13 +433,13 @@ end
 
 
 ; ============= DRAW KEYS ==============
-pro compspec::handle_draw_key, ev
+pro combspec::handle_draw_key, ev
    common npixcom, npix,ndup 
    if ev.press ne 1 then return
    key = string(ev.ch)
    coords = convert_coord(ev.x, ev.y, /device, /to_data)
    widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
-   spec= (*self.spec)[self.i]
+   spec= *self.spec
    case mode of
       0: begin        ;continuum fit
           widget_control, widget_info(self.base, find_by_uname='iplotcont'), get_value=wplotcon
@@ -445,6 +478,14 @@ pro compspec::handle_draw_key, ev
                       else: widget_control, widget_info(self.base, find_by_uname='status'), set_value='Key not recognized.'
                   endcase
               end
+              's': begin
+                  case self.keystate of
+                      0: begin
+                          self->writespecindiv, spec
+                      end
+                      else: widget_control, widget_info(self.base, find_by_uname='status'), set_value='Key not recognized.'
+                  endcase
+              end
               'e': begin
                   case self.keystate of
                       0: begin
@@ -457,14 +498,14 @@ pro compspec::handle_draw_key, ev
                           lambda1 = self.lambda1 < coords[0]
                           lambda2 = self.lambda1 > coords[0]
                           self.keystate = 0
-                          specall = *self.spec
-                          w = where(specall[self.i].indiv_lambda[*,wplotcon] gt lambda1 and specall[self.i].indiv_lambda[*,wplotcon] lt lambda2, c)
+                          spec = *self.spec
+                          w = where(spec.indiv_lambda[*,wplotcon] gt lambda1 and spec.indiv_lambda[*,wplotcon] lt lambda2, c)
                           if c eq 0 then begin
                               widget_control, widget_info(self.base, find_by_uname='status'), set_value='This wavelength region is invalid.'
                           endif else begin
-                              specall[self.i].indiv_contmask[w,wplotcon] = 0
+                              spec.indiv_contmask[w,wplotcon] = 0
                               ptr_free, self.spec
-                              self.spec = ptr_new(specall)
+                              self.spec = ptr_new(spec)
                               self->redraw
                           endelse
                       end
@@ -483,14 +524,14 @@ pro compspec::handle_draw_key, ev
                           lambda1 = self.lambda1 < coords[0]
                           lambda2 = self.lambda1 > coords[0]
                           self.keystate = 0
-                          specall = *self.spec
-                          w = where(specall[self.i].indiv_lambda[*,wplotcon] gt lambda1 and specall[self.i].indiv_lambda[*,wplotcon] lt lambda2, c)
+                          spec = *self.spec
+                          w = where(spec.indiv_lambda[*,wplotcon] gt lambda1 and spec.indiv_lambda[*,wplotcon] lt lambda2, c)
                           if c eq 0 then begin
                               widget_control, widget_info(self.base, find_by_uname='status'), set_value='This wavelength region is invalid.'
                           endif else begin
-                              specall[self.i].indiv_contmask[w,wplotcon] = 1
+                              spec.indiv_contmask[w,wplotcon] = 1
                               ptr_free, self.spec
-                              self.spec = ptr_new(specall)
+                              self.spec = ptr_new(spec)
                               self->redraw
                           endelse
                       end
@@ -600,6 +641,15 @@ pro compspec::handle_draw_key, ev
                       else: widget_control, widget_info(self.base, find_by_uname='status'), set_value='Key not recognized.'
                   endcase
               end
+              's': begin
+                  case self.keystate of
+                      0: begin
+                          self->writespecindiv, spec
+                      end
+                      else: widget_control, widget_info(self.base, find_by_uname='status'), set_value='Key not recognized.'
+                  endcase
+              end
+
               'h': begin
                   self.lambdalim = [6513, 6613]
                   self->redraw
@@ -632,12 +682,10 @@ pro combspec::cleanup
 end
 
 pro combspec::default_mask
-    specall = *self.spec
-    spec = specall[self.i]
-    self->indivmask, spec, nmc=0
-    specall[self.i] = spec
+    spec = *self.spec
+    self->indivmask, spec
     ptr_free, self.spec
-    self.spec = ptr_new(specall)
+    self.spec = ptr_new(spec)
     self->redraw
 end
 
@@ -891,14 +939,15 @@ pro combspec::redraw
    widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
    widget_control, widget_info(self.base, find_by_uname='spec'), get_value=index
    wset, index
-   spec = (*self.spec)[self.i]
-
+   spec = *self.spec
+   indivcolors = *self.indivcolors
+   indivbgcolors = *self.indivbgcolors
    case mode of
        ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
        0: begin ;continuum fit
           widget_control, widget_info(self.base, find_by_uname='iplotcont'), get_value=wplotcon
           if wplotcon lt spec.indiv_count then begin
-             plot, spec.indiv_lambda[*,wplotcon], spec.indiv_contdiv[*,wplotcon]*spec.indiv_continuum[*,wplotcon], xrange=self.lambdalim*(1d + spec.z), yrange=self.ylim, xstyle=5, ystyle=5, background=fsc_color('white'), color=fsc_color('black'), /nodata
+             plot, spec.indiv_lambda[*,wplotcon]*(1.+spec.indiv_vhelio[wplotcon]/3e5), spec.indiv_contdiv[*,wplotcon]*spec.indiv_continuum[*,wplotcon], xrange=self.lambdalim*(1d + spec.z), yrange=self.ylim, xstyle=5, ystyle=5, background=fsc_color('white'), color=fsc_color('black'), /nodata
          
              ;;making the highlight region
              t = round(-1*ts_diff(spec.indiv_contmask[*,wplotcon], 1))
@@ -927,20 +976,21 @@ pro combspec::redraw
                 x = ([spec.indiv_lambda[wstart[i],wplotcon], spec.indiv_lambda[wstart[i],wplotcon], spec.indiv_lambda[wend[i],wplotcon], $
                       spec.indiv_lambda[wend[i],wplotcon]] > (self.lambdalim[0] * (1d + spec.z))) < (self.lambdalim[1] * (1d + spec.z))
                 y = [self.ylim[0], self.ylim[1], self.ylim[1], self.ylim[0]]
-                polyfill, x, y, color=fsc_color((*self.indivbgcolors)[wplotcon],/brewer)
+                polyfill, x, y, color=fsc_color(indivbgcolors[wplotcon],/brewer)
              endfor
              ;;finish highlighting masked regions
 
              ;;start ploting
              for idup=0,ndup-1 do begin 
                 if spec.indiv_good[idup] eq 1 then begin
-                   oplot, spec.indiv_lambda[*,idup], spec.indiv_contdiv[*,idup]*spec.indiv_continuum[*,idup], color=fsc_color((*self.indivcolors)[idup])
+                   oplot, spec.indiv_lambda[*,idup]*(1.+spec.indiv_vhelio[idup]/3e5), spec.indiv_contdiv[*,idup]*spec.indiv_continuum[*,idup], color=fsc_color(indivcolors(idup))
                 endif
              endfor
-             oplot, spec.indiv_lambda[*,wplotcon], spec.indiv_contdiv[*,wplotcon]*spec.indiv_continuum[*,wplotcon], color=fsc_color((*self.indivcolors)[wplotcon])
+             oplot, spec.indiv_lambda[*,wplotcon]*(1.+spec.indiv_vhelio[wplotcon]/3e5), spec.indiv_contdiv[*,wplotcon]*spec.indiv_continuum[*,wplotcon], color=fsc_color((*self.indivcolors)[wplotcon])
+             oplot,spec.indiv_lambda[*,wplotcon]*(1.+spec.indiv_vhelio[wplotcon]/3e5),spec.indiv_continuum[*,wplotcon], color=fsc_color('black')
  
              ;;make the axes labels
-             plot, spec.indiv_lambda[*,wplotcon], spec.indiv_contdiv[*,wplotcon]*spec.indiv_continuum[*,wplotcon], xrange=self.lambdalim * (1d + spec.z), yrange=self.ylim, xstyle=1, ystyle=1, background=fsc_color('white'), color=fsc_color('black'), xtitle='!6observed wavelength (!sA!r!u!9 %!6!n)!3', ytitle='!6flux (e!E-!N/hr)!3', /nodata, /noerase
+             plot, spec.indiv_lambda[*,wplotcon]*(1.+spec.indiv_vhelio[wplotcon]/3e5), spec.indiv_contdiv[*,wplotcon]*spec.indiv_continuum[*,wplotcon], xrange=self.lambdalim * (1d + spec.z), yrange=self.ylim, xstyle=1, ystyle=1, background=fsc_color('white'), color=fsc_color('black'), xtitle='!6observed wavelength (!sA!r!u!9 %!6!n)!3', ytitle='!6flux (e!E-!N/hr)!3', /nodata, /noerase
              ;;highlight the telluric region and write line names
              n = n_elements(*self.tellstart)
              for i=0,n-1 do begin
@@ -959,16 +1009,18 @@ pro combspec::redraw
        1: begin                ;rest frame
           ;;make reference axis of contdiv with applied fake continuum
           znow = spec.z
-          plot, spec.lambda/(1d + znow), spec.contdiv, xrange=self.lambdalim, yrange=self.divylim, xstyle=5, ystyle=5, background=fsc_color('white'), color=fsc_color('black'), /nodata
+          plot, spec.lambda/(1d + znow), spec.contdiv, xrange=self.lambdalim, yrange=self.divylim, xstyle=1, ystyle=1, background=fsc_color('white'), color=fsc_color('black'), /nodata
           oplot, [-1d6, 1d6], [0.0, 0.0], color=fsc_color('pink')
           oplot, [-1d6, 1d6], [1.0, 1.0], color=fsc_color('pale green')
 
           for idup=0,ndup-1 do begin
-             if spec.indiv_good eq 1 then oplot,spec.indiv_lambda[*,idup],spec.indiv_contdiv[*,idup],color=fsc_color((*self.indivcolors)[idup])
+             if spec.indiv_good[idup] eq 1 then begin
+                oplot,spec.indiv_lambda[*,idup]/(1d +znow)*(1.+spec.indiv_vhelio[idup]/3e5),spec.indiv_contdiv[*,idup],color=fsc_color(indivcolors(idup))
+             endif
           endfor
-   
-          ;;plot the contdiv with applied fake continuum
-          oplot, spec.lambda/(1d +znow), spec.contdiv, color=fsc_color('black')
+         
+          if total(spec.indiv_good) gt 1 then thick=2 else thick=1 
+          oplot, spec.lambda/(1d +znow), spec.contdiv, color=fsc_color('black'),thick=thick
 
           ;;highlighting the telluric bands and label line names
           n = n_elements(*self.tellstart)
@@ -983,7 +1035,7 @@ pro combspec::redraw
           endfor
         end
     endcase
-   zl = mode lt 2 ? (*self.spec)[self.i].z : 0.0
+   zl = mode lt 2 ? (*self.spec).z : 0.0
    widget_control, widget_info(self.base, find_by_uname='lambdalow'), set_value=strcompress(string(self.lambdalim[0]*(1d + zl), format='(D7.1)'), /rem)
    widget_control, widget_info(self.base, find_by_uname='lambdahigh'), set_value=strcompress(string(self.lambdalim[1]*(1d + zl), format='(D7.1)'), /rem)
 
@@ -993,7 +1045,7 @@ end
 
 pro combspec::statusbox, spec=spec
     common npixcom, npix,ndup
-    if ~keyword_set(spec) then spec = (*self.spec)[self.i]
+    if ~keyword_set(spec) then spec = *self.spec
     unknown = '???'
     widget_control, widget_info(self.base, find_by_uname='include'), set_value=spec.indiv_good
     widget_control, widget_info(self.base, find_by_uname='curid'), set_value=strtrim(spec.objname, 2)+' ('+strcompress(self.i+1, /rem)+' / '+strcompress(self.nspec, /rem)+')'
@@ -1002,6 +1054,8 @@ pro combspec::statusbox, spec=spec
     widget_control, widget_info(self.base, find_by_uname='cursn'), set_value=strcompress(string(spec.sn, format='(D7.2)'), /rem)
 
     widget_control, widget_info(self.base, find_by_uname='curmstar'), set_value=spec.mass_kcorrect gt 0 ? strcompress(string(spec.mass_kcorrect, format='(D10.2)'), /rem) : unknown
+
+    widget_control, widget_info(self.base, find_by_uname='curexptime'), set_value=strcompress(string(spec.exptime, format='(I8)'), /rem)
     inditable = replicate({mask:'',id:'',vhelio:-999,sn:-999,exptime:-999},ndup)
     inditable.mask = strcompress(spec.indiv_mask)
     inditable.id = strcompress(spec.indiv_objname)
@@ -1038,12 +1092,12 @@ pro combspec::getspec, list=list, cat=cat, distance=distance, mass=mass
           spec.objname = objnames[i]
           specinfo[i].mask = masks[i]
           specinfo[i].slit = slits[i]
-          specinfo[i].objanme = objnames[i]
+          specinfo[i].objname = objnames[i]
           spec.indiv_skyfit = -1
           spec.indiv_skylinemask = -1
           obj = list[i]
           struct_assign,cat[i],spec,/nozero ;copy cat over
-
+          spec.mass_kcorrect = mass[i]
           spec.indiv_count = obj.count
           nobs = obj.count
           for iobs =0, nobs-1 do begin
@@ -1102,6 +1156,8 @@ pro combspec::getspec, list=list, cat=cat, distance=distance, mass=mass
       widget_control, widget_info(self.base, find_by_uname='mode'), set_value=1
    endif else begin
       specinfo = mrdfits(specfits, 1, /silent)
+      ptr_free,self.specinfo
+      self.specinfo = ptr_new(specinfo)
 
       self.nspec = n_elements(specinfo)
       speclist = specinfo.mask+' '+strtrim(string(specinfo.slit), 2)+' '+specinfo.objname
@@ -1141,10 +1197,13 @@ pro combspec::readspecindiv
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Reading spectrum from database ...'
     i=self.i
     specinfo = *self.specinfo
-    specfits = self.directory+strcompress(specinfo[i].mask)+'_'+specinfo[i].slit+'_'+specinfo[i].objname+'.fits.gz'
+    specfits = self.directory+strtrim(specinfo[i].mask,2)+'_'+strtrim(specinfo[i].slit,2)+'_'+strtrim(specinfo[i].objname,2)+'.fits.gz'
+    if file_test(specfits) eq 0 then stop,'no file found'
     spec = mrdfits(specfits,1,/silent)
     ptr_free,self.spec
     self.spec = ptr_new(spec)    
+    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Ready.'
+
 end
 
 pro combspec::initialize_directory, directory=directory,rematch=rematch
@@ -1222,11 +1281,12 @@ function combspec::INIT, directory=directory
     wprepbase = widget_base(wleft, /row, /align_center)
     wfitcont = widget_button(wprepbase, value='Fit Continuum', uvalue='fitcont', uname='fitcont', tab_mode=1, xsize=100)
     wcombine = widget_button(wprepbase, value='Re-stack', uvalue='combine', uname='combine', tab_mode=1, xsize=100)
+    wsavespec = widget_button(wprepbase,value='Save spec', uvalue='savespec',uname='savespec',tab_mode=1,xsize=100)
     wdefaultmaskbase = widget_base(wleft,/row,/align_center)
-    wdefaultmask = widget_button(wdefaultmaskbase,value='Default Mask',uvalue='default_mask',uname='default_mask',tab_mode=1,xsize=100)
+    wdefaultmask = widget_button(wdefaultmaskbase,value='Default Mask',uvalue='default_mask',uname='default_mask',tab_mode=1,xsize=100)    
     wincludebase = widget_base(wleft, /row, /align_center,/frame)
     wincluderadio = cw_bgroup(wincludebase,['0','1','2','3','4','5','6'],/column,/nonexclusive,set_value=[1,1,1,1,1,1,1],uname='include',uvalue='include',label_top='include')
-    wplotconradio = cw_bgroup(wincludebase,['0','1','2','3','4','5','6'],/column,/exclusive,set_value=0,uname='iplotcon',uvalue='iplotcon',label_top='plot')
+    wplotconradio = cw_bgroup(wincludebase,['0','1','2','3','4','5','6'],/column,/exclusive,set_value=0,uname='iplotcont',uvalue='iplotcont',label_top='plot')
     wcurobj = widget_base(wleft, /column, /align_center, tab_mode=0, /frame)
     widbase = widget_base(wcurobj, /align_left, /row, xsize=235)
     widlabel = widget_label(widbase, value='object ID:', /align_right, uname='idlabel', xsize=65)
@@ -1245,6 +1305,11 @@ function combspec::INIT, directory=directory
     wmstarbase = widget_base(wcurobj, /align_center, /row)
     wmstarlabel = widget_label(wmstarbase, value='log M* = ', /align_right, uname='mstarlabel', xsize=95)
     wcurmstar = widget_label(wmstarbase, value='     ', /align_left, uname='curmstar', uvalue='curmstar', xsize=150)
+
+    wexptimebase = widget_base(wcurobj, /align_center, /row)
+    wexptimelabel = widget_label(wexptimebase, value='Exp time = ', /align_right, uname='exptimelabel', xsize=95)
+    wcurexptime = widget_label(wexptimebase, value='     ', /align_left, uname='curexptime', uvalue='curexptime', xsize=150)
+
     windibase = widget_base(wcurobj,/align_left,/row,xsize=400)
     winditable = widget_table(windibase,value=replicate({mask:'',id:'',vhelio:-999,sn:-999,exptime:-999},7),/row_major,column_labels=['mask','id','vhelio','sn','exptime'],uname='curinditable',uvalue='curinditable')
 
@@ -1306,7 +1371,7 @@ pro combspec__define
     state = {combspec, $
              base:0L, $
              directory:'', $
-             specfile:ptr_new(), $
+             specinfo:ptr_new(), $
              spec:ptr_new(), $
              tell:ptr_new(), $
              lambdalim:[-100d, 100d], $
