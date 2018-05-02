@@ -696,37 +696,41 @@ pro combspec::indivcontinuum, spec
    common continuum, conttype
    nobs = spec.indiv_count
    for i=0,nobs-1 do begin
-      contmask = spec.indiv_contmask[*,i]
-      lambda = spec.indiv_lambda[*,i]
-      telldivivar = spec.indiv_telldivivar[*,i]
-      spectrum = spec.indiv_telldiv[*,i]
-      won = where(contmask eq 1, complement=woff, con)
-      if con gt 100 then begin
-         if conttype eq 'polycon' then begin
-            degree = 7
-            coeff =  poly_fit(lambda[won],spectrum[won],degree,measure_errors=1./sqrt(telldivivar[won]),status=status)
-            if status ne 0 then stop,'stopped:(continuumnormalize_deimos.pro) blueside has some error'
-            cont = poly(lambda,reform(coeff))
+      nhalf = fix(npix/2.)
+      for ccd=1,2 do begin
+         if ccd eq 1 then ipix=0 & fpix = nhalf-1
+         if ccd eq 2 then ipix=nhalf & fpix = npix-1
+         contmask = spec.indiv_contmask[ipix:fpix,i]
+         lambda = spec.indiv_lambda[ipix:fpix,i]
+         telldivivar = spec.indiv_telldivivar[ipix:fpix,i]
+         spectrum = spec.indiv_telldiv[ipix:fpix,i]
+         won = where(contmask eq 1, complement=woff, con)
+         if con gt 100 then begin
+            if conttype eq 'polycon' then begin
+               degree = 7
+               coeff =  poly_fit(lambda[won],spectrum[won],degree,measure_errors=1./sqrt(telldivivar[won]),status=status)
+               if status ne 0 then stop,'stopped:(continuumnormalize_deimos.pro) blueside has some error'
+               cont = poly(lambda,reform(coeff))
+            endif else begin
+               bkspace = 500.
+               bkpt = slatec_splinefit(lambda[won], spectrum[won], coeff, invvar=telldivivar[won], bkspace=bkspace, upper=3, lower=3, /silent)
+               if bkpt[0] eq -1 then stop,'cannot do continnum fit'
+               cont = slatec_bvalu(lambda, bkpt, coeff)
+            endelse
+            check = where(finite(cont),ccheck)
+            if ccheck lt 10 then stop
+            contdiv = spec.indiv_telldiv[ipix:fpix,i]/cont
+            contdivivar = spec.indiv_telldivivar[ipix:fpix,i]*cont^2
          endif else begin
-            bkspace = 500.
-            bkpt = slatec_splinefit(lambda[won], spectrum[won], coeff, invvar=telldivivar[won], bkspace=bkspace, upper=3, lower=3, /silent)
-            if bkpt[0] eq -1 then stop,'cannot do continnum fit'
-            cont = slatec_bvalu(lambda, bkpt, coeff)
+            contdiv = dblarr(npix)
+            cont = dblarr(npix)
+            contdivivar = dblarr(npix)
+            spec.indiv_good[i] = 0  
          endelse
-         check = where(finite(cont),ccheck)
-         if ccheck lt 10 then stop
-         contdiv = spec.indiv_telldiv[*,i]/cont
-         contdivivar = spec.indiv_telldivivar[*,i]*cont^2
-      endif else begin
-         contdiv = dblarr(npix)
-         cont = dblarr(npix)
-         contdivivar = dblarr(npix)
-         spec.indiv_good[i] = 0  
-      endelse
-      spec.indiv_continuum[*,i] = cont
-      spec.indiv_contdivivar[*,i] = contdivivar
-      spec.indiv_contdiv[*,i] = contdiv
-
+         spec.indiv_continuum[ipix:fpix,i] = cont
+         spec.indiv_contdivivar[ipix:fpix,i] = contdivivar
+         spec.indiv_contdiv[ipix:fpix,i] = contdiv
+      endfor
       wcont = where(spec.indiv_contmask[3:npix-4,i] eq 1)+3
       wcont = wcont[where(finite(spec.indiv_telldiv[wcont,i]) and finite(spec.indiv_continuum[wcont,i]) and spec.indiv_continuum[wcont,i] ne 0)]
       dev = abs((spec.indiv_telldiv[wcont,i] - spec.indiv_continuum[wcont,i]) / spec.indiv_continuum[wcont,i])
