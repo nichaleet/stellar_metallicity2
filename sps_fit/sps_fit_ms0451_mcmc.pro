@@ -1,8 +1,109 @@
-; =================
-pro sps_iterproc, funcname, p, iter, fnorm, functargs=functargs, parinfo=pi, quiet=quiet, dof=dof
-    common sps_iterproc, contiter
-    common toprint, agediff, zdiff
-    if iter gt 1 then print, contiter, p[0], p[1], p[2],p[3], fnorm/dof, dof,abs(zdiff),abs(agediff),format='(I4,2X,D6.3,1X,D5.2,2X,D6.1,2x,D6.3,1X,D10.5,1X,I4,2X,D8.4,2X,D8.4)'
+function calchisq,ymodel,y,yerr
+
+  if n_Elements(ymodel) ne n_elements(y) then begin
+     print, 'Number of elements are not equal'
+     stop
+  endif
+  chisq = total((ymodel-y)^2/yerr^2)
+  return,chisq
+end
+
+
+pro mcmc_sps,x,y,yerr,nparam,nstep,p0,stepsizes,limits,paraname,parfix,returnvalues
+  common get_sps, dlam, dataivar, datalam, wonfit, contmask, normalize, rest
+
+  !p.multi = [0,3,2]
+  !p.charsize=2
+
+  ymodel0 = get_sps_obs(x,p0)
+  oldchisq = calchisq(ymodel0,y,yerr)
+ ; print,'Chisq of the initial parameters:', oldchisq/float(n_Elements(x)-nparam)
+  wparfit = where(parfix eq 0,nparfit,complement=wparfix,ncomplement=nparfix)
+  randomparam = wparfit(fix(randomu(seed,nstep)*nparfit))
+  randomstepsize = randomn(seed,nstep)
+  randomaccept = randomu(seed,nstep)  ;0-1
+
+  parr = fltarr(nparam,nstep+1)
+  chisqarr = fltarr(nstep+1)
+  pold = p0
+  parr(0) = p0
+  pcurrent = p0
+  chisqarr(0) = oldchisq
+  naccepts = 0UL
+  nrejects = 0UL
+  for ii=0UL,nstep-1 do begin
+     if ii mod 50 eq 0 then print,'.',format='(A,$)'
+     if ii eq nstep-1 then print, '.'
+     chosenparam = randomparam(ii)
+     pcurrent(chosenparam) = pcurrent(chosenparam)+stepsizes(chosenparam)*randomstepsize(ii)
+     if pcurrent(chosenparam) le limits[1,chosenparam] and pcurrent(chosenparam) ge limits[0,chosenparam] then begin
+        ymodel = get_sps_obs(x,pcurrent)
+     endif else ymodel = (0.*y)-99.
+
+     newchisq = calchisq(ymodel,y,yerr)
+     ;;print, pcurrent, newchisq   
+     if newchisq lt oldchisq then begin
+        naccepts = naccepts+1
+        ;;print, 'accept'
+     endif else begin
+        prob = exp(-0.5*(newchisq-oldchisq))
+      if randomaccept(ii) lt prob then begin ;accept
+         naccepts = naccepts+1
+         ;;print, 'accept with prob', prob
+      endif else begin    ;reject
+         pcurrent = pold    ; do not accept new parameters
+         newchisq = oldchisq
+         nrejects = nrejects+1
+
+         ;;print, 'reject with prob', 1.-prob
+      endelse
+   endelse
+     parr(*,ii+1) = pcurrent
+     chisqarr(ii+1) = newchisq
+     pold = pcurrent
+     oldchisq = newchisq
+
+  endfor
+  print, 'acceptance ratio', float(naccepts)/float(nrejects+naccepts)
+
+  ;;plot chisq
+  plot,chisqarr,xtitle='step number', ytitle='chisq',yrange=[min(chisqarr)-10.,max(chisqarr)+10.],background=fsc_color('white'), color=fsc_color('black')
+
+  medchi = median(chisqarr)
+  minstep = where(chisqarr le medchi)
+  minstep = minstep(0)
+
+  ;;print, 'Trimming position is', minstep,' at chisq ', chisqarr(minstep)
+  oplot,[minstep,minstep],[3000,5000],linestyle=1,color=fsc_Color('red')
+
+  chisqarr_trimmed = chisqarr[minstep:nstep]
+  parr_trimmed = parr[*,minstep:nstep]
+  parr_sort = 0.*parr_trimmed
+
+  nelement = n_elements(chisqarr_trimmed)
+  sigmapos = long([0.16,0.5,0.84]*nelement)
+  returnvalues = fltarr(3,nparam)
+
+  ;;print,'After trimming, there are ',nelement, ' elements left.'
+  ;;Calculating outputs and plotting
+  for jj=0,nparam-1 do begin
+     if parfix(jj) eq 0 then begin
+        sortind = bsort(parr_trimmed(jj,*),asort)
+        parr_Sort(jj,*) = asort
+        ;;plot,parr(jj,*),xtitle='step number', ytitle=paraname(jj),yrange=[min(parr(jj,*))-.5,max(parr(jj,*))+.5]     
+        bin = (max(parr_sort(jj,*))-min(parr_sort(jj,*)))/100.
+        plothist,parr_sort(jj,*),xhist,yhist,bin=bin,/noplot,peak=1.
+        yhist= yhist/tsum(xhist,yhist)
+        if jj ne nparam-1 then plot,xhist,yhist,ytitle='posterior PDF',xtitle=paraname(jj),background=fsc_color('white'), color=fsc_color('black')
+        print,'1 sigma range for ',paraname(jj),' is:',reform(parr_sort(jj,[sigmapos]))
+        returnvalues(*,jj) =  parr_sort(jj,[sigmapos])
+     endif else begin
+        print,paraname(jj),' is fixed at', pcurrent[jj]
+        returnvalues(*,jj) = pcurrent[jj]
+     endelse
+  endfor
+;!p.multi = [0,1,1]
+;stop
 end
 
 
@@ -71,23 +172,25 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
     pi[0].limits = [-0.5,0.1] ;this is just for initial parameters
     pi[1].limits = [min(spsage),(galage(znow,1000)/1.e9)<max(spsage)]
     pi[3].limits = [-0.3,0.3]+znow
+    pi[3].fixed = 1
     ;set the prior to velocity dispersion according to Faber-Jackson relation (Dutton2011)
 ;    if science.logmstar gt 5. then begin
 ;	logvdisp = 2.23+0.37*(science.logmstar-10.9)-0.19*alog10(0.5+0.5*(10.^science.logmstar/10.^10.9))
 ;	pi[2].limits = [10.^(logvdisp-0.4),10.^(logvdisp+0.4)]
 ;	print, 'velocity dispersion prior = ',pi[2].limits,' km/s'	
 ;    endif else pi[2].limits = [40.,400.]; [30.,200.]
-    pi[2].limits = [0.,600.]
+    pi[2].limits = [40.,600.]
    ;;make the initial guesses unfix but within limits except redshift
     pi.value = randomu(seed,4)*(pi.limits[1,*]-pi.limits[0,*])+pi.limits[0,*]
     pi[3].value = znow
     firstguess = pi.value    
     pi[0].limits = minmax(spsz) ;fix the limit of [Fe/H] back
-    pi[1].limits = [min(spsage),(galage(znow,1000)/1.e9)<max(spsage)]
-    pi.step = double([0.1, 0.5, 25.0,0.002])
+    pi.step = double([0.05, 0.3, 10.0,0.002])
     pi.parname = ['    Z', '  age', 'vdisp','redshift']
     pi.mpformat = ['(D6.3)', '(D5.2)', '(D6.1)','(D6.3)']
-    print, 'prior range:',pi.limits
+    parfit = where(pi.fixed eq 0,cparfit,complement=parfix,ncomplement=cparfix)
+    print, 'fitting for', pi(parfit).parname
+    print, 'prior range:',pi(parfit).limits
 
     won = where(science.fitmask eq 1 and finite(science.contdiv) and finite(science.contdivivar) and science.contdivivar gt 0 and reallambda/(1.+znow) gt 3500. and reallambda/(1.+znow) lt 7400., con)
 
@@ -111,12 +214,8 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
     widget_control, widget_info(self.base, find_by_uname='maxnloop'), get_value=maxnloop
     maxnloop = fix(maxnloop[0])
     if maxnloop eq 0 then maxnloop = 50
-    print, '* * * * * * * * * * * * * * * * * * * *'
     print, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
     print, '* * * * * * * * * * * * * * * * * * * *'
-    print, '  i Z/Z_sun   age sigma_v  redhift    chi^2  DOF   ZDIFF  AGEDIFF'
-    print, '--- ------- ----- ------- ---------  -------- ---- -----  ------'
-
 ;;things to keep during the while loop
     bestchisq = 9999.
     bestvalue = [99.,99.,99.,99.]
@@ -124,9 +223,13 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
     chisqarr = fltarr(maxnloop)
     valuearr = fltarr(4,maxnloop)
     errorarr = fltarr(4,maxnloop)
-    
+   
+    dof = con-1.-cparfit 
     ;;while abs(zdiff) gt 0.001 or abs(agediff) gt 0.001 or abs(vdispdiff) gt 0.001 or abs(redshfdiff) gt 0.001 and nloop le maxnloop do begin
     while nloop lt maxnloop do begin
+        widget_control, widget_info(self.base, find_by_uname='spec'), get_value=index
+        wset, index
+        print,nloop,'/',maxnloop
         contiter++
         dlam = dlam_all
         dataivar = science.contdivivar
@@ -135,13 +238,21 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
         contmask = science.contmask
         rest =0
         if nloop eq 0 then normalize =1 else normalize = 0
-        pars = mpfitfun('get_sps_obs', xmp, ymp, dymp, parinfo=pi, /nocatch, bestnorm=bestnorm, dof=dof, perror=perror, ftol=1d-10, gtol=1d-10, xtol=1d-10, covar=covar, nprint=500, status=status, yfit=ympfit, iterproc='sps_iterproc')
+
+        mcmc_sps,xmp,ymp,dymp,4,10000UL,pi.value,pi.step,pi.limits,pi.parname,pi.fixed,returnvalues
+        pars = reform(returnvalues[1,*])
+        perror = reform((returnvalues[2,*]-returnvalues[0,*])/2.)
+        pupper = reform(returnvalues[2,*])
+        plower = reform(returnvalues[0,*])
+ 
+        ymodel =  get_sps_obs(xmp,pars)
+        bestnorm = calchisq(ymodel,ymp,dymp)
+
 
         zdiff = (pi[0].value-pars[0])/pi[0].value
         agediff = (pi[1].value-pars[1])/pi[1].value
         vdispdiff = (pi[2].value-pars[2])/pi[2].value
         redshfdiff = (pi[3].value-pars[3])/pi[2].value
-        ;print,'z,age,vdisp diff:',zdiff,agediff,vdispdiff,nloop
         pi.value = pars
         restlambda = reallambda / (1d + pi[3].value)
 
@@ -205,7 +316,7 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
         valuearr[*,nloop] = pars
         errorarr[*,nloop] = perror
         nloop +=1
-
+        print,'current chisq:', curchisq
      endwhile
 
     if savedata eq 1 then begin
@@ -235,8 +346,12 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
     done:
     science.feh = pi[0].value
     science.feherr = perror[0]
+    science.fehupper = pupper[0]
+    science.fehlower = plower[0]
     science.age = pi[1].value
     science.ageerr = perror[1]
+    science.ageupper = pupper[1]
+    science.agelower = plower[1]
     science.zfit = pi[3].value
     science.zspec = pi[3].value
     science.vdisp = pi[2].value
@@ -473,7 +588,7 @@ pro sps_fit::fit_all
         self.i = i
         self->default_range
         science = scienceall[self.i]
-        if science.good eq 0 then continue
+        if science.goodfit eq 0 then continue
 	;if science.good eq 0 and science.goodfit eq 0 then continue
         self->fit, science
         scienceall[self.i] = science
@@ -1667,9 +1782,9 @@ pro sps_fit::getscience, files=files
     npix = 8192
 
     observatory, 'keck', obs
-    sciencefits = self.directory+(self.lowsn eq 1 ? 'sps_fit_lowsn.fits.gz' : 'sps_fit.fits.gz')
+    sciencefits = self.directory+'sps_fit_mcmc.fits.gz'
     if ~file_test(sciencefits) then begin
-        if ~keyword_set(files) then message, 'You must specify the FILES keyword if a sps_fit.fits.gz file does not exist.'
+        if ~keyword_set(files) then message, 'You must specify the FILES keyword if a sps_fit_mcmc.fits.gz file does not exist.'
         c = n_elements(files)
         masks = strarr(c)
         slits = strarr(c)
@@ -1843,7 +1958,7 @@ end
 pro sps_fit::writescience
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Writing to database ...'
     scienceall = *self.science
-    sciencefits = self.directory+(self.lowsn eq 1 ? 'sps_fit_lowsn.fits' : 'sps_fit.fits')
+    sciencefits = self.directory+'sps_fit_mcmc.fits'
     mwrfits, scienceall, sciencefits, /create, /silent
     spawn, 'gzip -f '+sciencefits
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Ready.'
@@ -1861,7 +1976,7 @@ pro sps_fit::initialize_directory, directory=directory
 
     countfiles:
     files = file_search(directory, mask_in+'*.{fits,fits.gz}', count=c)
-    sciencefits = newdirectory+(self.lowsn eq 1 ? 'sps_fit_lowsn.fits.gz' : 'sps_fit.fits.gz')
+    sciencefits = newdirectory+'sps_fit_mcmc.fits.gz'
     if c eq 0 then begin
        files = file_search(directory+'*/'+mask_in+'*.{fits,fits.gz}', count=c)
     endif
@@ -2012,9 +2127,9 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     tellstart = tellstart[wbands]
     tellend = tellend[wbands]
     ptr_free, self.linewaves, self.linewaves, self.linecolors, self.tellstart, self.tellend, self.tellthick
-    self.linewaves = ptr_new([2798.0, 3646.00, 3727.425, 3750.15, 3770.63, 3797.90, 3835.39, 3868.71, 3888.65, 3889.05, 3933.663, 3967.41, 3968.468, 3970.07, 4101.76, 4305.05, 4340.47, 4861.33, 4958.92, 5006.84, 5167.321, 5172.684, 5183.604, 5875.67, 5889.951, 5895.924, 6300.30, 6548.03, 6562.80, 6583.41, 6678.152, 6716.47, 6730.85,4384,4455,4531,5015,5270,5335,5406,5709,5782])
-    self.linenames = ptr_new(['MgII', 'Hbreak', '[OII]', 'H12', 'H11', 'H10', 'H9', '[NeIII]', 'HeI', 'H8', 'CaH', '[NeIII]', 'CaK', 'He', 'Hd', 'CH', 'Hg', 'Hb', '[OIII]', '[OIII]', 'Mgb', 'Mgb', 'Mgb', 'HeI', 'NaD', 'NaD', '[OI]', '[NII]', 'Ha', '[NII]', 'HeI', '[SII]', '[SII]','Fe4384','Fe4455','Fe4531','Fe5015','Fe5270','Fe5335','Fe5406','Fe5709','Fe5782'])
-    self.linecolors = ptr_new(['blue', 'black', 'blue', 'black', 'black', 'black', 'black', 'blue', 'blue', 'black', 'red', 'blue', 'red', 'black', 'black', 'red', 'black', 'black', 'blue', 'blue', 'red', 'red', 'red', 'blue', 'red', 'red', 'blue', 'blue', 'black', 'blue', 'blue', 'blue', 'blue','red','red','red','red','red','red','red','red','red'])
+    self.linewaves = ptr_new([2798.0, 3646.00, 3727.425, 3750.15, 3770.63, 3797.90, 3835.39, 3868.71, 3888.65, 3889.05, 3933.663, 3967.41, 3968.468, 3970.07, 4101.76, 4305.05, 4340.47, 4861.33, 4958.92, 5006.84, 5167.321, 5172.684, 5183.604, 5875.67, 5889.951, 5895.924, 6300.30, 6548.03, 6562.80, 6583.41, 6678.152, 6716.47, 6730.85])
+    self.linenames = ptr_new(['MgII', 'Hbreak', '[OII]', 'H12', 'H11', 'H10', 'H9', '[NeIII]', 'HeI', 'H8', 'CaH', '[NeIII]', 'CaK', 'He', 'Hd', 'CH', 'Hg', 'Hb', '[OIII]', '[OIII]', 'Mgb', 'Mgb', 'Mgb', 'HeI', 'NaD', 'NaD', '[OI]', '[NII]', 'Ha', '[NII]', 'HeI', '[SII]', '[SII]'])
+    self.linecolors = ptr_new(['blue', 'black', 'blue', 'black', 'black', 'black', 'black', 'blue', 'blue', 'black', 'red', 'blue', 'red', 'black', 'black', 'red', 'black', 'black', 'blue', 'blue', 'red', 'red', 'red', 'blue', 'red', 'red', 'blue', 'blue', 'black', 'blue', 'blue', 'blue', 'blue'])
     self.tellstart = ptr_new(tellstart)
     self.tellend = ptr_new(tellend)
     self.tellthick = ptr_new([5, 2, 5, 2, 2])
@@ -2145,7 +2260,7 @@ pro science__define
 end
 
 
-pro sps_fit_ms0451
+pro sps_fit_ms0451_mcmc
     common mask_in, mask_in
     mask = 'spline'
     mask_in = mask
