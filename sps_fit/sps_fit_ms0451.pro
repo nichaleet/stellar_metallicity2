@@ -465,6 +465,69 @@ pro sps_fit::fitz, science, noredraw=noredraw, nostatusbar=nostatusbar
     endif
 end
 
+pro sps_fit::cal_uncertainties, science
+   
+   spec_arr = *self.degen_sps
+   grid_feh = *self.degen_fehgrid
+   grid_age = *self.degen_agegrid 
+
+   ;find where is the spec closest to the input age and feh
+   min_dist = min(sqrt((spec_arr.feh-science.feh)^2+(spec_arr.age-science.age)^2),iref)
+   if min_dist gt 0.05 then stop,'halted because matching might be off grid in make_chisqarr_new.pro'
+
+   ;make noisy ref spectra
+   npix = n_elements(spec_arr(iref).lambda)
+   refspec_err = abs(spec_arr(iref).spec/science.snfit)
+   refspec = spec_arr(iref).spec+randomn(seed,npix)*refspec_err
+
+   ;make chisqarr
+   chisqarr = fltarr(size(grid_feh,/dimensions))
+   for i=0,n_elements(spec_arr)-1 do begin
+      loc = where(grid_feh eq spec_arr[i].feh and grid_age eq spec_arr[i].age,cloc)
+      if cloc ne 1 then stop,'oops'
+      ind = array_indices(grid_feh,loc)
+      chisqarr[ind[0],ind[1]] = total((refspec-spec_arr[i].spec)^2/refspec_err)
+   endfor
+
+   feharr = grid_feh[*,0]
+   agearr = reform(grid_age[0,*])
+
+   deltafeh = grid_feh[1,0]-grid_feh[0,0]
+   deltaage = grid_age[0,1]-grid_age[0,0]
+
+   ;read the chisq grid and calculate probability
+   Lgrid = -0.5*(chisqarr-min(chisqarr))
+   probgrid = exp(double(Lgrid))
+   volume = 0
+   arr_dimen = size(grid_feh,/dimension)
+   for ii=0,arr_dimen(0)-1 do begin
+      for jj=0,arr_dimen(1)-1 do begin
+         volume = volume+deltafeh*deltaage*probgrid[ii,jj]
+      endfor
+   endfor
+   probgrid = probgrid/volume
+
+   probfeh = fltarr(arr_dimen(0))
+   probage = fltarr(arr_dimen(1))
+   for ii=0,arr_dimen(0)-1 do probfeh(ii) = int_tabulated(agearr,probgrid[ii,*])
+   for jj=0,arr_dimen(1)-1 do probage(jj) = int_tabulated(feharr,probgrid[*,jj])
+   probfeh = probfeh/int_tabulated(feharr,probfeh)
+   probage = probage/int_tabulated(agearr,probage)
+
+   cumprobfeh = fltarr(arr_dimen(0))
+   for jj=1,arr_dimen(0)-1 do cumprobfeh(jj) = int_tabulated(feharr[0:jj],probfeh[0:jj])
+   cumprobage = fltarr(arr_dimen(1))
+   for jj=1,arr_dimen(1)-1 do cumprobage(jj) = int_tabulated(agearr[0:jj],probage[0:jj])
+
+   midagevalue = interpol(agearr,cumprobage,0.5)
+   midfehvalue = interpol(feharr,cumprobfeh,0.5)
+
+   science.ageupper = science.age+(interpol(agearr,cumprobage,0.84)-midagevalue)
+   science.agelower = science.age+(interpol(agearr,cumprobage,0.16)-midagevalue)
+   science.fehupper = science.feh+(interpol(feharr,cumprobfeh,0.84)-midfehvalue)
+   science.fehlower = science.feh+(interpol(feharr,cumprobfeh,0.16)-midfehvalue)
+
+end
 
 pro sps_fit::fit_all
     scienceall = *self.science
@@ -487,6 +550,26 @@ pro sps_fit::fit_all
     self->redraw    
 end
 
+pro sps_fit::cal_uncertainties_all
+    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Calculatign uncertainties ...'
+    scienceall = *self.science
+    curi = self.i
+    for i=0,self.nspec-1 do begin
+        self.i = i
+        science = scienceall[self.i]
+        if science.goodfit eq 0 then continue
+        self->cal_uncertainties, science
+        scienceall[self.i] = science
+    endfor
+    ptr_free, self.science
+    self.science = ptr_new(scienceall)
+    self->writescience
+    self.i = curi
+    science = scienceall[self.i]
+    self->statusbox, science=science
+    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Ready'
+
+end
 
 ; =================
 pro sps_fit_event, ev
@@ -564,7 +647,17 @@ pro sps_fit::handle_button, ev
            self.science = ptr_new(scienceall)
            self->redraw
         end
+        'cal_uncertainties': begin
+           scienceall = *self.science
+           science = scienceall[self.i]
+           self->cal_uncertainties,science
+           scienceall[self.i]=science
+           ptr_free, self.science
+           self.science = ptr_new(scienceall)
+           self->statusbox, science=science
+        end
         'fit_all': self->fit_all
+        'cal_uncertainties_all':self->cal_uncertainties_all
         'default_cont': self->default_cont
         'default_mask': self->default_mask
         'default_maskall': self->default_maskall
@@ -1635,12 +1728,13 @@ pro sps_fit::statusbox, science=science
     widget_control, widget_info(self.base, find_by_uname='curcol'), set_value=color gt -10 ? strcompress(string(color, format='(D10.2)'), /rem)+(noerror ? '' : ' +/- '+strcompress(string(colorerr, format='(D10.2)'), /rem)) : unknown
     widget_control, widget_info(self.base, find_by_uname='curz'), set_value=strcompress(string(science.z, format='(D5.3)'), /rem)
     widget_control, widget_info(self.base, find_by_uname='curzfit'), set_value=strcompress(string(science.zfit, format='(D5.3)'), /rem)
-    widget_control, widget_info(self.base, find_by_uname='curzquality'), set_value=strcompress(string(science.zquality, format='(D4.1)'), /rem)
     widget_control, widget_info(self.base, find_by_uname='cursn'), set_value=science.sn gt 0 ? strcompress(string(science.sn, format='(D10.1)'),/rem)+' ; '+strcompress(string(science.snfit, format='(D10.1)'), /rem) : unknown
     widget_control, widget_info(self.base, find_by_uname='curnloop'), set_value=science.nloop gt 0 ? strcompress(string(science.nloop, format='(D10.1)'), /rem) : unknown
     widget_control, widget_info(self.base, find_by_uname='curage'), set_value=science.age gt -100 ? strcompress(string(science.age, format='(D10.2)'), /rem)+(science.ageerr le 0 ? '' : ' +/- '+strcompress(string(science.ageerr, format='(D10.2)'), /rem))+' Gyr' : unknown
+    widget_control, widget_info(self.base, find_by_uname='curageuncert'), set_value=science.agelower gt -100 ? strcompress(string(science.agelower, format='(D10.2)'), /rem)+(science.ageupper le 0 ? '' : ' : '+strcompress(string(science.ageupper, format='(D10.2)'), /rem)) : unknown
     widget_control, widget_info(self.base, find_by_uname='curmstar'), set_value=science.logmstar gt 0 ? strcompress(string(science.logmstar, format='(D10.2)'), /rem) : unknown
     widget_control, widget_info(self.base, find_by_uname='curfeh'), set_value=science.feh gt -100 ? strcompress(string(science.feh, format='(D10.2)'), /rem)+(science.feherr le 0 ? '' : ' +/- '+strcompress(string(science.feherr, format='(D10.2)'), /rem)) : unknown
+    widget_control, widget_info(self.base, find_by_uname='curfehuncert'), set_value=science.fehlower gt -100 ? strcompress(string(science.fehlower, format='(D10.2)'), /rem)+(science.fehupper le 0 ? '' : ' : '+strcompress(string(science.fehupper, format='(D10.2)'), /rem)) : unknown
     widget_control, widget_info(self.base, find_by_uname='curoii'), set_value=science.oiiew ne -999 ? strcompress(string(science.oiiew, format='(D10.2)'), /rem)+(science.oiiewerr le 0 ? '' : ' +/- '+strcompress(string(science.oiiewerr, format='(D10.2)'), /rem))+' A' : unknown
     widget_control, widget_info(self.base, find_by_uname='curcah'), set_value=science.caherr gt 0 ? strcompress(string(science.cah, format='(D10.2)'), /rem)+(science.caherr le 0 ? '' : ' +/- '+strcompress(string(science.caherr, format='(D10.2)'), /rem)) : unknown
     widget_control, widget_info(self.base, find_by_uname='curgband'), set_value=science.gbanderr gt 0 ? strcompress(string(science.gband, format='(D10.2)'), /rem)+(science.gbanderr le 0 ? '' : ' +/- '+strcompress(string(science.gbanderr, format='(D10.2)'), /rem)) : unknown
@@ -1888,7 +1982,7 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     common sps_spec, sps, spsz, spsage
     if (size(sps))[1] eq 0 then spsspec = sps_interp(0.0, 5.0)
 
-    base = widget_base(/row, title='sps_fit', uvalue=self, mbar=menu, tab_mode=0, units=1)
+    base = widget_base(/row, title='sps_fit_mpfit', uvalue=self, mbar=menu, tab_mode=0, units=1)
     file_menu = widget_button(menu, value='File', /menu)
     wexit = widget_button(file_menu, value='Save', uvalue='save', uname='save')
     wexit = widget_button(file_menu, value='Exit', uvalue='exit', uname='exit')
@@ -1897,8 +1991,8 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     wdefault_cont = widget_button(tools_menu, value='Default Continuum Regions', uname='default_cont', uvalue='default_cont')
     wdefault_maskall = widget_button(tools_menu, value='Default Pixel Mask All', uname='default_maskall', uvalue='default_maskall')
     wdefault_goodspec = widget_button(tools_menu, value='Default Good Spectrum', uname='default_goodspec', uvalue='default_goodspec')
-    wreprepare_all = widget_button(tools_menu, value='Fit All', uname='fit_all', uvalue='fit_all')
-
+    wfit_all = widget_button(tools_menu, value='Fit All', uname='fit_all', uvalue='fit_all')
+    wcal_uncertainties_all = widget_button(tools_menu, value='Cal uncertainties All',uname='cal_uncertainties_all',uvalue='cal_uncertainties_all')
     wleft = widget_base(base, /column, uname='left')
     wright = widget_base(base, /column, uname='right')
     widget_control, /managed, base
@@ -1915,6 +2009,8 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     windicesbase = widget_base(wleft, /row, /align_center)
     windices = widget_button(windicesbase, value='Compute Indices', uvalue='indices', uname='indices', tab_mode=1, xsize=100)
     wdefault_mask = widget_button(windicesbase,value='Default Mask',uvalue='default_mask',uname='default_mask',tab_mode=1,xsize=100)
+    wuncertbase = widget_base(wleft,/row,/align_center)
+    wuncertainties = widget_button(wuncertbase,value='cal_uncertainties',uvalue='cal_uncertainties',uname='cal_uncertainties')
     wgoodbase = widget_base(wleft, /column, /align_center)
     wgood = cw_bgroup(wgoodbase, ['good spectrum','good fit'], /nonexclusive, set_value=[0, 0], uname='good', uvalue='good')
 
@@ -1928,18 +2024,28 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     wbvbase = widget_base(wcurobj, /align_center, /row)
     wbvlabel = widget_label(wbvbase, value='B-V = ', /align_right, uname='collabel', xsize=95)
     wcurcol = widget_label(wbvbase, value='     ', /align_left, uname='curcol', uvalue='curcol', xsize=150)
-    wagebase = widget_base(wcurobj, /align_center, /row)
-    wagelabel = widget_label(wagebase, value='age = ', /align_right, uname='agelabel', xsize=95)
-    wcurage = widget_label(wagebase, value='     ', /align_left, uname='curage', uvalue='curage', xsize=150)
+
     wmstarbase = widget_base(wcurobj, /align_center, /row)
     wmstarlabel = widget_label(wmstarbase, value='log M* = ', /align_right, uname='mstarlabel', xsize=95)
     wcurmstar = widget_label(wmstarbase, value='     ', /align_left, uname='curmstar', uvalue='curmstar', xsize=150)
     woiibase = widget_base(wcurobj, /align_center, /row)
     woiilabel = widget_label(woiibase, value='OII EW = ', /align_right, uname='oiilabel', xsize=95)
     wcuroii = widget_label(woiibase, value='     ', /align_left, uname='curoii', uvalue='curoii', xsize=150)
+
+    wagebase = widget_base(wcurobj, /align_center, /row)
+    wagelabel = widget_label(wagebase, value='age = ', /align_right, uname='agelabel', xsize=95)
+    wcurage = widget_label(wagebase, value='     ', /align_left, uname='curage', uvalue='curage', xsize=150)
+    wageuncertbase = widget_base(wcurobj, /align_center, /row)
+    wageuncertlabel = widget_label(wageuncertbase,value='    ',/align_right,uname='ageuncertlabel',xsize=95)
+    wageuncert = widget_label(wageuncertbase,value='      ',/align_left, uname='curageuncert', uvalue='curageuncert', xsize=150)
+
     wfehbase = widget_base(wcurobj, /align_center, /row)
     wfehlabel = widget_label(wfehbase, value='[Fe/H] = ', /align_right, uname='fehlabel', xsize=95)
     wcurfeh = widget_label(wfehbase, value='     ', /align_left, uname='curfeh', uvalue='curfeh', xsize=150)
+    wfehuncertbase = widget_base(wcurobj, /align_center, /row)
+    wfehuncertlabel = widget_label(wfehuncertbase,value='    ',/align_right,uname='fehuncertlabel',xsize=95)
+    wfehuncert = widget_label(wfehuncertbase,value='      ',/align_left, uname='curfehuncert', uvalue='curfehuncert', xsize=150)
+
     wcahbase = widget_base(wcurobj, /align_center, /row)
     wcahlabel = widget_label(wcahbase, value='CaH = ', /align_right, uname='cahlabel', xsize=95)
     wcurcah = widget_label(wcahbase, value='     ', /align_left, uname='curcah', uvalue='curcah', xsize=150)
@@ -1963,9 +2069,6 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     wzfitbase = widget_base(wcurobj, /align_center, /row)
     wzfitlabel = widget_label(wzfitbase, value='zfit = ', /align_right, uname='zfitlabel', xsize=95)
     wcurzfit = widget_label(wzfitbase, value='     ', /align_left, uname='curzfit', uvalue='curzfit', xsize=150)
-    wzqualitybase = widget_base(wcurobj, /align_center, /row)
-    wzqualitylabel = widget_label(wzqualitybase, value='zquality = ', /align_right, uname='zqualitylabel', xsize=95)
-    wcurzquality = widget_label(wzqualitybase, value='     ', /align_left, uname='curzquality', uvalue='curzquality', xsize=150)
     wchisqbase = widget_base(wcurobj, /align_center, /row)
     wchisqlabel = widget_label(wchisqbase, value='chisq = ', /align_right, uname='chisqlabel', xsize=95)
     wcurchisq = widget_label(wchisqbase, value='     ', /align_left, uname='curchisq', uvalue='curchisq', xsize=150)
@@ -2029,6 +2132,17 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     self.indend   = ptr_new(indbandend)
     self.indname  = ptr_new(indname)
 
+    degen_sps = mrdfits('/scr2/nichal/workspace2/ana/age_metal_degeneracy/new_grid_spec.fits',1)
+    feharr = degen_sps(uniq(degen_sps.feh,sort(degen_sps.feh))).feh
+    agearr = degen_sps(uniq(degen_sps.age,sort(degen_sps.age))).age
+    nfeh = n_elements(feharr)
+    nage = n_elements(agearr)
+    degen_fehgrid = rebin(feharr,nfeh,nage)
+    degen_agegrid = transpose(rebin(agearr,nage,nfeh))
+    self.degen_sps = ptr_new(degen_sps)
+    self.degen_fehgrid = ptr_new(degen_fehgrid)
+    self.degen_agegrid = ptr_new(degen_agegrid)
+
     common random, seed
     seed = systime(1)
     
@@ -2059,6 +2173,9 @@ pro sps_fit__define
              indstart:ptr_new(), $
              indend:ptr_new(), $
              indname:ptr_new(), $
+             degen_sps:ptr_new(), $
+             degen_fehgrid:ptr_new(),$
+             degen_agegrid:ptr_new(),$
              nspec:0L, $
              i:0L, $
              keystate:0, $

@@ -592,6 +592,9 @@ pro sps_fit::fit_all
 	;if science.good eq 0 and science.goodfit eq 0 then continue
         self->fit, science
         scienceall[self.i] = science
+        ptr_free, self.science
+        self.science = ptr_new(scienceall)
+        self->writescience
     endfor
     ptr_free, self.science
     self.science = ptr_new(scienceall)
@@ -2003,7 +2006,7 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     common sps_spec, sps, spsz, spsage
     if (size(sps))[1] eq 0 then spsspec = sps_interp(0.0, 5.0)
 
-    base = widget_base(/row, title='sps_fit', uvalue=self, mbar=menu, tab_mode=0, units=1)
+    base = widget_base(/row, title='sps_fit_mcmc', uvalue=self, mbar=menu, tab_mode=0, units=1)
     file_menu = widget_button(menu, value='File', /menu)
     wexit = widget_button(file_menu, value='Save', uvalue='save', uname='save')
     wexit = widget_button(file_menu, value='Exit', uvalue='exit', uname='exit')
