@@ -1,5 +1,7 @@
 1) run find_matching0451.pro to get a list of uniq galaxies. Galaxies that were observed with multiple masks are listed together. The list is matched_ms0451obj.fits
-2) run combinespec_ms0451.pro to combine 1D spec and output in combined_uniq_ms0451 (there are two choices for continuum normalization, spline or polynomial of degree 7) Based on specana, seems that spline gives better S/N.
+2) run combspec_ms0451.pro  to combine 1D spec and output in directory data/spline. The default for cont normalization is spline fit.
+
+2) (obsolete, moved to arxiv) run combinespec_ms0451.pro to combine 1D spec and output in directory combined_uniq_ms0451 (there are two choices for continuum normalization, spline or polynomial of degree 7) Based on specana, seems that spline gives better S/N.
 
 
 (separated program)
