@@ -466,7 +466,7 @@ pro sps_fit::fitz, science, noredraw=noredraw, nostatusbar=nostatusbar
 end
 
 pro sps_fit::cal_uncertainties, science
-   
+   widget_control, widget_info(self.base, find_by_uname='status'), set_value='Calculatign uncertainties ...'
    spec_arr = *self.degen_sps
    grid_feh = *self.degen_fehgrid
    grid_age = *self.degen_agegrid 
@@ -527,6 +527,7 @@ pro sps_fit::cal_uncertainties, science
    science.fehupper = science.feh+(interpol(feharr,cumprobfeh,0.84)-midfehvalue)
    science.fehlower = science.feh+(interpol(feharr,cumprobfeh,0.16)-midfehvalue)
 
+   widget_control, widget_info(self.base, find_by_uname='status'), set_value='Ready ...'
 end
 
 pro sps_fit::fit_all
@@ -1731,10 +1732,10 @@ pro sps_fit::statusbox, science=science
     widget_control, widget_info(self.base, find_by_uname='cursn'), set_value=science.sn gt 0 ? strcompress(string(science.sn, format='(D10.1)'),/rem)+' ; '+strcompress(string(science.snfit, format='(D10.1)'), /rem) : unknown
     widget_control, widget_info(self.base, find_by_uname='curnloop'), set_value=science.nloop gt 0 ? strcompress(string(science.nloop, format='(D10.1)'), /rem) : unknown
     widget_control, widget_info(self.base, find_by_uname='curage'), set_value=science.age gt -100 ? strcompress(string(science.age, format='(D10.2)'), /rem)+(science.ageerr le 0 ? '' : ' +/- '+strcompress(string(science.ageerr, format='(D10.2)'), /rem))+' Gyr' : unknown
-    widget_control, widget_info(self.base, find_by_uname='curageuncert'), set_value=science.agelower gt -100 ? strcompress(string(science.agelower, format='(D10.2)'), /rem)+(science.ageupper le 0 ? '' : ' : '+strcompress(string(science.ageupper, format='(D10.2)'), /rem)) : unknown
+    widget_control, widget_info(self.base, find_by_uname='curageuncert'), set_value=science.agelower gt -100 ? strcompress(string(science.agelower, format='(D10.2)'), /rem)+(science.ageupper gt -100 ? ' : '+strcompress(string(science.ageupper, format='(D10.2)'), /rem):'') : unknown
     widget_control, widget_info(self.base, find_by_uname='curmstar'), set_value=science.logmstar gt 0 ? strcompress(string(science.logmstar, format='(D10.2)'), /rem) : unknown
     widget_control, widget_info(self.base, find_by_uname='curfeh'), set_value=science.feh gt -100 ? strcompress(string(science.feh, format='(D10.2)'), /rem)+(science.feherr le 0 ? '' : ' +/- '+strcompress(string(science.feherr, format='(D10.2)'), /rem)) : unknown
-    widget_control, widget_info(self.base, find_by_uname='curfehuncert'), set_value=science.fehlower gt -100 ? strcompress(string(science.fehlower, format='(D10.2)'), /rem)+(science.fehupper le 0 ? '' : ' : '+strcompress(string(science.fehupper, format='(D10.2)'), /rem)) : unknown
+    widget_control, widget_info(self.base, find_by_uname='curfehuncert'), set_value=science.fehlower gt -100 ? strcompress(string(science.fehlower, format='(D10.2)'), /rem)+(science.fehupper ge -100 ? ' : '+strcompress(string(science.fehupper, format='(D10.2)'), /rem):'') : unknown
     widget_control, widget_info(self.base, find_by_uname='curoii'), set_value=science.oiiew ne -999 ? strcompress(string(science.oiiew, format='(D10.2)'), /rem)+(science.oiiewerr le 0 ? '' : ' +/- '+strcompress(string(science.oiiewerr, format='(D10.2)'), /rem))+' A' : unknown
     widget_control, widget_info(self.base, find_by_uname='curcah'), set_value=science.caherr gt 0 ? strcompress(string(science.cah, format='(D10.2)'), /rem)+(science.caherr le 0 ? '' : ' +/- '+strcompress(string(science.caherr, format='(D10.2)'), /rem)) : unknown
     widget_control, widget_info(self.base, find_by_uname='curgband'), set_value=science.gbanderr gt 0 ? strcompress(string(science.gband, format='(D10.2)'), /rem)+(science.gbanderr le 0 ? '' : ' +/- '+strcompress(string(science.gbanderr, format='(D10.2)'), /rem)) : unknown
@@ -2196,35 +2197,7 @@ pro science__define
                lambda:dblarr(npix), $
                contmask:bytarr(npix), $
                spscont:dblarr(npix), $
-               contdiv:dblarr(npix), $
-               contdivivar:dblarr(npix), $
-               spsspec:dblarr(npix), $
-               spsspecfull:dblarr(npix), $
-               spscontfull:dblarr(npix), $
-               fitmask:bytarr(npix), $
-               dlam:dblarr(npix), $
-               zspec:-999d, $
-               zfit:-999d, $
-               z:-999d, $
-               zquality:-999d, $
-               zcat:0, $
-               phot_color:'', $
-               b:-999d, $
-               v:-999d, $
-               r:-999d, $
-               i:-999d, $
-               j:-999d, $
-               k:-999d, $
-               f814w:-999d, $
-               fuv:-999d, $
-               nuv:-999d, $ 
-               berr:-999d, $
-               verr:-999d, $
-               rerr:-999d, $
-               ierr:-999d, $
-               jerr:-999d, $
-               kerr:-999d, $
-               f814werr:-999d, $
+                        f814werr:-999d, $
                fuverr:-999d, $
                nuverr:-999d, $ 
                age:-999d, $
