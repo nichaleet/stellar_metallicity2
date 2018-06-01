@@ -1,73 +1,92 @@
-pro combspec::combine,spec,noredraw=noredraw
-   common npixcom, npix,ndup
+pro combspec::combine,spec,noredraw=nosdaredraw
+   common npixcom, npix,npixcomb,ndup
    wgood = where(spec.indiv_good eq 1, cgood)
    if cgood eq 1 then begin
-       spec.lambda = spec.indiv_lambda[*,wgood[0]]*(1.+spec.indiv_vhelio[wgood[0]]/3.e5)
-       spec.dlam = spec.indiv_dlam[*,wgood[0]]
-       spec.contdiv = spec.indiv_contdiv[*,wgood[0]]
-       spec.contdivivar = spec.indiv_contdivivar[*,wgood[0]]
-       spec.exptime = spec.indiv_exptime[wgood[0]]
+       goodpix = where(spec.indiv_lambda[*,wgood[0]] ne 0.,npixcomb)
+       ipix = min(goodpix)
+       fpix = max(goodpix)
+       struct_replace_field,spec,'lambda',dblarr(npixcomb)
+       struct_replace_field,spec,'dlam',dblarr(npixcomb)
+       struct_replace_field,spec,'contdiv',dblarr(npixcomb)
+       struct_replace_field,spec,'contdivivar',dblarr(npixcomb)
+       spec.lambda = spec.indiv_lambda[ipix:fpix,wgood[0]]*(1.+spec.indiv_vhelio[wgood[0]]/3.e5)
+       spec.dlam = spec.indiv_dlam[ipix:fpix,wgood[0]]
+       spec.contdiv = spec.indiv_contdiv[ipix:fpix,wgood[0]]
+       spec.contdivivar = spec.indiv_contdivivar[ipix:fpix,wgood[0]]
        spec.sn = spec.indiv_sn[wgood[0]]
    endif
 
    if cgood gt 1 then begin ;stack continuum and make output structure (strout)
-       spec.exptime = total(spec.indiv_exptime[wgood])
-       sn = spec.indiv_sn[wgood]
-       ;shift velocity to heliocentric frame
-       lambdaarr = spec.indiv_lambda[*,wgood] ;[npix,cgood]
-       for k=0,cgood-1 do begin
-           lambda = (1.+spec.indiv_vhelio[wgood[k]]/3e5)*spec.indiv_lambda[*,wgood[k]]
-           lambdaarr[*,k] = lambda  ;ok it's shifted
-       endfor
+       sn = spec.indiv_sn[wgood] ;per angstrom
        ;find the total wl range (lambdafull)
-       maxsn = max(sn,ref)
-       if spec.slit eq '328' then ref =1       
-       ;use the lambda of the spec with max sn as ref
-       lambdafull = lambdaarr[*,ref]
+       ;in the overlapped region use the pixel template of the spectrum with higher signal to noise
+       snorder = reverse(sort(sn)) ;order by high to low
+       for k=0,cgood-1 do begin
+          know = snorder[k] ;k-now
+          lambnow = (1.+spec.indiv_vhelio[wgood[know]]/3e5)*spec.indiv_lambda[*,wgood[know]] ;shifted to helio centric
+          goodpix = where(lambnow ne 0.,cgoodpix)
+          lambnow = lambnow(goodpix)
+          if k eq 0 then lambdafull = lambnow
+          if k ge 1 then begin
+            if lambnow[0] lt min(lambdafull) then begin
+               waddpix = where(lambnow lt min(lambdafull))
+               lambdafull = [lambnow(waddpix),lambdafull]
+            endif
+            if lambnow[cgoodpix-1] gt max(lambdafull) then begin
+               waddpix = where(lambnow gt max(lambdafull))
+               lambdafull = [lambdafull,lambnow(waddpix)]
+            endif
+          endif
+       endfor
+       npixcomb = n_Elements(lambdafull)
+       ;change the dimension of the output in the spec structure
+       struct_replace_field,spec,'lambda',dblarr(npixcomb)
+       struct_replace_field,spec,'dlam',dblarr(npixcomb)
+       struct_replace_field,spec,'contdiv',dblarr(npixcomb)
+       struct_replace_field,spec,'contdivivar',dblarr(npixcomb)
+ 
        spec.lambda = lambdafull
 
-       ;deal with the mask
-       combmaskarr = bytarr(npix,cgood)+1
+       ;get data in and interpolate
+       combmaskarr = bytarr(npixcomb,cgood)
+       contdivarr = dblarr(npixcomb,cgood)
+       contdivivararr = dblarr(npixcomb,cgood)
+       dlamarr = dblarr(npixcomb,cgood)
        for k=0,cgood-1 do begin
-          woffmask = where(spec.indiv_combmask[*,wgood[k]] eq 0,coffmask)
-          if coffmask gt 0 then begin
-             loc = value_locate(lambdafull,lambdaarr[woffmask,k])
-             loc = loc(where(loc ge 0))
-             combmaskarr[loc,k] = 0
+          lambnow = (1.+spec.indiv_vhelio[wgood[k]]/3e5)*spec.indiv_lambda[*,wgood[k]] ;shifted to helio centric
+          goodpix = where(lambnow ne 0.,cgoodpix)
+          lambnow = lambnow(goodpix)
+          specnow = spec.indiv_spec[goodpix,wgood[k]]
+          ivarnow = spec.indiv_ivar[goodpix,wgood[k]]
+          dlamnow = spec.indiv_dlam[goodpix,wgood[k]]
+          wonlamb = where(lambdafull ge min(lambnow) and lambdafull le max(lambnow),conlamb,$
+                          complement=wofflamb,ncomplement=cofflamb)
+          contdivarr[*,k] = interpol(specnow,lambnow,lambdafull)          
+          contdivivararr[*,k] = interpol(ivarnow,lambnow,lambdafull)
+          dlamarr[*,k] = interpol(dlamnow,lambnow,lambdafull)
+          if cofflamb gt 0 then begin 
+             combmaskarr[wofflamb,k] = 0
+             contdivarr[wofflamb,k]=1./0.
+             contdivivararr[wofflamb,k]=0
+             dlamarr[wofflamb,k]=1./0.
           endif
        endfor
 
-       ;get data in and interpolate
-       contdivarr=fltarr(npix,cgood)+1./0.
-       contdivivararr = fltarr(npix,cgood)+1./0.
-       dlamarr = fltarr(npix,cgood)+1./0.
-       framearr = bytarr(npix,cgood)+1
-       for k=0,cgood-1 do begin
-          loc = value_locate(lambdaarr[*,k],lambdafull) ;refvec,value
-          woffrange = where(loc eq -1 or loc eq npix-1,coffrange,complement = winrange)
-          contdivarr[winrange,k]=interpol(spec.indiv_contdiv[*,wgood[k]],lambdaarr[*,k],lambdafull[winrange])
-          contdivivararr[winrange,k]=interpol(spec.indiv_contdivivar[*,wgood[k]],lambdaarr[*,k],lambdafull[winrange])
-          dlamarr[winrange,k]=interpol(spec.indiv_dlam[*,wgood[k]],lambdaarr[*,k],lambdafull[winrange])
-          framearr[woffrange,k] = 0
-          woff = where(combmaskarr[*,k] eq 0,coff)
-          if coff gt 0 then framearr[woff,k]=0
-       endfor
-
        ;weighted average
-       nframearr = total(framearr,2) ;size of npix
-       wnodup = where(nframearr eq 1, cwnodup)
+       ncombmaskarr = total(combmaskarr,2) ;size of ncombpix
+       wnodup = where(ncombmaskarr eq 1, cwnodup)
        if cwnodup gt 0 then begin
            for ii=0,cwnodup-1 do begin
-              wframe = where(framearr[wnodup[ii],*] eq 1, cwframe)
+              wframe = where(combmaskarr[wnodup[ii],*] eq 1, cwframe)
               if cwframe ne 1 then stop,'oops something is wrong'
               spec.dlam[wnodup[ii]] = dlamarr[wnodup[ii],wframe]
               spec.contdiv[wnodup[ii]] = contdivarr[wnodup[ii],wframe]
               spec.contdivivar[wnodup[ii]] = contdivivararr[wnodup[ii],wframe]
            endfor
        endif
-       wdup = where(nframearr gt 1, cwdup)
+       wdup = where(ncombmaskarr gt 1, cwdup)
        for ii=0,cwdup-1 do begin
-           wnan = where(~finite(contdivivararr[wdup[ii],*]) or (framearr[wdup[ii],*] eq 0),cnan)
+           wnan = where(~finite(contdivivararr[wdup[ii],*]) or (combmaskarr[wdup[ii],*] eq 0),cnan)
            dcontdiv = 1./sqrt(abs(contdivivararr[wdup[ii],*]))
            if cnan gt 0 then dcontdiv(wnan) = 1./0.
            err = abs(dcontdiv/contdivarr[wdup[ii],*])
@@ -77,7 +96,7 @@ pro combspec::combine,spec,noredraw=noredraw
        endfor
        ;signal to noise
        ;create mask
-       contmask = bytarr(npix)+1
+       contmask = bytarr(npixcomb)+1
        lambdarest = lambdafull/(1.+spec.z)
        for i=0,n_elements(*self.linestart)-1 do begin
           w = where(lambdarest ge (*self.linestart)[i] and lambdarest le (*self.lineend)[i], c)
@@ -90,7 +109,8 @@ pro combspec::combine,spec,noredraw=noredraw
        dev = abs(spec.contdiv[wcont] - 1.)
        avgdev = mean(dev)
        w = where(dev lt 3.0*avgdev, c)
-       if c gt 0 then spec.sn = 1.0/mean(dev[w])
+       if c gt 0 then spec.sn = 1.0/mean(dev[w])/sqrt(median(spec.dlam))
+       
    endif
    self->statusbox, spec=spec
 
@@ -103,7 +123,7 @@ end
 pro combspec::combine_all
     specinfo = *self.specinfo
     curi = self.i
-    for i=200,self.nspec-1 do begin
+    for i=0,self.nspec-1 do begin
         self.i = i
         self->default_range
         self->readspecindiv
@@ -294,9 +314,9 @@ end
 
 pro combspec::default_range, update=update
     if ~keyword_set(update) then begin
-        self.ylim = minmax((*self.spec).indiv_telldiv,/nan)
+        self.ylim = minmax((*self.spec).indiv_spec,/nan)
         self.ylim[1] *= 1.1
-        self.divylim = [-1.0, 2.5]
+        self.divylim = [-1.0, 5]
         self.lambdalim = (minmax((*self.spec).lambda / (1d + (*self.spec).z)) < 9100) > 2000
         self.lambdalim[0] >= 2000.
         self.lambdalim[1] <= 8938. / (1d +(*self.spec).z)
@@ -464,7 +484,7 @@ end
 
 ; ============= DRAW KEYS ==============
 pro combspec::handle_draw_key, ev
-   common npixcom, npix,ndup 
+   common npixcom, npix,npixcomb,ndup 
    if ev.press ne 1 then return
    key = string(ev.ch)
    coords = convert_coord(ev.x, ev.y, /device, /to_data)
@@ -785,43 +805,42 @@ pro combspec::default_vhelio
 end
 
 pro combspec::indivcontinuum, spec
-   common npixcom, npix,ndup
+   common npixcom, npix,npixcomb,ndup
    common continuum, conttype
    nobs = spec.indiv_count
    for i=0,nobs-1 do begin
-      nhalf = fix(npix/2.)
-      for ccd=1,2 do begin
-         if ccd eq 1 then begin
-             ipix=0
-             fpix = nhalf-1
-         endif
-         if ccd eq 2 then begin
-             ipix=nhalf
-             fpix = npix-1
-         endif
+         ipix=0
+         fpix = spec.indiv_npix[i]-1
          contmask = spec.indiv_contmask[ipix:fpix,i]
          contmask[0:15]=0
          contmask[fpix-ipix-15:fpix-ipix]=0
          lambda = spec.indiv_lambda[ipix:fpix,i]
-         telldivivar = spec.indiv_telldivivar[ipix:fpix,i]
-         spectrum = spec.indiv_telldiv[ipix:fpix,i]
+         ivar = spec.indiv_ivar[ipix:fpix,i]
+         spectrum = spec.indiv_spec[ipix:fpix,i]
          won = where(contmask eq 1, complement=woff, con)
          if con gt 100 then begin
-            if conttype eq 'polycon' then begin
-               degree = 7
-               coeff =  poly_fit(lambda[won],spectrum[won],degree,measure_errors=1./sqrt(telldivivar[won]),status=status)
-               if status ne 0 then stop,'stopped:(continuumnormalize_deimos.pro) blueside has some error'
-               cont = poly(lambda,reform(coeff))
-            endif else begin
-               bkspace = 500.
-               bkpt = slatec_splinefit(lambda[won], spectrum[won], coeff, invvar=telldivivar[won], bkspace=bkspace, upper=3, lower=3, /silent)
-               if bkpt[0] eq -1 then stop,'cannot do continnum fit'
-               cont = slatec_bvalu(lambda, bkpt, coeff)
-            endelse
+            case conttype of 
+               'polycon': begin
+                  degree = 7
+                  coeff =  poly_fit(lambda[won],spectrum[won],degree,$
+                                    measure_errors=1./sqrt(ivar[won]),status=status)
+                  if status ne 0 then stop,'stopped:(continuumnormalize_deimos.pro) has some error'
+                  cont = poly(lambda,reform(coeff))
+                end
+               'spline': begin
+                  bkspace =  fix(400./median(abs(ts_diff(lambda,1)))) ;approximately every 400 A
+                  bkpt = slatec_splinefit(lambda[won], spectrum[won], coeff, invvar=ivar[won], $
+                                          bkspace=bkspace, upper=3, lower=3, /silent)
+               
+                  if bkpt[0] eq -1 then stop,'cannot do spline continnum fit'
+                  cont = slatec_bvalu(lambda, bkpt, coeff)
+                end
+                else: stop,'no continuum type found'
+            endcase
             check = where(finite(cont),ccheck)
             if ccheck lt 10 then stop
-            contdiv = spec.indiv_telldiv[ipix:fpix,i]/cont
-            contdivivar = spec.indiv_telldivivar[ipix:fpix,i]*cont^2
+            contdiv = spec.indiv_spec[ipix:fpix,i]/cont
+            contdivivar = spec.indiv_ivar[ipix:fpix,i]*cont^2
          endif else begin
             contdiv = dblarr(fpix-ipix+1)
             cont = dblarr(fpix-ipix+1)
@@ -831,13 +850,12 @@ pro combspec::indivcontinuum, spec
          spec.indiv_continuum[ipix:fpix,i] = cont
          spec.indiv_contdivivar[ipix:fpix,i] = contdivivar
          spec.indiv_contdiv[ipix:fpix,i] = contdiv
-      endfor
       wcont = where(spec.indiv_contmask[3:npix-4,i] eq 1)+3
-      wcont = wcont[where(finite(spec.indiv_telldiv[wcont,i]) and finite(spec.indiv_continuum[wcont,i]) and spec.indiv_continuum[wcont,i] ne 0)]
-      dev = abs((spec.indiv_telldiv[wcont,i] - spec.indiv_continuum[wcont,i]) / spec.indiv_continuum[wcont,i])
+      wcont = wcont[where(finite(spec.indiv_spec[wcont,i]) and finite(spec.indiv_continuum[wcont,i]) and spec.indiv_continuum[wcont,i] ne 0)]
+      dev = abs((spec.indiv_spec[wcont,i] - spec.indiv_continuum[wcont,i]) / spec.indiv_continuum[wcont,i])
       avgdev = mean(dev)
       w = where(dev lt 3.0*avgdev, c)
-      if c gt 0 then spec.indiv_sn[i] = 1.0/mean(dev[w])
+      if c gt 0 then spec.indiv_sn[i] = 1.0/mean(dev[w])/sqrt(median(spec.indiv_dlam[wcont,i]))
    endfor
 end
 
@@ -846,10 +864,9 @@ pro combspec::indivmask,spec
    for i=0,nobs-1 do begin
       lambda = spec.indiv_lambda[*,i]
       lambdarest = lambda/(1.+spec.z)
-      indivspec = spec.indiv_telldiv[*,i]
+      indivspec = spec.indiv_spec[*,i]
       ivar = spec.indiv_ivar[*,i]
-      telldivivar = spec.indiv_telldivivar[*,i]
-   
+      indiv_npix = spec.indiv_npix[i] 
       ;create continuum mask
       npix = n_elements(lambda)
       contmask = bytarr(npix)+1
@@ -861,7 +878,8 @@ pro combspec::indivmask,spec
          if c gt 0 then contmask[w] = 0
       endfor
    
-      w = where(~finite(indivspec) or ~finite(lambda) or ~finite(ivar) or ~finite(telldivivar)  or ivar eq 0, c)
+      w = where(~finite(indivspec) or ~finite(lambda) or ~finite(ivar) or $
+                ivar eq 0 or lambda eq 0 or indivspec eq 0, c)
       if c gt 0 then contmask[w]=0
    
       tellmask = bytarr(n_elements(lambda))
@@ -871,174 +889,20 @@ pro combspec::indivmask,spec
           w = where(lambda ge tellstart[j] and lambda le tellend[j], c)
           if c gt 0 then begin
               if j eq 0 then contmask[w] = 0
-              tellmask[w] = 1
           endif
       endfor
-      nhalf = fix(npix/2)
-      contmask[nhalf-3:nhalf+3]=0
       contmask[0:2] = 0
       contmask[npix-3:npix-1] = 0
+      contmask[indiv_npix-3:indiv_npix-1]=0
       spec.indiv_contmask[*,i] = contmask
-      spec.indiv_tellmask[*,i] = tellmask
    endfor
 end
 
-pro combspec::indivtelluric,spec
-   nobs = spec.indiv_count
-   for i=0,nobs-1 do begin
-      aratio = spec.indiv_airmass[i]/((*self.tell).airmass)
-      telllambda = (*self.tell)[0].lambda
-      tellspec = ((*self.tell)[0].spec)^aratio
-      tellivar = ((*self.tell)[0].ivar)*(((*self.tell)[0].spec)/(aratio*tellspec))^2.
-      ivarmissing = 10d10
-      w = where(tellivar ge 1d8, c) ;these are not in the telluric band
-      if c gt 0 then tellivar[w] = ivarmissing
-      f = where(finite(tellspec) and tellspec gt 0 and finite(tellivar) and tellivar gt 0 and tellivar lt 1d8) ;where the band is
-      telllambda = telllambda[f]
-      tellspec = tellspec[f]
-      tellivarfull = tellivar
-      tellivar = tellivar[f]
 
-      tellspecnew = interpolate(tellspec, findex(telllambda, spec.indiv_lambda[*,i]), missing=1.)
-      tellivarnew = interpolate(tellivarfull, findex(telllambda, spec.indiv_lambda[*,i]), missing=ivarmissing)
-
-      spec.indiv_telldiv[*,i] = spec.indiv_spec[*,i] / tellspecnew
-      spec.indiv_telldivivar[*,i] = (spec.indiv_ivar[*,i]^(-1.) + (spec.indiv_telldiv[*,i])^2.*tellivarnew^(-1.))^(-1.) * tellspecnew^2.
-   endfor
-end
-
-function combspec::fitskylines,spec,iobs
-    lambda = spec.indiv_lambda[*,iobs]
-    skyspec = spec.indiv_skyspec[*,iobs]
-    w = where(~finite(skyspec), c)
-    if c gt 0 then skyspec[w] = 0
-    skyspec = skyspec/max(skyspec)
-    medskyspec = median(skyspec)
-
-    deriv1skyspec = deriv(lambda, skyspec)
-    deriv2skyspec = deriv(lambda, deriv1skyspec)
-
-    thresh = 1.5
-    nlines = 1000
-    while nlines gt 200 do begin
-        w = where(abs(deriv1skyspec) lt 0.2 and deriv2skyspec lt -0.01 and skyspec gt thresh*medskyspec)
-        w = [w, n_elements(lambda)+1]
-        wstep = round(-1*ts_diff(w, 1))
-        linestart = where(wstep gt 1, nlines)
-        if nlines lt 5 then begin
-            message, 'Fewer than 5 sky lines in this spectrum.', /info
-            return, [[-1], [-1], [-1]]
-        endif
-        linepix = round(-1*ts_diff(linestart, 1))
-        nlines -= 1
-        thresh *= 2
-    endwhile
-
-    linepix = linepix[0:nlines-1]
-    wlocmax = lindgen(nlines)
-    sigma = dblarr(nlines)
-    sigmaerr = dblarr(nlines)
-    linelambda = dblarr(nlines)
-    nskyspec = n_elements(skyspec)
-    wgoodline = bytarr(nlines)+1
-    for i=0,nlines-1 do begin
-        if linepix[i] eq 1 then wlocmax[i] = w[linestart[i]] else begin
-            junk = min(abs(deriv1skyspec[w[linestart[i]]:w[linestart[i]]+linepix[i]-1]), wmin)
-            wlocmax[i] = w[linestart[i]]+wmin
-        endelse
-        if wlocmax[i]-10 lt 0 or wlocmax[i]+10 ge nskyspec then begin
-            wgoodline[i] = 0
-            continue
-        endif
-        skyspecmax = max(skyspec[wlocmax[i]-10:wlocmax[i]+10], wlocmaxtemp)
-        wlocmax[i] += wlocmaxtemp-10
-        wfit = lindgen(20)+wlocmax[i]-10
-        wfit = wfit[where(wfit ge 0 and wfit lt n_elements(lambda), nfit)]
-        lambdafit = lambda[wfit]
-        skyspecfit = skyspec[wfit]
-
-        skyspecmax = max(skyspecfit, wmax)
-
-        guess = [skyspecmax, lambdafit[wmax], 0, medskyspec]
-        yfit = gaussfit(lambdafit, skyspecfit, a, estimates=guess, sigma=aerr, nterms=4, chisq=chisq)
-        sigma[i] = abs(a[2])
-        sigmaerr[i] = aerr[2]
-        linelambda[i] = a[1]
-
-        if chisq gt 1d-3 or sigmaerr[i] gt 0.8 then wgoodline[i] = 0
-    endfor
-    wgood = where(sigma gt 0 and wgoodline eq 1, c)
-    if c gt 0 then begin
-        linelambda = linelambda[wgood]
-        sigma = sigma[wgood]
-        sigmaerr = sigmaerr[wgood]
-        return, [[linelambda], [sigma], [sigmaerr]]
-    endif else return, [[-1], [-1], [-1]]
-end
-
-pro combspec::indivspecres, spec
-   nobs = spec.indiv_count
-   for i=0,nobs-1 do begin
-      lambda = spec.indiv_lambda[*,i]
-      wsky = where(spec.indiv_skylinemask[*,i] ne -1, cw)
-      if cw eq 0 then begin
-         fit = self->fitskylines(spec,i)
-         w = where(2.35*fit[*,1] gt 0.8 and 2.35*fit[*,1] lt 7.0, cwprev)
-         n = (size(fit))[1]
-         if n gt 200 then message, 'Too many sky lines!'
-         if n gt 0 then spec.indiv_skyfit[0:n-1,*,i] = fit
-         if (n le 3) or (cwprev lt 3) then begin
-            spec.indiv_dlam[*,i] = replicate(1.37/2.35, n_elements(lambda))
-            spec.indiv_skylinemask[*,i] = lonarr(n_elements(spec.indiv_skylinemask[*,i]))-1
-            spec.indiv_goodsky[i] = 0
-            message, 'Unstable sky line fit.  Using FWHM = 1.37 A', /info
-            return
-         endif
-
-         ;quadratic fit
-         qf = poly_fit(fit[w,0]/1000.0 - 7.8, 2.35*fit[w,1], 2, $
-                       measure_errors=2.35*fit[w,2], chisq=chisq, /double, yfit=yfit)
-         ;remove outliers and refit 4 times
-         for j=0,4 do begin
-            wnow = where(abs(2.35*fit[w,1] - yfit) lt 2.*2.35*fit[w,2], cw) ;good sigmas
-            if cw eq cwprev then break
-            cwprev = cw
-            if cw lt 3 then begin
-               spec.indiv_goodsky[i] = 0
-               message, 'The spectral resolution fit is very poor.', /info
-               break
-            endif
-            w = w[wnow]
-            qf = poly_fit(fit[w,0]/1000.0 - 7.8, 2.35*fit[w,1], 2, measure_errors=2.35*fit[w,2], $
-                          chisq=chisq, /double, yfit=yfit)
-         endfor
-         n = (size(fit))[1]
-         spec.indiv_skylinemask[*,i] = 0
-         spec.indiv_skylinemask[w,i] = 1
-         if n lt 200 then spec.indiv_skylinemask[n:n_elements(spec.indiv_skylinemask[*,i])-1,i] = -1
-      endif else begin
-         wsky = where(spec.indiv_skylinemask[*,i] eq 1, csky)
-         if csky lt 3 then begin
-            spec.indiv_dlam[*,i] = replicate(1.37/2.35, n_elements(lambda))
-            spec.indiv_goodsky[i] = 0
-            message, strcompress(string(self.i))+'-'+strcompress(string(i))+' Too few arc lines for new fit.', /info
-            return
-         endif
-         fit = spec.indiv_skyfit[wsky,*,i]
-         qf = poly_fit(fit[wsky,0]/1000.0 - 7.8, 2.35*fit[wsky,1], 2, measure_errors=2.35*fit[wsky,2],$
-                       chisq=chisq, /double, yfit=yfit)
-      endelse
-      l = lambda / 1000. - 7.8
-      dlam = poly(l, qf)
-      dlam /= 2.35
-      spec.indiv_dlam[*,i] = dlam
-      spec.indiv_goodsky[i] = 1
-   endfor
-end
 
 ; ============== REDRAW ===============
 pro combspec::redraw
-   common npixcom, npix,ndup
+   common npixcom, npix,npixcomb,ndup
    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Redrawing ...'
    self->default_range, /update
    widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
@@ -1052,7 +916,9 @@ pro combspec::redraw
        ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
        0: begin ;continuum fit
           if wplotcon lt spec.indiv_count then begin
-             plot, spec.indiv_lambda[*,wplotcon]*(1.+spec.indiv_vhelio[wplotcon]/3e5), spec.indiv_contdiv[*,wplotcon]*spec.indiv_continuum[*,wplotcon], xrange=self.lambdalim*(1d + spec.z), yrange=self.ylim, xstyle=5, ystyle=5, background=fsc_color('white'), color=fsc_color('black'), /nodata
+             ipix = 0 ;min(where(spec.indiv_lambda[*,wplotcon] ne 0.))
+             fpix = spec.indiv_npix[wplotcon]-1
+             plot, spec.indiv_lambda[ipix:fpix,wplotcon]*(1.+spec.indiv_vhelio[wplotcon]/3e5), spec.indiv_contdiv[ipix:fpix,wplotcon]*spec.indiv_continuum[ipix:fpix,wplotcon], xrange=self.lambdalim*(1d + spec.z), yrange=self.ylim, xstyle=5, ystyle=5, background=fsc_color('white'), color=fsc_color('black'), /nodata
          
              ;;making the highlight region
              t = round(-1*ts_diff(spec.indiv_contmask[*,wplotcon], 1))
@@ -1088,14 +954,18 @@ pro combspec::redraw
              ;;start ploting
              for idup=0,ndup-1 do begin 
                 if spec.indiv_good[idup] eq 1 then begin
-                   oplot, spec.indiv_lambda[*,idup]*(1.+spec.indiv_vhelio[idup]/3e5), spec.indiv_contdiv[*,idup]*spec.indiv_continuum[*,idup], color=fsc_color(indivcolors(idup))
+                   ipix = min(where(spec.indiv_lambda[*,idup] ne 0.))
+                   fpix = spec.indiv_npix[idup]-1
+                   oplot, spec.indiv_lambda[ipix:fpix,idup]*(1.+spec.indiv_vhelio[idup]/3e5), spec.indiv_contdiv[ipix:fpix,idup]*spec.indiv_continuum[ipix:fpix,idup], color=fsc_color(indivcolors(idup))
                 endif
              endfor
-             oplot, spec.indiv_lambda[*,wplotcon]*(1.+spec.indiv_vhelio[wplotcon]/3e5), spec.indiv_contdiv[*,wplotcon]*spec.indiv_continuum[*,wplotcon], color=fsc_color((*self.indivcolors)[wplotcon])
-             oplot,spec.indiv_lambda[*,wplotcon]*(1.+spec.indiv_vhelio[wplotcon]/3e5),spec.indiv_continuum[*,wplotcon], color=fsc_color('black')
+             ipix = min(where(spec.indiv_lambda[*,wplotcon] ne 0.))
+             fpix = spec.indiv_npix[wplotcon]-1
+             oplot, spec.indiv_lambda[ipix:fpix,wplotcon]*(1.+spec.indiv_vhelio[wplotcon]/3e5), spec.indiv_contdiv[ipix:fpix,wplotcon]*spec.indiv_continuum[ipix:fpix,wplotcon], color=fsc_color((*self.indivcolors)[wplotcon])
+             oplot,spec.indiv_lambda[ipix:fpix,wplotcon]*(1.+spec.indiv_vhelio[wplotcon]/3e5),spec.indiv_continuum[ipix:fpix,wplotcon], color=fsc_color('black')
  
              ;;make the axes labels
-             plot, spec.indiv_lambda[*,wplotcon]*(1.+spec.indiv_vhelio[wplotcon]/3e5), spec.indiv_contdiv[*,wplotcon]*spec.indiv_continuum[*,wplotcon], xrange=self.lambdalim * (1d + spec.z), yrange=self.ylim, xstyle=1, ystyle=1, background=fsc_color('white'), color=fsc_color('black'), xtitle='!6observed wavelength (!sA!r!u!9 %!6!n)!3', ytitle='!6flux (e!E-!N/hr)!3', /nodata, /noerase
+             plot, spec.indiv_lambda[ipix:fpix,wplotcon]*(1.+spec.indiv_vhelio[wplotcon]/3e5), spec.indiv_contdiv[ipix:fpix,wplotcon]*spec.indiv_continuum[ipix:fpix,wplotcon], xrange=self.lambdalim * (1d + spec.z), yrange=self.ylim, xstyle=1, ystyle=1, background=fsc_color('white'), color=fsc_color('black'), xtitle='!6observed wavelength (!sA!r!u!9 %!6!n)!3', ytitle='!6flux (e!E-!N/hr)!3', /nodata, /noerase
              ;;highlight the telluric region and write line names
              n = n_elements(*self.tellstart)
              for i=0,n-1 do begin
@@ -1155,7 +1025,9 @@ pro combspec::redraw
 
           for idup=0,ndup-1 do begin
              if spec.indiv_good[idup] eq 1 then begin
-                oplot,spec.indiv_lambda[*,idup]/(1d +znow)*(1.+spec.indiv_vhelio[idup]/3e5),spec.indiv_contdiv[*,idup],color=fsc_color(indivcolors(idup))
+                ipix = min(where(spec.indiv_lambda[*,idup] ne 0.))
+                fpix = spec.indiv_npix[idup]-1
+                oplot,spec.indiv_lambda[ipix:fpix,idup]/(1d +znow)*(1.+spec.indiv_vhelio[idup]/3e5),spec.indiv_contdiv[ipix:fpix,idup],color=fsc_color(indivcolors(idup))
              endif
           endfor
          
@@ -1184,25 +1056,25 @@ end
 
 
 pro combspec::statusbox, spec=spec
-    common npixcom, npix,ndup
+    common npixcom, npix,npixcomb,ndup
     if ~keyword_set(spec) then spec = *self.spec
     unknown = '???'
     widget_control, widget_info(self.base, find_by_uname='include'), set_value=spec.indiv_good
     widget_control, widget_info(self.base, find_by_uname='curid'), set_value=strtrim(spec.objname, 2)+' ('+strcompress(self.i+1, /rem)+' / '+strcompress(self.nspec, /rem)+')'
-    widget_control, widget_info(self.base, find_by_uname='curcat'), set_value=strcompress(spec.specname)
     widget_control, widget_info(self.base, find_by_uname='curz'), set_value=strcompress(string(spec.z, format='(D5.3)'), /rem)
     widget_control, widget_info(self.base, find_by_uname='cursn'), set_value=strcompress(string(spec.sn, format='(D7.2)'), /rem)
 
-    widget_control, widget_info(self.base, find_by_uname='curmstar'), set_value=spec.mass_kcorrect gt 0 ? strcompress(string(spec.mass_kcorrect, format='(D10.2)'), /rem) : unknown
+    widget_control, widget_info(self.base, find_by_uname='curmstar'), set_value=spec.LOGMSTAR_SED_BL gt 0 ? strcompress(string(spec.logmstar_sed_bl, format='(D10.2)'), /rem) : unknown
 
-    widget_control, widget_info(self.base, find_by_uname='curexptime'), set_value=strcompress(string(spec.exptime, format='(I8)'), /rem)
+    widget_control, widget_info(self.base, find_by_uname='curoiiew'), set_value=strcompress(string(spec.EW_OII, format='(I8)'), /rem)
+    widget_control, widget_info(self.base, find_by_uname='curf814w'), set_value=spec.f814wmag gt 0 ? strcompress(string(spec.f814wmag, format='(D8.2)'), /rem) : unknown
 
-    inditable = replicate({mask:'',id:'',vhelio:-999,sn:-999,exptime:-999},ndup)
+
+    inditable = replicate({instru:'',mask:'',vhelio:-999,sn:-999},ndup)
+    inditable.instru = strcompress(spec.indiv_instru)
     inditable.mask = strcompress(spec.indiv_mask)
-    inditable.id = strcompress(spec.indiv_objname)
     inditable.vhelio = spec.indiv_vhelio
     inditable.sn =  spec.indiv_sn
-    inditable.exptime = spec.indiv_exptime
     widget_control,widget_info(self.base,find_by_uname='curinditable'),set_value = inditable
  
     widget_control, widget_info(self.base, find_by_uname='iplotcont'), get_value=wplotcon
@@ -1213,123 +1085,124 @@ end
 pro combspec::getspec, list=list
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Initializing ...'
     common continuum, conttype
-    common npixcom, npix,ndup
+    common npixcom, npix,npixcomb,ndup
 
-    npix = 10625
-
+    npix = 10625 ;size of deimos old
+    npixcomb = npix+1373 ;size of deimos old+mosfire
     observatory, 'keck', obs
     specfits = self.directory+'combspec_out.fits.gz'
     if ~file_test(specfits) then begin 
        nspec = n_elements(list)
        self.nspec = nspec
-       specinfo = replicate({contype:'',objnum:'',objname:''},nspec)
-       contypes = replicate(contype,nspec)
+       specinfo = replicate({conttype:'',objnum:'',objname:''},nspec)
+       conttypes = replicate(conttype,nspec)
        objnums = strarr(nspec)
        objnames = strarr(nspec)
        for i=0,nspec-1 do begin
           spec = {spec}
+          obj = list[i]
           objnums[i] = strtrim(string(i),2)
-          objnames[i] = strtrim(cat[i].phot_id,2)
-          spec.contype = contypes[i]
+          objnames[i] = strtrim(obj.phot_id,2)
+          spec.conttype = conttypes[i]
           spec.objnum = objnums[i]
           spec.objname = objnames[i]
-          specinfo[i].contype = contypes[i]
+          specinfo[i].conttype = conttypes[i]
           specinfo[i].objnum = objnums[i]
           specinfo[i].objname = objnames[i]
-          obj = list[i]
-          struct_assign,cat[i],spec,/nozero ;copy cat over
+          struct_assign,obj,spec,/nozero ;copy cat over
           spec.indiv_count = obj.ndup
           nobs = obj.ndup
           for iobs =0, nobs-1 do begin
               instru = obj.instrus[iobs]
-              case instru of 
+              case strtrim(instru,2) of 
                  'deimos_old': begin
                     ;the structure will have 3 tags: spec, lambda, ivar of 10625 pixels
                     ;lambda is in rest-frame
                     str = mrdfits(strtrim(obj.files[iobs],2),1,hdr,/silent,status=status)
-                    if status ne 0 then continue
-                    npix = n_Elements(str.spec)
-                    spec.indiv_npix[iobs] = n_elements(str.spec)
-                    spec.indiv_spec[*,iobs]=str.spec
-                    spec.indiv_lambda[*,iobs]=str.spec*(obj.z+1.) ;change to observed lambda
-                    spec.indiv_ivar[*,iobs] = [strblu.ivar]
-                    spec.indiv_combmask[*,iobs]=1
+                    indiv_npix = n_Elements(str.spec)
+                    spec.indiv_npix[iobs] = indiv_npix
+                    spec.indiv_spec[0:indiv_npix-1,iobs]=str.spec
+                    spec.indiv_lambda[0:indiv_npix-1,iobs]=str.lambda*(obj.z+1.) ;change to observed lambda
+                    spec.indiv_ivar[0:indiv_npix-1,iobs] = str.ivar
+                    spec.indiv_combmask[0:indiv_npix-1,iobs]=1
                     spec.indiv_filename[iobs] = obj.files[iobs]
                     spec.indiv_mask[iobs] = obj.masks[iobs]
                     spec.indiv_slit[iobs] = obj.slits[iobs]
                     spec.indiv_instru[iobs] = obj.instrus[iobs]
                     spec.indiv_ra[iobs] = obj.ra[iobs]
                     spec.indiv_dec[iobs] = obj.dec[iobs]
-                    spec.indiv_dlam[*,iobs] = 1.7 ;DEIMOS 1200 line grating, center at 7500, 1" slit
+                    spec.indiv_dlam[0:indiv_npix-1,iobs] = 1.7 ;DEIMOS 1200 line grating, center at 7500, 1" slit
                     spec.indiv_good[iobs] = 1
                     end
                  'lris_old': begin
                     str = mrdfits(strtrim(obj.files[iobs],2),1,hdr,/silent,status=status)
-                    if status ne 0 then continue
-                    spec.indiv_spec[*,iobs]=str.spec
-                    spec.indiv_lambda[*,iobs]=str.spec*(obj.z+1.) ;change to observed lambda
-                    spec.indiv_ivar[*,iobs] = [strblu.ivar]
-                    spec.indiv_combmask[*,iobs]=1
+                    indiv_npix = n_Elements(str.spec)
+                    spec.indiv_npix[iobs] = indiv_npix
+                    spec.indiv_spec[0:indiv_npix-1,iobs]=str.spec
+                    spec.indiv_lambda[0:indiv_npix-1,iobs]=str.lambda*(obj.z+1.) ;change to observed lambda
+                    spec.indiv_ivar[0:indiv_npix-1,iobs] = str.ivar
+                    spec.indiv_combmask[0:indiv_npix-1,iobs]=1
                     spec.indiv_filename[iobs] = obj.files[iobs]
                     spec.indiv_mask[iobs] = obj.masks[iobs]
                     spec.indiv_slit[iobs] = obj.slits[iobs]
                     spec.indiv_instru[iobs] = obj.instrus[iobs]
                     spec.indiv_ra[iobs] = obj.ra[iobs]
                     spec.indiv_dec[iobs] = obj.dec[iobs]
-                    spec.indiv_dlam[*,iobs] = 9.18 ;LRIS 300 line grating, 1" slit
+                    spec.indiv_dlam[0:indiv_npix-1,iobs] = 9.18 ;LRIS 300 line grating, 1" slit
                     spec.indiv_good[iobs] = 1
-                    spec.indiv_npix[iobs] = n_elements(str.spec)
                     end
                  'lris': begin
                     str = readfits(strtrim(obj.files[iobs],2),hdr)
-                    npix = n_elements(str)
-                    spec.indiv_spec[*,iobs]=str
+                    indiv_npix = n_elements(str)
+                    spec.indiv_spec[0:indiv_npix-1,iobs]=str
                     cdelt = sxpar(hdr,'cdelt1')
                     crval = sxpar(hdr,'crval1')
-                    spec.iniv_lambda[*,iobs]= dindgen(npix)*cdelt+crval
-                    spec.indiv_npix[iobs] = npix
-                    spec.indiv_combmask[*,iobs]=1
+                    spec.indiv_lambda[0:indiv_npix-1,iobs]= dindgen(indiv_npix)*cdelt+crval
+                    spec.indiv_npix[iobs] = indiv_npix
+                    spec.indiv_combmask[0:indiv_npix-1,iobs]=1
                     spec.indiv_filename[iobs] = obj.files[iobs]
                     spec.indiv_instru[iobs] = obj.instrus[iobs]
                     radec = stringradec2deci(sxpar(hdr,'ra'),sxpar(hdr,'dec'))
                     spec.indiv_ra[iobs] = radec[0]
                     spec.indiv_dec[iobs] = radec[1]
-                    spec.indiv_dlam[*,iobs] = 6.9 ;LRIS400/8500 grating, 1" slit
+                    spec.indiv_dlam[0:indiv_npix-1,iobs] = 6.9 ;LRIS400/8500 grating, 1" slit
                     spec.indiv_good[iobs] = 1
-                    spec.indiv_npix[iobs] = n_elements(str.spec)
+                    spec.indiv_npix[iobs] = indiv_npix
+                    spec.indiv_jd = sxpar(hdr,'mjd-obs')+2400000.5 
                     basefile =  file_basename(obj.files[iobs])
                     extensions = strsplit(basefile,'.',/extract)
                     spec.indiv_mask[iobs] = extensions[0]
                     extensions[1]= 'rsig'
-                    sigmafile = file_dirname(obj.files[iobs])+'/'+strjoin(extensions,'.')
+                    sigmafile = strtrim(file_dirname(obj.files[iobs])+'/'+strjoin(extensions,'.'),2)
+                    if file_test(sigmafile) eq 0 then stop, 'cannot find file '+sigmafile
                     sigstr = readfits(sigmafile,hdr)
                     if sxpar(hdr,'crval1') ne crval or sxpar(hdr,'cdelt1') ne cdelt then $
                        stop,'check LRIS sigma and spec file:',obj.files[iobs]
-                    spec.indiv_ivar[*,iobs] = 1./sqrt(sigstr)
-                     
+                    spec.indiv_ivar[0:indiv_npix-1,iobs] = 1./sigstr^2
                     end
                  'mosfire': begin
+                    str = mrdfits(strtrim(obj.files[iobs],2),1)
+                    hdr = str.hdr
+                    indiv_npix = n_Elements(str.lambda)
+                    spec.indiv_npix[iobs] = indiv_npix
+                    spec.indiv_spec[0:indiv_npix-1,iobs]=str.spec
+                    spec.indiv_lambda[0:indiv_npix-1,iobs]=str.lambda
+                    spec.indiv_ivar[0:indiv_npix-1,iobs] = 1./str.errspec^2
+                    spec.indiv_combmask[0:indiv_npix-1,iobs]=1
+                    spec.indiv_filename[iobs] = obj.files[iobs]
+                    spec.indiv_instru[iobs] = obj.instrus[iobs]
+                    spec.indiv_ra[iobs] = sxpar(hdr,'targra')
+                    spec.indiv_dec[iobs]= sxpar(hdr,'targdec')
+                    spec.indiv_dlam[0:indiv_npix-1,iobs] = 3.06 ;MOSFIRE Y BAND
+                    spec.indiv_good[iobs] = 1
+                    spec.indiv_npix[iobs] = indiv_npix
+                    spec.indiv_jd = sxpar(hdr,'mjd-obs')+2400000.5 
+                    basefile =  file_basename(obj.files[iobs])
+                    extensions = strsplit(basefile,'.',/extract)
+                    spec.indiv_mask[iobs] = extensions[1]
                     end
-                 else: print,'no instrument type found for '+obj.instrus[iobs]
+                 else: stop,'no instrument type found for '+obj.instrus[iobs]
               endcase
-
-              strblu = mrdfits(strtrim(obj.filename[iobs],2),1,hdrblu,/silent,status=status1)
-              strred = mrdfits(strtrim(obj.filename[iobs],2),2,hdrred,/silent,status=status2)
-              if status1 ne 0 or status2 ne 0 then continue
-              if typename(strblu) eq 'INT' then continue
-              spec.indiv_spec[*,iobs] = [strblu.spec,strred.spec]
-              spec.indiv_lambda[*,iobs] = [strblu.lambda,strred.lambda]
-              spec.indiv_ivar[*,iobs] = [strblu.ivar,strred.ivar]
-              spec.indiv_combmask[*,iobs]=1
-              spec.indiv_objname[iobs] = obj.objname[iobs]
-              spec.indiv_ra[iobs] = obj.ra[iobs]
-              spec.indiv_dec[iobs] = obj.dec[iobs]
-              spec.indiv_mask[iobs] = obj.mask[iobs]
-              spec.indiv_slit[iobs] = obj.slit[iobs]
-              spec.indiv_filename[iobs] = obj.filename[iobs]
-              spec.indiv_exptime[iobs] = obj.exptime[iobs]
-              spec.indiv_vhelio[iobs] = helio_deimos(spec.indiv_ra[iobs],spec.indiv_dec[iobs],2000,jd=spec.indiv_jd[iobs])
-              spec.indiv_good[iobs] = 1
           endfor 
           self.i = i
           tell = mrdfits('/scr2/nichal/workspace2/telluric/deimos_telluric_1.0.fits', 1, /silent)
@@ -1338,21 +1211,19 @@ pro combspec::getspec, list=list
           ptr_free, self.tell
           self.tell = ptr_new(tell)
    
-          self->indivspecres, spec
-          self->indivtelluric, spec
           self->indivmask,spec
           self->indivcontinuum,spec
           self->statusbox, spec=spec
           self->writespecindiv,spec
       endfor
-      speclist = masks+' '+slits+' '+objnames
+      speclist = conttypes+' '+objnums+' '+objnames
       widget_control, widget_info(self.base, find_by_uname='filelist'), set_value=speclist
       self.i = 0
       ptr_free, self.specinfo
       self.specinfo = ptr_new(specinfo)
       self.nspec = nspec
       self->writespecinfo
-      speclist = masks+' '+strtrim(string(slits), 2)+' '+objnames
+      speclist = conttypes+' '+strtrim(string(objnums), 2)+' '+objnames
       widget_control, widget_info(self.base, find_by_uname='filelist'), set_value=speclist
       self->readspecindiv
       widget_control, widget_info(self.base, find_by_uname='mode'), set_value=1
@@ -1362,7 +1233,7 @@ pro combspec::getspec, list=list
       self.specinfo = ptr_new(specinfo)
 
       self.nspec = n_elements(specinfo)
-      speclist = specinfo.mask+' '+strtrim(string(specinfo.slit), 2)+' '+specinfo.objname
+      speclist = specinfo.conttype+' '+strtrim(string(specinfo.objnum), 2)+' '+specinfo.objname
       widget_control, widget_info(self.base, find_by_uname='filelist'), set_value=speclist
 
       tell = (mrdfits('/scr2/nichal/workspace2/telluric/deimos_telluric_1.0.fits', 1, /silent))
@@ -1389,7 +1260,7 @@ end
 
 pro combspec::writespecindiv,spec
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Writing spectrum to database ...'
-    specfits = self.directory+strcompress(spec.mask)+'_'+spec.slit+'_'+spec.objname+'.fits'
+    specfits = self.directory+strcompress(spec.conttype)+'_'+spec.objnum+'_'+spec.objname+'.fits'
     mwrfits, spec, specfits, /create, /silent
     spawn, 'gzip -f '+specfits
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Ready.'
@@ -1399,7 +1270,7 @@ pro combspec::readspecindiv
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Reading spectrum from database ...'
     i=self.i
     specinfo = *self.specinfo
-    specfits = self.directory+strtrim(specinfo[i].mask,2)+'_'+strtrim(specinfo[i].slit,2)+'_'+strtrim(specinfo[i].objname,2)+'.fits.gz'
+    specfits = self.directory+strtrim(specinfo[i].conttype,2)+'_'+strtrim(specinfo[i].objnum,2)+'_'+strtrim(specinfo[i].objname,2)+'.fits.gz'
     if file_test(specfits) eq 0 then stop,'no file found'
     spec = mrdfits(specfits,1,/silent)
     ptr_free,self.spec
@@ -1433,7 +1304,7 @@ end
 
 ; =============== INIT ================
 function combspec::INIT, directory=directory
-    common npixcom, npix,ndup
+    common npixcom, npix,npixcomb,ndup
 
     base = widget_base(/row, title='combine_spec_cl1604', uvalue=self, mbar=menu, tab_mode=0, units=1)
     file_menu = widget_button(menu, value='File', /menu)
@@ -1464,9 +1335,6 @@ function combspec::INIT, directory=directory
     widbase = widget_base(wcurobj, /align_left, /row, xsize=235)
     widlabel = widget_label(widbase, value='object ID:', /align_right, uname='idlabel', xsize=65)
     wcurid = widget_label(widbase, value='     ', /align_left, uname='curid', uvalue='curid', xsize=180)
-    wcatbase = widget_base(wcurobj, /align_left, /row, xsize=235)
-    wcatlabel = widget_label(wcatbase, value='cat ID:', /align_right, uname='catlabel', xsize=65)
-    wcurcat = widget_label(wcatbase, value='     ', /align_left, uname='curcat', uvalue='curcat', xsize=180)
     wsnbase = widget_base(wcurobj, /align_center, /row)
     wsnlabel = widget_label(wsnbase, value='s/n = ', /align_right, uname='snlabel', xsize=95)
     wcursn = widget_label(wsnbase, value='     ', /align_left, uname='cursn', uvalue='cursn', xsize=150)
@@ -1479,12 +1347,17 @@ function combspec::INIT, directory=directory
     wmstarlabel = widget_label(wmstarbase, value='log M* = ', /align_right, uname='mstarlabel', xsize=95)
     wcurmstar = widget_label(wmstarbase, value='     ', /align_left, uname='curmstar', uvalue='curmstar', xsize=150)
 
-    wexptimebase = widget_base(wcurobj, /align_center, /row)
-    wexptimelabel = widget_label(wexptimebase, value='Exp time = ', /align_right, uname='exptimelabel', xsize=95)
-    wcurexptime = widget_label(wexptimebase, value='     ', /align_left, uname='curexptime', uvalue='curexptime', xsize=150)
+    woiiewbase = widget_base(wcurobj, /align_center, /row)
+    woiiewlabel = widget_label(woiiewbase, value='OII EW = ', /align_right, uname='oiiewlabel', xsize=95)
+    wcuroiiew = widget_label(woiiewbase, value='     ', /align_left, uname='curoiiew', uvalue='curoiiew', xsize=150)
+
+    wf814wbase = widget_base(wcurobj, /align_center, /row)
+    wf814wlabel = widget_label(wf814wbase, value='F814W = ', /align_right, uname='f814wlabel', xsize=95)
+    wcurf814w = widget_label(wf814wbase, value='     ', /align_left, uname='curf814w', uvalue='curf814w', xsize=150)
+
 
     windibase = widget_base(wcurobj,/align_left,/row,xsize=400)
-    winditable = widget_table(windibase,value=replicate({mask:'',id:'',vhelio:-999,sn:-999,exptime:-999},7),/row_major,column_labels=['mask','id','vhelio','sn','exptime'],uname='curinditable',uvalue='curinditable')
+    winditable = widget_table(windibase,value=replicate({instru:'',mask:'',vhelio:-999,sn:-999},5),/row_major,column_labels=['instru','mask','vhelio','sn'],uname='curinditable',uvalue='curinditable')
 
     ; ------ RIGHT -------
     wfile = widget_base(wright, /frame, /row, /align_left, tab_mode=1)
@@ -1521,9 +1394,9 @@ function combspec::INIT, directory=directory
     tellstart = tellstart[wbands]
     tellend = tellend[wbands]
     ptr_free, self.linewaves, self.linewaves, self.linecolors, self.tellstart, self.tellend, self.tellthick
-    self.linewaves = ptr_new([2798.0, 3646.00, 3727.425, 3750.15, 3770.63, 3797.90, 3835.39, 3868.71, 3888.65, 3889.05, 3933.663, 3967.41, 3968.468, 3970.07, 4101.76, 4305.05, 4340.47, 4861.33, 4958.92, 5006.84, 5167.321, 5172.684, 5183.604, 5875.67, 5889.951, 5895.924, 6300.30, 6548.03, 6562.80, 6583.41, 6678.152, 6716.47, 6730.85])
-    self.linenames = ptr_new(['MgII', 'Hbreak', '[OII]', 'H12', 'H11', 'H10', 'H9', '[NeIII]', 'HeI', 'H8', 'CaH', '[NeIII]', 'CaK', 'He', 'Hd', 'CH', 'Hg', 'Hb', '[OIII]', '[OIII]', 'Mgb', 'Mgb', 'Mgb', 'HeI', 'NaD', 'NaD', '[OI]', '[NII]', 'Ha', '[NII]', 'HeI', '[SII]', '[SII]'])
-    self.linecolors = ptr_new(['blue', 'black', 'blue', 'black', 'black', 'black', 'black', 'blue', 'blue', 'black', 'red', 'blue', 'red', 'black', 'black', 'red', 'black', 'black', 'blue', 'blue', 'red', 'red', 'red', 'blue', 'red', 'red', 'blue', 'blue', 'black', 'blue', 'blue', 'blue', 'blue'])
+    self.linewaves = ptr_new([2798.0, 3646.00, 3727.425, 3750.15, 3770.63, 3797.90, 3835.39, 3868.71, 3888.65, 3889.05, 3933.663, 3967.41, 3968.468, 3970.07, 4101.76, 4305.05, 4340.47, 4861.33, 4958.92, 5006.84, 5167.321, 5172.684, 5183.604, 5875.67, 5889.951, 5895.924, 6300.30, 6548.03, 6562.80, 6583.41, 6678.152, 6716.47, 6730.85,4384,4455,4531,5015,5270,5335,5406,5709,5782])
+    self.linenames = ptr_new(['MgII', 'Hbreak', '[OII]', 'H12', 'H11', 'H10', 'H9', '[NeIII]', 'HeI', 'H8', 'CaH', '[NeIII]', 'CaK', 'He', 'Hd', 'CH', 'Hg', 'Hb', '[OIII]', '[OIII]', 'Mgb', 'Mgb', 'Mgb', 'HeI', 'NaD', 'NaD', '[OI]', '[NII]', 'Ha', '[NII]', 'HeI', '[SII]', '[SII]','Fe4384','Fe4455','Fe4531','Fe5015','Fe5270','Fe5335','Fe5406','Fe5709','Fe5782'])
+    self.linecolors = ptr_new(['blue', 'black', 'blue', 'black', 'black', 'black', 'black', 'blue', 'blue', 'black', 'red', 'blue', 'red', 'black', 'black', 'red', 'black', 'black', 'blue', 'blue', 'red', 'red', 'red', 'blue', 'red', 'red', 'blue', 'blue', 'black', 'blue', 'blue', 'blue', 'blue','red','red','red','red','red','red','red','red','red'])
     self.tellstart = ptr_new(tellstart)
     self.tellend = ptr_new(tellend)
     self.tellthick = ptr_new([5, 2, 5, 2, 2])
@@ -1571,15 +1444,15 @@ pro combspec__define
 end
 
 pro spec__define
-   common npixcom, npix,ndup
+   common npixcom, npix,npixcomb,ndup
    spec = {spec, $
-           contype:'', $
+           conttype:'', $
            objnum:'', $
            objname:'', $
-           lambda:dblarr(npix), $
-           dlam:dblarr(npix), $
-           contdiv:dblarr(npix), $
-           contdivivar:dblarr(npix), $
+           lambda:dblarr(npixcomb), $
+           dlam:dblarr(npixcomb), $
+           contdiv:dblarr(npixcomb), $
+           contdivivar:dblarr(npixcomb), $
            sn:-999d, $
            indiv_spec:dblarr(npix,ndup), $
            indiv_lambda:dblarr(npix,ndup), $
@@ -1591,18 +1464,17 @@ pro spec__define
            indiv_contdiv:dblarr(npix,ndup), $
            indiv_contdivivar:dblarr(npix,ndup), $
            indiv_sn:fltarr(ndup),$
-           indiv_objname:strarr(ndup),$
            indiv_ra:dblarr(ndup), $
            indiv_dec:dblarr(ndup), $
            indiv_mask:strarr(ndup),$
            indiv_slit:strarr(ndup),$
            indiv_filename:strarr(ndup),$
-           indiv_exptime:dblarr(ndup), $
            indiv_jd:dblarr(ndup), $
            indiv_vhelio:dblarr(ndup), $
            indiv_good:bytarr(ndup), $
            indiv_count:-999L,$
            indiv_instru:strarr(ndup),$
+           indiv_npix:lonarr(ndup),$
            PHOT_ID:'',$      
            MASK:'',$         
            SLIT:'',$         
@@ -1660,7 +1532,7 @@ end
 
 pro combspec_cl1604
    common continuum, conttype
-   common npixcom, npix,ndup
+   common npixcom, npix,npixcomb,ndup
    ndup = 4
    conttype = 'spline'
    n = obj_new('combspec',directory=directory)
