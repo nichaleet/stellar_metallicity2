@@ -21,6 +21,7 @@ pro combspec::combine,spec,noredraw=nosdaredraw
        ;find the total wl range (lambdafull)
        ;in the overlapped region use the pixel template of the spectrum with higher signal to noise
        snorder = reverse(sort(sn)) ;order by high to low
+       wgap=[]
        for k=0,cgood-1 do begin
           know = snorder[k] ;k-now
           lambnow = (1.+spec.indiv_vhelio[wgood[know]]/3e5)*spec.indiv_lambda[*,wgood[know]] ;shifted to helio centric
@@ -29,12 +30,34 @@ pro combspec::combine,spec,noredraw=nosdaredraw
           if k eq 0 then lambdafull = lambnow
           if k ge 1 then begin
             if lambnow[0] lt min(lambdafull) then begin
-               waddpix = where(lambnow lt min(lambdafull))
+               waddpix = where(lambnow lt min(lambdafull),cwaddpix)
                lambdafull = [lambnow(waddpix),lambdafull]
+               ;note if there is a gap and edit the existing gaps
+               if n_elements(wgap) gt 0 then wgap = wgap+cwaddpix
+               if cwaddpix eq cgoodpix then wgap = [wgap,cwaddpix-1]
             endif
             if lambnow[cgoodpix-1] gt max(lambdafull) then begin
-               waddpix = where(lambnow gt max(lambdafull))
+               waddpix = where(lambnow gt max(lambdafull),cwaddpix)
                lambdafull = [lambdafull,lambnow(waddpix)]
+               if cwaddpix eq cgoodpix then wgap = [wgap,n_elements(lambdafull)-cwaddpix-1]
+            endif
+            ;check the gap
+            nwgap = n_elements(wgap)   
+            if nwgap gt 0 then begin
+               rmgap = []
+               for gg=0,nwgap-1 do begin
+                 waddpix = where(lambnow gt lambdafull[wgap[gg]] and lambnow lt lambdafull[wgap[gg]+1],cwaddpix)
+                 if cwaddpix gt 0 then begin
+                    nlambdafull = n_elements(lambdafull)
+                    lambdafull = [lambdafull[0:wgap[gg]],lambnow(waddpix),lambdafull[wgap[gg]+1:nlambdafull-1]]
+                    if max(waddpix) eq cgoodpix-1 then wgap = [wgap,wgap[gg]+cwaddpix]
+                    if min(waddpix) eq 0 then wgap = [wgap,wgap[gg]] 
+                    rmgap = [rmgap,gg]
+                 endif
+               endfor
+               if n_elements(rmgap) gt 0 then begin
+                  if n_Elements(rmgap) eq n_Elements(wgap) then wgap=[] else remove,rmgap,wgap
+               endif
             endif
           endif
        endfor
@@ -56,11 +79,14 @@ pro combspec::combine,spec,noredraw=nosdaredraw
           lambnow = (1.+spec.indiv_vhelio[wgood[k]]/3e5)*spec.indiv_lambda[*,wgood[k]] ;shifted to helio centric
           goodpix = where(lambnow ne 0.,cgoodpix)
           lambnow = lambnow(goodpix)
-          specnow = spec.indiv_spec[goodpix,wgood[k]]
-          ivarnow = spec.indiv_ivar[goodpix,wgood[k]]
+          specnow = spec.indiv_contdiv[goodpix,wgood[k]]
+          ivarnow = spec.indiv_contdivivar[goodpix,wgood[k]]
           dlamnow = spec.indiv_dlam[goodpix,wgood[k]]
+          masknow = spec.indiv_combmask[goodpix,wgood[k]]
           wonlamb = where(lambdafull ge min(lambnow) and lambdafull le max(lambnow),conlamb,$
                           complement=wofflamb,ncomplement=cofflamb)
+          combmaskarr[*,k] = byte(interpol(masknow,lambnow,lambdafull))
+          combmaskarr[wofflamb,k] = 0
           contdivarr[*,k] = interpol(specnow,lambnow,lambdafull)          
           contdivivararr[*,k] = interpol(ivarnow,lambnow,lambdafull)
           dlamarr[*,k] = interpol(dlamnow,lambnow,lambdafull)
@@ -71,6 +97,8 @@ pro combspec::combine,spec,noredraw=nosdaredraw
              dlamarr[wofflamb,k]=1./0.
           endif
        endfor
+       wzero = where(contdivarr eq 0,czero)
+       if czero gt 0 then combmaskarr(wzero) = 0
 
        ;weighted average
        ncombmaskarr = total(combmaskarr,2) ;size of ncombpix
@@ -110,7 +138,6 @@ pro combspec::combine,spec,noredraw=nosdaredraw
        avgdev = mean(dev)
        w = where(dev lt 3.0*avgdev, c)
        if c gt 0 then spec.sn = 1.0/mean(dev[w])/sqrt(median(spec.dlam))
-       
    endif
    self->statusbox, spec=spec
 
@@ -197,6 +224,7 @@ pro combspec::handle_button, ev
 	'fitcont': begin
 	   spec = *self.spec
 	   self->indivcontinuum,spec
+           self->statusbox, spec=spec
 	   ptr_free, self.spec
 	   self.spec = ptr_new(spec)
 	   self->redraw
@@ -361,6 +389,7 @@ pro combspec::editvhelio,vhelio,noredraw=noredraw
    spec.indiv_vhelio[wplotcon]=vhelio
    ptr_free, self.spec
    self.spec = ptr_new(spec)
+   self->statusbox, spec=spec
    if ~keyword_set(noredraw) then self->redraw
 end
 
@@ -851,7 +880,7 @@ pro combspec::indivcontinuum, spec
          spec.indiv_contdivivar[ipix:fpix,i] = contdivivar
          spec.indiv_contdiv[ipix:fpix,i] = contdiv
       wcont = where(spec.indiv_contmask[3:npix-4,i] eq 1)+3
-      wcont = wcont[where(finite(spec.indiv_spec[wcont,i]) and finite(spec.indiv_continuum[wcont,i]) and spec.indiv_continuum[wcont,i] ne 0)]
+      wcont = wcont[where(finite(spec.indiv_spec[wcont,i]) and finite(spec.indiv_continuum[wcont,i]) and spec.indiv_continuum[wcont,i] ne 0 and spec.indiv_lambda[wcont,i] gt 6700.)]
       dev = abs((spec.indiv_spec[wcont,i] - spec.indiv_continuum[wcont,i]) / spec.indiv_continuum[wcont,i])
       avgdev = mean(dev)
       w = where(dev lt 3.0*avgdev, c)
@@ -963,7 +992,7 @@ pro combspec::redraw
              fpix = spec.indiv_npix[wplotcon]-1
              oplot, spec.indiv_lambda[ipix:fpix,wplotcon]*(1.+spec.indiv_vhelio[wplotcon]/3e5), spec.indiv_contdiv[ipix:fpix,wplotcon]*spec.indiv_continuum[ipix:fpix,wplotcon], color=fsc_color((*self.indivcolors)[wplotcon])
              oplot,spec.indiv_lambda[ipix:fpix,wplotcon]*(1.+spec.indiv_vhelio[wplotcon]/3e5),spec.indiv_continuum[ipix:fpix,wplotcon], color=fsc_color('black')
- 
+             oplot,spec.indiv_lambda[ipix:fpix,wplotcon]*(1.+spec.indiv_vhelio[wplotcon]/3e5),1./sqrt(spec.indiv_ivar[ipix:fpix,wplotcon]), color=fsc_color('gray') 
              ;;make the axes labels
              plot, spec.indiv_lambda[ipix:fpix,wplotcon]*(1.+spec.indiv_vhelio[wplotcon]/3e5), spec.indiv_contdiv[ipix:fpix,wplotcon]*spec.indiv_continuum[ipix:fpix,wplotcon], xrange=self.lambdalim * (1d + spec.z), yrange=self.ylim, xstyle=1, ystyle=1, background=fsc_color('white'), color=fsc_color('black'), xtitle='!6observed wavelength (!sA!r!u!9 %!6!n)!3', ytitle='!6flux (e!E-!N/hr)!3', /nodata, /noerase
              ;;highlight the telluric region and write line names
@@ -1031,7 +1060,7 @@ pro combspec::redraw
              endif
           endfor
          
-          if total(spec.indiv_good) gt 1 then thick=2 else thick=1 
+          if total(spec.indiv_good) gt 1 then thick=1 else thick=1 
           oplot, spec.lambda/(1d +znow), spec.contdiv, color=fsc_color('black'),thick=thick
 
           ;;highlighting the telluric bands and label line names

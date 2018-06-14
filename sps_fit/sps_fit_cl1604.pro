@@ -32,9 +32,9 @@ pro sps_fit::indices, science, noredraw=noredraw, nostatusbar=nostatusbar
     science.cah = cahindex[0]
     w = where(cahindex[1:nmc] gt -1d8)
     science.caherr = stddev(cahindex[w+1])
-    science.gband = gbandindex[0]
-    w = where(gbandindex[1:nmc] gt -1d8)
-    science.gbanderr = stddev(gbandindex[w+1])
+;    science.gband = gbandindex[0]
+;    w = where(gbandindex[1:nmc] gt -1d8)
+;    science.gbanderr = stddev(gbandindex[w+1])
 end
 
 
@@ -45,26 +45,18 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
     common toprint, agediff, zdiff
 
     if ~keyword_set(nostatusbar) then widget_control, widget_info(self.base, find_by_uname='status'), set_value='Fitting ...'
-    savedata = 0 ;1
 
     znow = science.zspec
     reallambda = science.lambda
     nlambda = n_elements(reallambda)
-    
+    npix = science.npix
+ 
     ;check if the blue chip was failed
     neg = where(reallambda lt 0., cneg)
     if cneg gt 0 then reallambda(neg) = reallambda(neg)+10000.
     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-    if min(science.dlam) gt 0.2 and max(science.dlam) lt 10.0 then begin
-        dlam_all = science.dlam
-    endif else begin
-        specresfile = self.directory+'specres_poly.sav'
-        if file_test(specresfile) then begin
-            restore, specresfile
-            dlam_all = poly(science.lambda/1000 - 7.8, specres_poly) / 2.35
-        endif else dlam_all = replicate(3.9/2.35, nlambda)
-    endelse
+    dlam_all = science.dlam
 
     pi = replicate({value:0d, fixed:0, limited:[1,1], limits:[0.D,0.D], parname:'', mpprint:0, mpformat:'', step:0d, tied:''}, 4)
    
@@ -186,14 +178,6 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
         ;if nloop eq maxnloop then print,'WARNING: MAX NLOOP REACHED!'
         curchisq = bestnorm/dof
 
-        ;;keeping the values
-        if savedata eq 1 and nloop mod 10 eq 0 then begin
-           if nloop eq 0 then $
-              str={won:won,lambda:science.lambda,contdiv:science.contdiv,contdivivar:science.contdivivar,fakecont:science.spscont,spsbestfit:spsbestfitarr[*,0],chisq:curchisq,param:pars,perror:perror,loop:nloop} else $
-              str={won:won,lambda:science.lambda,contdiv:science.contdiv,contdivivar:science.contdivivar,fakecont:science.spscont,spsbestfit:spsbestfit,chisq:curchisq,param:pars,perror:perror,loop:nloop}
-           if nloop eq 0 then loopstr = [str] else loopstr=[loopstr,str]
-           save,loopstr,firstguess,filename=self.directory+'/obj'+strtrim(string(self.i+1, format='(I3)'), 2)+'sps_fit_loopinfo.sav'
-        endif
         if curchisq lt bestchisq then begin
            bestchisq = curchisq
            bestvalue = pars
@@ -207,11 +191,6 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
         nloop +=1
 
      endwhile
-
-    if savedata eq 1 then begin
-       str = {chisq:chisqarr,param:valuearr,perror:errorarr,paraname:['Z','age','sigmav','redshift'],objname:strtrim(science.objname, 2),dof:dof}
-       save,str,filename=self.directory+'/sps_fit_data_'+strtrim(string(self.i+1, format='(I3)'), 2)+'.sav'
-    endif
 
     print,agediff,zdiff,format='("--- ------- ----- ------- ---------  -------- ----",D9.6,2X,D9.6)'                            
     ;;check if the last chisq is the best chisq
@@ -761,7 +740,7 @@ pro sps_fit::default_range, update=update
         self.divylim = [-1.0, 2.5]
         self.lambdalim = (minmax((*self.science)[self.i].lambda / (1d + (*self.science)[self.i].zspec)) < 9100) > 2000
         self.lambdalim[0] >= 2000.
-        self.lambdalim[1] <= 8938. / (1d + (*self.science)[self.i].z)
+        self.lambdalim[1] <= 8938. / (1d + (*self.science)[self.i].zcat)
     endif
     widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
     case 1 of
@@ -775,7 +754,7 @@ pro sps_fit::default_range, update=update
         end
     endcase
     widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
-    zl = mode lt 1 ? (*self.science)[self.i].z : 0.0
+    zl = mode lt 1 ? (*self.science)[self.i].zspec : 0.0
     widget_control, widget_info(self.base, find_by_uname='lambdalow'), set_value=strcompress(string(self.lambdalim[0]*(1d + zl), format='(D7.1)'), /rem)
     widget_control, widget_info(self.base, find_by_uname='lambdahigh'), set_value=strcompress(string(self.lambdalim[1]*(1d + zl), format='(D7.1)'), /rem)
 end
@@ -801,7 +780,7 @@ pro sps_fit::lambdarange, red=red, blue=blue
         lhighnew = self.lambdalim[1] + 0.6*lrange
     endif
     widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
-    zl = mode lt 5 ? (*self.science)[self.i].z : 0.0
+    zl = mode lt 5 ? (*self.science)[self.i].zspec : 0.0
     widget_control, widget_info(self.base, find_by_uname='lambdalow'), set_value=strcompress(string(self.lambdalim[0]*(1d + zl), format='(D7.1)'), /rem)
     widget_control, widget_info(self.base, find_by_uname='lambdahigh'), set_value=strcompress(string(self.lambdalim[1]*(1d + zl), format='(D7.1)'), /rem)
     self->lambdalow, llownew, /noredraw
@@ -946,7 +925,7 @@ pro sps_fit::handle_motion, ev
             endif else begin
                 lambda = slit.lambda0[x] + slit.dlambda[x, y]
                 widget_control, widget_info(self.base, find_by_uname='obswave'), set_value='obs = '+string(lambda, format='(D7.1)')
-                widget_control, widget_info(self.base, find_by_uname='restwave'), set_value='rest = '+string(lambda / (1.0 + (*self.science)[self.i].z), format='(D7.1)')
+                widget_control, widget_info(self.base, find_by_uname='restwave'), set_value='rest = '+string(lambda / (1.0 + (*self.science)[self.i].zspec), format='(D7.1)')
                 widget_control, widget_info(self.base, find_by_uname='yslit'), set_value='y = '+string(y, format='(I3)')
             endelse
         end
@@ -972,7 +951,7 @@ end
 pro sps_fit::handle_draw_click, ev
     click_coords = convert_coord(ev.x, ev.y, /device, /to_data)
     widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
-    if mode lt 1 then click_coords /= 1d + (*self.science)[self.i].z
+    if mode lt 1 then click_coords /= 1d + (*self.science)[self.i].zspec
     case ev.modifiers of
         0: begin
             case ev.press of
@@ -985,7 +964,7 @@ pro sps_fit::handle_draw_click, ev
             endcase
             llownew = click_coords[0] - lrange/2.
             lhighnew = click_coords[0] + lrange/2.
-            zl = mode lt 2 ? (*self.science)[self.i].z : 0.0
+            zl = mode lt 2 ? (*self.science)[self.i].zspec: 0.0
             widget_control, widget_info(self.base, find_by_uname='lambdalow'), set_value=strcompress(string(self.lambdalim[0]*(1d + zl), format='(D7.1)'), /rem)
             widget_control, widget_info(self.base, find_by_uname='lambdahigh'), set_value=strcompress(string(self.lambdalim[1]*(1d + zl), format='(D7.1)'), /rem)
             self->lambdalow, llownew, /noredraw
@@ -999,7 +978,7 @@ pro sps_fit::handle_draw_click, ev
             lrange = self.lambdalim[1] - self.lambdalim[0]
             llownew = click_coords[0] - lrange/2.
             lhighnew = click_coords[0] + lrange/2.        
-            zl = mode lt 1 ? (*self.science)[self.i].z : 0.0
+            zl = mode lt 1 ? (*self.science)[self.i].zspec: 0.0
             widget_control, widget_info(self.base, find_by_uname='lambdalow'), set_value=strcompress(string(self.lambdalim[0]*(1d + zl), format='(D7.1)'), /rem)
             widget_control, widget_info(self.base, find_by_uname='lambdahigh'), set_value=strcompress(string(self.lambdalim[1]*(1d + zl), format='(D7.1)'), /rem)
             self->lambdalow, llownew, /noredraw
@@ -1384,13 +1363,6 @@ pro sps_fit::contmask, science
 end
 
 pro sps_fit::mask, science, nomask=nomask, zfind=zfind, nozfind=nozfind, nmc=nmc
-    specresfile = self.directory+'specres_poly.sav'
-
-    if file_test(specresfile) then begin
-        restore, specresfile
-        dlam = poly(science.lambda/1000 - 7.8, specres_poly) / 2.35
-        globalres = 1
-    endif
 
     if ~keyword_set(nomask) then begin
 
@@ -1494,7 +1466,7 @@ pro sps_fit::redraw
     widget_control, widget_info(self.base, find_by_uname='spec'), get_value=index
     wset, index
     science = (*self.science)[self.i]
-
+    npix = science.npix
     case mode of
         ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
         0: begin                ;continuum fit
@@ -1590,11 +1562,9 @@ pro sps_fit::redraw
             ;;plot the contdiv with applied fake continuum
             oplot, science.lambda/(1d +znow), science.contdiv/science.spscont, color=fsc_color('black') 
             good = where(science.contdivivar ne 0, cgood)
-            oplot, science.lambda(good)/(1d +znow), 1./sqrt(science.contdivivar(good))/science.spscont(good),color=fsc_color('blue') ;sigma
+            oplot, science.lambda(good)/(1d +znow), 1./sqrt(science.contdivivar(good))/science.spscont(good),color=fsc_color('cornflowerblue') ;sigma
             nfull = n_elements(science.lambda)
             nhalf = fix(nfull/2)-1
-            if science.wlfail_blue eq 1 then oplot, science.lambda[0:nhalf]/(1d +znow), science.contdiv[0:nhalf]/science.spscont[0:nhalf], color=fsc_color('darkgray') 
-            if science.wlfail_red eq 1 then oplot, science.lambda[nhalf:nfull-1]/(1d +znow), science.contdiv[nhalf:nfull-1]/science.spscont[nhalf:nfull-1], color=fsc_color('darkgray') 
 
             ;;highlighting the telluric bands and label line names
             n = n_elements(*self.tellstart)
@@ -1611,11 +1581,11 @@ pro sps_fit::redraw
             ;;plot the models
             plot, science.lambda/(1d + science.zspec), science.contdiv/science.spscont, xrange=self.lambdalim, yrange=self.divylim, xstyle=1, ystyle=1, background=fsc_color('white'), color=fsc_color('black'), xtitle='!6rest wavelength (!sA!r!u!9 %!6!n)!3', ytitle='!6flux (normalized)!3', /nodata, /noerase
             if (science.feh gt -10 and science.age gt 0.0) or total(science.spsspec gt 0.0) then begin
-               oplot, science.lambda/(1d + science.zspec), science.spsspecfull, color=fsc_color('red')
+               oplot, science.lambda[0:npix-1]/(1d + science.zspec), science.spsspecfull[0:npix-1], color=fsc_color('red')
             endif
          end
      endcase        
-    zl = mode lt 2 ? (*self.science)[self.i].z : 0.0
+    zl = mode lt 2 ? (*self.science)[self.i].zspec : 0.0
     widget_control, widget_info(self.base, find_by_uname='lambdalow'), set_value=strcompress(string(self.lambdalim[0]*(1d + zl), format='(D7.1)'), /rem)
     widget_control, widget_info(self.base, find_by_uname='lambdahigh'), set_value=strcompress(string(self.lambdalim[1]*(1d + zl), format='(D7.1)'), /rem)
 
@@ -1625,120 +1595,22 @@ end
 
 pro sps_fit::statusbox, science=science
     if ~keyword_set(science) then science = (*self.science)[self.i]
-    
-    phot_color = science.phot_color
-    case phot_color of
-        'VK': begin
-            color = science.v-science.k
-            mag = science.k
-            colorerr = sqrt((science.verr)^2. + (science.kerr)^2.)
-            magerr = science.kerr
-            noerror = science.verr le 0 or science.verr ge 10 or science.kerr le 0 or science.kerr ge 10
-            clrlbl = 'V-K = '
-            maglbl = 'K = '
-        end
-        'VJ': begin
-            color = science.v-science.j
-            mag = science.j
-            colorerr = sqrt((science.verr)^2. + (science.jerr)^2.)
-            magerr = science.jerr
-            noerror = science.verr le 0 or science.verr ge 10 or science.jerr le 0 or science.jerr ge 10
-            clrlbl = 'V-J = '
-            maglbl = 'J = '
-        end
-        'VI': begin
-            color = science.v-science.i
-            mag = science.i
-            colorerr = sqrt((science.verr)^2. + (science.ierr)^2.)
-            magerr = science.ierr
-            noerror = science.verr le 0 or science.verr ge 10 or science.ierr le 0 or science.ierr ge 10
-            clrlbl = 'V-I = '
-            maglbl = 'I = '
-        end
-        'VR': begin
-            color = science.v-science.r
-            mag = science.r
-            colorerr = sqrt((science.verr)^2. + (science.rerr)^2.)
-            magerr = science.rerr
-            noerror = science.verr le 0 or science.verr ge 10 or science.rerr le 0 or science.rerr ge 10
-            clrlbl = 'V-R = '
-            maglbl = 'R = '
-        end
-        'BV': begin
-            color = science.b-science.v
-            mag = science.v
-            colorerr = sqrt((science.berr)^2. + (science.verr)^2.)
-            magerr = science.verr
-            noerror = science.berr le 0 or science.berr ge 10 or science.verr le 0 or science.verr ge 10
-            clrlbl = 'B-V = '
-            maglbl = 'V = '
-        end
-        'BR': begin
-            color = science.b-science.r
-            mag = science.r
-            colorerr = sqrt((science.berr)^2. + (science.rerr)^2.)
-            magerr = science.rerr
-            noerror = science.berr le 0 or science.berr ge 10 or science.rerr le 0 or science.rerr ge 10
-            clrlbl = 'B-R = '
-            maglbl = 'R = '
-        end
-        'RI': begin
-            color = science.r-science.i
-            mag = science.i
-            colorerr = sqrt((science.rerr)^2. + (science.ierr)^2.)
-            magerr = science.ierr
-            noerror = science.rerr le 0 or science.rerr ge 10 or science.ierr le 0 or science.ierr ge 10
-            clrlbl = 'R-I = '
-            maglbl = 'I = '
-        end
-        'JK': begin
-            color = science.j-science.k
-            mag = science.k
-            colorerr = sqrt((science.jerr)^2. + (science.kerr)^2.)
-            magerr = science.kerr
-            noerror = science.jerr le 0 or science.jerr ge 10 or science.kerr le 0 or science.kerr ge 10
-            clrlbl = 'J-K = '
-            maglbl = 'K = '
-        end
-        'F606WF814W': begin
-            color = science.f606w-science.f814w
-            mag = science.f814w
-            colorerr = sqrt((science.f606werr)^2. + (science.f814werr)^2.)
-            magerr = science.f814werr
-            noerror = science.f606werr le 0 or science.f606werr ge 10 or science.f814werr le 0 or science.f814werr ge 10
-            clrlbl = 'F606W-F814W = '
-            maglbl = 'F814W = '
-        end
-        else: begin
-            color = -999.0
-            mag = -999.0
-            colorerr = 0.0
-            magerr = 0.0
-            noerror = 1
-            clrlbl = 'V-I = '
-            maglbl = 'I = '
-        end
-    endcase
 
     unknown = '???'
     widget_control, widget_info(self.base, find_by_uname='good'), set_value=[science.good, science.goodfit]
     widget_control, widget_info(self.base, find_by_uname='curid'), set_value=strtrim(science.objname, 2)+' ('+strcompress(self.i+1, /rem)+' / '+strcompress(self.nspec, /rem)+')'
-    widget_control, widget_info(self.base, find_by_uname='maglabel'), set_value=maglbl
-    widget_control, widget_info(self.base, find_by_uname='collabel'), set_value=clrlbl
-    widget_control, widget_info(self.base, find_by_uname='curmag'), set_value=mag gt 0 ? strcompress(string(mag, format='(D10.2)'), /rem)+(noerror ? '' : ' +/- '+strcompress(string(magerr, format='(D10.2)'), /rem)) : unknown
-    widget_control, widget_info(self.base, find_by_uname='curcol'), set_value=color gt -10 ? strcompress(string(color, format='(D10.2)'), /rem)+(noerror ? '' : ' +/- '+strcompress(string(colorerr, format='(D10.2)'), /rem)) : unknown
-    widget_control, widget_info(self.base, find_by_uname='curz'), set_value=strcompress(string(science.z, format='(D5.3)'), /rem)
+    widget_control, widget_info(self.base, find_by_uname='curzcat'), set_value=strcompress(string(science.zcat, format='(D5.3)'), /rem)
     widget_control, widget_info(self.base, find_by_uname='curzfit'), set_value=strcompress(string(science.zfit, format='(D5.3)'), /rem)
     widget_control, widget_info(self.base, find_by_uname='cursn'), set_value=science.sn gt 0 ? strcompress(string(science.sn, format='(D10.1)'),/rem)+' ; '+strcompress(string(science.snfit, format='(D10.1)'), /rem) : unknown
     widget_control, widget_info(self.base, find_by_uname='curnloop'), set_value=science.nloop gt 0 ? strcompress(string(science.nloop, format='(D10.1)'), /rem) : unknown
     widget_control, widget_info(self.base, find_by_uname='curage'), set_value=science.age gt -100 ? strcompress(string(science.age, format='(D10.2)'), /rem)+(science.ageerr le 0 ? '' : ' +/- '+strcompress(string(science.ageerr, format='(D10.2)'), /rem))+' Gyr' : unknown
     widget_control, widget_info(self.base, find_by_uname='curageuncert'), set_value=science.agelower gt -100 ? strcompress(string(science.agelower, format='(D10.2)'), /rem)+(science.ageupper gt -100 ? ' : '+strcompress(string(science.ageupper, format='(D10.2)'), /rem):'') : unknown
-    widget_control, widget_info(self.base, find_by_uname='curmstar'), set_value=science.logmstar gt 0 ? strcompress(string(science.logmstar, format='(D10.2)'), /rem) : unknown
+    widget_control, widget_info(self.base, find_by_uname='curmstar'), set_value=science.logmstar_sed_bl gt 0 ? strcompress(string(science.logmstar_sed_bl, format='(D10.2)'), /rem) : unknown
     widget_control, widget_info(self.base, find_by_uname='curfeh'), set_value=science.feh gt -100 ? strcompress(string(science.feh, format='(D10.2)'), /rem)+(science.feherr le 0 ? '' : ' +/- '+strcompress(string(science.feherr, format='(D10.2)'), /rem)) : unknown
     widget_control, widget_info(self.base, find_by_uname='curfehuncert'), set_value=science.fehlower gt -100 ? strcompress(string(science.fehlower, format='(D10.2)'), /rem)+(science.fehupper ge -100 ? ' : '+strcompress(string(science.fehupper, format='(D10.2)'), /rem):'') : unknown
     widget_control, widget_info(self.base, find_by_uname='curoii'), set_value=science.oiiew ne -999 ? strcompress(string(science.oiiew, format='(D10.2)'), /rem)+(science.oiiewerr le 0 ? '' : ' +/- '+strcompress(string(science.oiiewerr, format='(D10.2)'), /rem))+' A' : unknown
+    widget_control, widget_info(self.base, find_by_uname='curoiicat'), set_value=science.ew_oii ne -999 ? strcompress(string(science.ew_oii, format='(D10.2)'), /rem)+(science.ew_oiierr le 0 ? '' : ' +/- '+strcompress(string(science.ew_oiierr, format='(D10.2)'), /rem))+' A' : unknown
     widget_control, widget_info(self.base, find_by_uname='curcah'), set_value=science.caherr gt 0 ? strcompress(string(science.cah, format='(D10.2)'), /rem)+(science.caherr le 0 ? '' : ' +/- '+strcompress(string(science.caherr, format='(D10.2)'), /rem)) : unknown
-    widget_control, widget_info(self.base, find_by_uname='curgband'), set_value=science.gbanderr gt 0 ? strcompress(string(science.gband, format='(D10.2)'), /rem)+(science.gbanderr le 0 ? '' : ' +/- '+strcompress(string(science.gbanderr, format='(D10.2)'), /rem)) : unknown
     widget_control, widget_info(self.base, find_by_uname='curchisq'), set_value=science.chisq gt 0 ? strcompress(string(science.chisq, format='(D10.2)'), /rem) : unknown
     widget_control, widget_info(self.base, find_by_uname='maxnloop'), set_value=science.nloop gt 0 ? strcompress(string(science.nloop, format='(I4)'), /rem) : unknown
 
@@ -1746,25 +1618,27 @@ pro sps_fit::statusbox, science=science
     
     if science.vdisp gt 0 then widget_control, widget_info(self.base, find_by_uname='curvdisp'), set_value=strcompress(string(science.vdisp, format='(D10.1)'), /rem)+(science.vdisperr le 0 ? '' : ' +/- '+strcompress(string(science.vdisperr, format='(D10.1)'), /rem))+' km/s' else widget_control, widget_info(self.base, find_by_uname='curvdisp'), set_value=unknown
 
-    if science.vdisp_smm gt 0 then widget_control, widget_info(self.base, find_by_uname='curvdispsmm'), set_value=strcompress(string(science.vdisp_smm, format='(D10.1)'), /rem)+(science.vdisperr_smm le 0 ? '' : ' +/- '+strcompress(string(science.vdisperr_smm, format='(D10.1)'), /rem))+' km/s (SMM)' else widget_control, widget_info(self.base, find_by_uname='curvdispsmm'), set_value=unknown
 end
 
 
 pro sps_fit::getscience, files=files
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Initializing ...'
-
     common mask_in, mask_in
-   
-    vdispfile = '/scr2/nichal/keck/deimos/Cl0024MS0451/MS0451_sigmas.txt'
-    readcol, vdispfile, vd_objname, vd_vdisp, vd_vdisperr, format='A,D,D', comment='#', /silent
-
     common npixcom, npix
-    npix = 8192
-
+    npix = 12619
+    
     observatory, 'keck', obs
     sciencefits = self.directory+(self.lowsn eq 1 ? 'sps_fit_lowsn.fits.gz' : 'sps_fit.fits.gz')
     if ~file_test(sciencefits) then begin
         if ~keyword_set(files) then message, 'You must specify the FILES keyword if a sps_fit.fits.gz file does not exist.'
+        ;only take quiescent galaxies with redshift z=0.8 to 1.0
+        goodfile = []
+        for i=0,n_elements(files)-1 do begin
+           data = mrdfits(files[i], 1, hdr, /silent)
+           if (data.indiv_count gt 2) or (data.z ge 0.8 and data.z le 1.0 and data.ew_oii gt -5.) then goodfile = [goodfile,i]
+        endfor    
+ 
+        files = files(goodfile)
         c = n_elements(files)
         masks = strarr(c)
         slits = strarr(c)
@@ -1775,7 +1649,7 @@ pro sps_fit::getscience, files=files
             extensions = strsplit(basefile, '_.', /extract)
             masks[i] = extensions[0]
             slits[i] = extensions[1]
-            objnames[i] = extensions[2]
+            objnames[i] = strjoin(extensions[2:4],'_')
         endfor
         w = where(strmatch(objnames, '*serendip*') eq 0 and strmatch(objnames, '*ACSstar*') eq 0, cw)
         if cw gt 0 then begin
@@ -1797,73 +1671,27 @@ pro sps_fit::getscience, files=files
 
         for i=0,nspec-1 do begin
             science = {science}
-            data = mrdfits(files[i], 1, hdr, /silent) ;box car extraction
-            science.objname = data.objname
-            science.mask = data.mask
-            science.slit = data.slit
-
-            science.ra = data.ra
-            science.dec = data.dec
-            
-            science.lambda = data.lambda
-            science.contdiv = data.contdiv
-            science.contdivivar = data.contdivivar
-            science.dlam = data.dlam
-
-            ;photometric stuff
-            science.z = data.z
-            science.zquality = data.zquality
-            science.zspec = data.z
+            data = mrdfits(files[i], 1, hdr, /silent) 
+            ;copying photometric stuff over
+            struct_assign,data,science,/nozero ;copy cat over
+            science.orelsemask = data.mask
+            science.orelseslit = data.slit
             science.zcat = data.z
-            science.b = data.b_auto
-            science.v = data.v_auto
-            science.r = data.r_auto
-            science.i = data.i_auto
-            science.j = data.j_auto
-            science.k = data.k_auto
-            science.f814w = data.f814w_auto
-            science.fuv = data.fuv_auto
-            science.nuv = data.nuv_auto
-            science.berr = data.b_auto_err
-            science.verr = data.v_auto_err
-            science.rerr = data.r_auto_err
-            science.ierr = data.i_auto_err
-            science.jerr = data.j_auto_err
-            science.kerr = data.k_auto_err
-            science.f814werr = data.f814w_auto_err
-            science.fuverr = data.fuv_auto_err
-            science.nuverr = data.nuv_auto_err
-            science.logmstar = data.mass_kcorrect
-            science.vdisp_smm = -999d
-            science.vdisperr_smm = -999d
-            if (size(vd_objname))[0] gt 0 then begin
-                match, strtrim(vd_objname, 2), strtrim(science.objname, 2), w1, w2, count=cmatch
-                if cmatch gt 0 then begin
-                    science[w2].vdisp_smm = vd_vdisp[w1]
-                    if strmid(mask_in, 0, 4) eq '0451' then begin
-                        science[w2].vdisperr_smm = vd_vdisperr[w1]
-                    endif else begin
-                        science[w2].vdisperr_smm = -999d
-                    endelse
-                endif
-            endif
-
-            case 1 of
-                science.b gt 10.0 and science.b lt 50.0 and science.v gt 10.0 and science.v lt 50.0: science.phot_color = 'BV'
-                science.b gt 10.0 and science.b lt 50.0 and science.r gt 10.0 and science.r lt 50.0: science.phot_color = 'BR'
-                science.v gt 10.0 and science.v lt 50.0 and science.i gt 10.0 and science.i lt 50.0: science.phot_color = 'VI'
-                science.v gt 10.0 and science.v lt 50.0 and science.k gt 10.0 and science.k lt 50.0: science.phot_color = 'VK'
-                science.v gt 10.0 and science.v lt 50.0 and science.j gt 10.0 and science.j lt 50.0: science.phot_color = 'VJ'
-                science.j gt 10.0 and science.j lt 50.0 and science.k gt 10.0 and science.k lt 50.0: science.phot_color = 'JK'
-                else: science.phot_color = 'BV'
-            endcase
-
+            science.zcatErr = data.zErr
+            science.cahcat = data.cah
+            science.cahcatErr = data.cahErr
+            science.zspec = data.z
+            ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+            nlamb = n_elements(data.lambda)
+            science.npix = nlamb
+            science.lambda[0:nlamb-1] = data.lambda
+            science.contdiv[0:nlamb-1] = data.contdiv
+            science.contdivivar[0:nlamb-1] = data.contdivivar
+            science.dlam[0:nlamb-1] = data.dlam
+            if nlamb lt npix then science.contdiv[nlamb:npix-1] = !values.f_infinity
             science.spec1dfile = files[i]
-            w = where(science.age le 0, c)
-            if c gt 0 then begin
-                science[w].age = -999d
-                science[w].ageerr = -999d
-            endif
+            science.age = -999d
+            science.ageerr = -999d
             science.feh = -999d
             science.feherr = -999d
             science.vdisp = -999d
@@ -1874,21 +1702,13 @@ pro sps_fit::getscience, files=files
             w = where(science.contdivivar gt 0 and finite(science.contdivivar), civar)
             if civar gt 10 then if w[civar-1] ne n_elements(science.contdivivar)-1 then science.contdivivar[w[civar-11:civar-1]] = 0
 
-            n = n_elements(science.lambda)
-
-            tell = mrdfits('/scr2/nichal/workspace2/telluric/deimos_telluric_1.0.fits', 1, /silent)
-            wtell = n_elements(tell)-1
-            tell = tell[wtell]
-            ptr_free, self.tell
-            self.tell = ptr_new(tell)
-
-            t = (-1*ts_diff(science.lambda, 1))[0:n-2]
-            wt = where(t le 0, ct)
-            if ct gt 0 then begin
-                message, 'Wavelength array for '+strtrim(objnames[i], 2)+' is not monotonic.  Omitting.', /info
+            
+            if civar eq 0 then begin
+                message, 'Bad data for '+strtrim(objnames[i], 2)+'.  Omitting.', /info
                 wgood[i] = 0
                 continue
             endif
+
 
             self->contmask, science
             self->oiiew, science
@@ -1903,24 +1723,31 @@ pro sps_fit::getscience, files=files
             scienceall[i] = science
         endfor
 
+        tell = mrdfits('/scr2/nichal/workspace2/telluric/deimos_telluric_1.0.fits', 1, /silent)
+        wtell = n_elements(tell)-1
+        tell = tell[wtell]
+        ptr_free, self.tell
+
+        self.tell = ptr_new(tell)
         self.i = 0
+
         wgood = where(wgood eq 1, cgood)
         scienceall = scienceall[wgood]
+
         ptr_free, self.science
         self.science = ptr_new(scienceall)
+        cgood = n_elements(scienceall)
         self.nspec = cgood
         self->writescience
-        ;self->specres_mask, self.directory
         speclist = masks[wgood]+' '+strtrim(string(slits[wgood]), 2)+' '+objnames[wgood]
         widget_control, widget_info(self.base, find_by_uname='filelist'), set_value=speclist
         widget_control, widget_info(self.base, find_by_uname='mode'), set_value=1
-        ;self->fit_all
         self->writescience
      endif else begin ;if sps_fit.fits.gz exists or not
         scienceall = mrdfits(sciencefits, 1, /silent)
 
         self.nspec = n_elements(scienceall)
-        speclist = scienceall.mask+' '+strtrim(string(scienceall.slit), 2)+' '+scienceall.objname
+        speclist = scienceall.conttype+' '+strtrim(string(scienceall.objnum), 2)+' '+scienceall.objname
         widget_control, widget_info(self.base, find_by_uname='filelist'), set_value=speclist
 
         tell = (mrdfits('/scr2/nichal/workspace2/telluric/deimos_telluric_1.0.fits', 1, /silent))
@@ -1948,7 +1775,7 @@ end
 pro sps_fit::initialize_directory, directory=directory
     common mask_in, mask_in
 
-    newdirectory = '/scr2/nichal/workspace4/sps_fit/data/'+mask_in+'_ms0451/'
+    newdirectory = '/scr2/nichal/workspace4/sps_fit/data/'+mask_in+'_cl1604/'
     if ~file_test(newdirectory) then file_mkdir, newdirectory
 
     if strmid(directory, 0, 1, /reverse_offset) ne '/' then directory = directory + '/'
@@ -2019,12 +1846,6 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     widbase = widget_base(wcurobj, /align_left, /row, xsize=235)
     widlabel = widget_label(widbase, value='object ID:', /align_right, uname='idlabel', xsize=65)
     wcurid = widget_label(widbase, value='     ', /align_left, uname='curid', uvalue='curid', xsize=180)
-    wvbase = widget_base(wcurobj, /align_center, /row)
-    wvlabel = widget_label(wvbase, value='B = ', /align_right, uname='maglabel', xsize=95)
-    wcurmag = widget_label(wvbase, value='     ', /align_left, uname='curmag', uvalue='curmag', xsize=150)
-    wbvbase = widget_base(wcurobj, /align_center, /row)
-    wbvlabel = widget_label(wbvbase, value='B-V = ', /align_right, uname='collabel', xsize=95)
-    wcurcol = widget_label(wbvbase, value='     ', /align_left, uname='curcol', uvalue='curcol', xsize=150)
 
     wmstarbase = widget_base(wcurobj, /align_center, /row)
     wmstarlabel = widget_label(wmstarbase, value='log M* = ', /align_right, uname='mstarlabel', xsize=95)
@@ -2032,6 +1853,10 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     woiibase = widget_base(wcurobj, /align_center, /row)
     woiilabel = widget_label(woiibase, value='OII EW = ', /align_right, uname='oiilabel', xsize=95)
     wcuroii = widget_label(woiibase, value='     ', /align_left, uname='curoii', uvalue='curoii', xsize=150)
+
+    woiicatbase = widget_base(wcurobj, /align_center, /row)
+    woiicatlabel = widget_label(woiicatbase, value='OII EW cat= ', /align_right, uname='oiicatlabel', xsize=95)
+    wcuroiicat = widget_label(woiicatbase, value='     ', /align_left, uname='curoiicat', uvalue='curoiicat', xsize=150)
 
     wagebase = widget_base(wcurobj, /align_center, /row)
     wagelabel = widget_label(wagebase, value='age = ', /align_right, uname='agelabel', xsize=95)
@@ -2050,23 +1875,17 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     wcahbase = widget_base(wcurobj, /align_center, /row)
     wcahlabel = widget_label(wcahbase, value='CaH = ', /align_right, uname='cahlabel', xsize=95)
     wcurcah = widget_label(wcahbase, value='     ', /align_left, uname='curcah', uvalue='curcah', xsize=150)
-    wgbandbase = widget_base(wcurobj, /align_center, /row)
-    wgbandlabel = widget_label(wgbandbase, value='Gband = ', /align_right, uname='gbandlabel', xsize=95)
-    wcurgband = widget_label(wgbandbase, value='     ', /align_left, uname='curgband', uvalue='curgband', xsize=150)
+
     wvdispbase = widget_base(wcurobj, /align_center, /row)
     wvdisplabel = widget_label(wvdispbase, value='sigma_v = ', /align_right, uname='vdisplabel', xsize=95)
     wcurvdisp = widget_label(wvdispbase, value='     ', /align_left, uname='curvdisp', uvalue='curvdisp', xsize=150)
-
-    wvdispsmmbase = widget_base(wcurobj, /align_center, /row)
-    wvdispsmmlabel = widget_label(wvdispsmmbase, value='sigma_vsmm = ', /align_right, uname='vdispsmmlabel', xsize=95)
-    wcurvdispsmm = widget_label(wvdispsmmbase, value='     ', /align_left, uname='curvdispsmm', uvalue='curvdispsmm', xsize=150)
 
     wsnbase = widget_base(wcurobj, /align_center, /row)
     wsnlabel = widget_label(wsnbase, value='SNR = ', /align_right, uname='snlabel', xsize=95)
     wcursn = widget_label(wsnbase, value='     ', /align_left, uname='cursn', uvalue='cursn', xsize=150)
     wzbase = widget_base(wcurobj, /align_center, /row)
-    wzlabel = widget_label(wzbase, value='zcat = ', /align_right, uname='zlabel', xsize=95)
-    wcurz = widget_label(wzbase, value='     ', /align_left, uname='curz', uvalue='curz', xsize=150)
+    wzlabel = widget_label(wzbase, value='zcat = ', /align_right, uname='zcatlabel', xsize=95)
+    wcurz = widget_label(wzbase, value='     ', /align_left, uname='curzcat', uvalue='curzcat', xsize=150)
     wzfitbase = widget_base(wcurobj, /align_center, /row)
     wzfitlabel = widget_label(wzfitbase, value='zfit = ', /align_right, uname='zfitlabel', xsize=95)
     wcurzfit = widget_label(wzfitbase, value='     ', /align_left, uname='curzfit', uvalue='curzfit', xsize=150)
@@ -2190,10 +2009,8 @@ pro science__define
     nsky = 200
     science = {science, $
                objname:'', $
-               mask:'', $
-               slit:0L, $
-               ra:-999d, $
-               dec:-999d, $
+               conttype:'', $
+               objnum:0L, $
                lambda:dblarr(npix), $
                contmask:bytarr(npix), $
                spscont:dblarr(npix), $
@@ -2204,30 +2021,9 @@ pro science__define
                spscontfull:dblarr(npix), $
                fitmask:bytarr(npix), $
                dlam:dblarr(npix), $
+               npix:-999, $
                zspec:-999d, $
                zfit:-999d, $
-               z:-999d, $
-               zquality:-999d, $
-               zcat:0, $
-               phot_color:'', $
-               b:-999d, $
-               v:-999d, $
-               r:-999d, $
-               i:-999d, $
-               j:-999d, $
-               k:-999d, $
-               f814w:-999d, $
-               fuv:-999d, $
-               nuv:-999d, $
-               berr:-999d, $
-               verr:-999d, $
-               rerr:-999d, $
-               ierr:-999d, $
-               jerr:-999d, $
-               kerr:-999d, $
-               f814werr:-999d, $
-               fuverr:-999d, $
-               nuverr:-999d, $ 
                age:-999d, $
                ageerr:-999d, $
                ageupper:-999d, $
@@ -2240,34 +2036,78 @@ pro science__define
 	       alphafeerr:-999d, $
                alphafeupper:-999d, $
 	       alphafelower:-999d, $
-               logmstar:-999d, $
                oiiew:-999d, $
                oiiewerr:-999d, $
                vdisp:-999d, $
                vdisperr:-999d, $
-               vdisp_smm:-999d, $
-               vdisperr_smm:-999d, $
                cah:-999d, $
                caherr:-999d, $
-               gband:-999d, $
-               gbanderr:-999d, $
                chisq:-999d, $
                sn:-999d, $
                snfit:-999d, $
                spec1dfile:'', $
                good:0B,$
                goodfit:0B, $
-               wlfail_blue:0B,$
-               wlfail_red:0B,$
-               nloop:0} 
+               nloop:0,$ 
+               ORELSEMASK:'',$
+               ORELSESLIT:'',$
+               RA:-999d,$
+               DEC:-999d,$
+               RA_LFC:-999d,$
+               DEC_LFC:-999d,$
+               RMAG:-999d,$
+               IMAG:-999d,$
+               ZMAG:-999d,$
+               Zcat:-999d,$
+               ZcatERR:-999d,$
+               ZQUALITY:-999,$
+               OLDID:'',$
+               PHOT_FLAG:'',$
+               RA_ACS:-999d,$
+               DEC_ACS:-999d,$
+               ACS_ID:'',$
+               F606WMAG:-999d,$
+               F814WMAG:-999d,$
+               COMMENT:'',$
+               D4000:-999d,$
+               D4000ERR:-999d,$
+               KMAG_AB:-999d,$
+               M_K:-999d,$
+               M_KERR:-999d,$
+               L_K:-999d,$
+               L_KERR:-999d,$
+               MSTAR_K:-999d,$
+               MSTAR_KERR:-999d,$
+               LOGMSTAR_K:-999d,$
+               LOGMSTAR_KERR:-999d,$
+               MSTAR_SED_BL:-999d,$
+               MSTAR_SED_BLERR:-999d,$
+               LOGMSTAR_SED_BL:-999d,$
+               LOGMSTAR_SED_BLERR:-999d,$
+               CONTEXT:-999,$
+               CONTEXTFLAG:-999,$
+               JMAG:-999d,$
+               JMAGERR:-999d,$
+               SFR_24M:-999d,$
+               EW_OIIERR:-999d,$
+               SFR_OII:-999d,$
+               EW_OII:-999d,$
+               LOGMSTAR_SED_PFW:-999d,$
+               AGE_SED:-999d,$
+               LOGAGE_SED:-999d,$
+               CAHcat:-999d,$
+               CAHcatERR:-999d,$
+               GBAND:-999d,$
+               GBANDERR:-999d,$
+               MASS_KCORRECT:-999d}
 end
 
 
-pro sps_fit_ms0451
+pro sps_fit_cl1604
     common mask_in, mask_in
     mask = 'spline'
     mask_in = mask
-    directory = '/scr2/nichal/workspace4/prepspec/data/'+mask
+    directory = '/scr2/nichal/workspace4/prepspec_cl1604/data/'+mask
     if ~file_test(directory) then message, 'Mask not found.'
     n = obj_new('sps_fit', directory=directory)
 end

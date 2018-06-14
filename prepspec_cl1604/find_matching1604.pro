@@ -54,8 +54,8 @@ common outfile, objall, maxdup, minz, maxz
    olfile = file_search('/scr2/nichal/keck/deimos/Cl1604/lris/spec1d*.fits.gz',count=colfile)  
    ;new lris spectra 
    nlfile1 = file_search('/scr2/nichal/WMKO/LRIS/2017may_cl1604/reduce/cl1604_1*.r.*.msdc.fits*',count=cnlfile1)
-   nlfile2 = file_search('/scr2/nichal/WMKO/LRIS/2018may_cl1604/reduce/cl1604_1*.r.*.msdc.fits*',count=cnlfile2)
-   nlfile = nlfile1+nlfile2
+   nlfile2 = file_search('/scr2/nichal/WMKO/LRIS/2018may_cl1604/reduce_cl1604/cl1604_1*.r.*.msdc.fits*',count=cnlfile2)
+   nlfile = [nlfile1,nlfile2]
    cnlfile = cnlfile1+cnlfile2
    ;new mosfire spectra
    mfile =  file_search('/scr2/nichal/keck/mosfire/2014jun/Cl1604_*/onedspec/spec1d*.fits',count=cmfile)
