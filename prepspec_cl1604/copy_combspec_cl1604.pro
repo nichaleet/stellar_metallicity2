@@ -15,11 +15,13 @@ pro combspec::combine,spec,noredraw=nosdaredraw
        spec.contdivivar = spec.indiv_contdivivar[ipix:fpix,wgood[0]]
        spec.sn = spec.indiv_sn[wgood[0]]
    endif
+
    if cgood gt 1 then begin ;stack continuum and make output structure (strout)
        sn = spec.indiv_sn[wgood] ;per angstrom
 
        ;First, find the total wl range (lambdafull) 
        ;in the overlapped region use the pixel template of the spectrum with higher signal to noise
+       ;Also, create a dlam array, which is the highest dlam at a given wavelength
        snorder = reverse(sort(sn)) ;order by high to low
        wgap=[]
        for k=0,cgood-1 do begin
@@ -70,84 +72,39 @@ pro combspec::combine,spec,noredraw=nosdaredraw
  
        spec.lambda = lambdafull
 
-       ;create a dlam array for smoothing. Dlam array is the highest dlam at the specific wl
+       ;get data in smooth and interpolate
        combmaskarr = bytarr(npixcomb,cgood)
-       dlamarr = dblarr(npixcomb,cgood)
-       for k=0,cgood-1 do begin
-          lambnow = (1.+spec.indiv_vhelio[wgood[k]]/3e5)*spec.indiv_lambda[*,wgood[k]]
-          goodpix = where(lambnow ne 0.,cgoodpix)
-          lambnow = lambnow(goodpix)
-          dlamnow = spec.indiv_dlam[goodpix,wgood[k]]
-          masknow = spec.indiv_combmask[goodpix,wgood[k]]
-          wonlamb = where(lambdafull ge min(lambnow) and lambdafull le max(lambnow),conlamb,$
-                          complement=wofflamb,ncomplement=cofflamb)
-          combmaskarr[*,k] = byte(interpol(masknow,lambnow,lambdafull))
-          if cofflamb gt 0 then combmaskarr[wofflamb,k] = 0
-          dlamarr[*,k] = interpol(dlamnow,lambnow,lambdafull)
-       endfor
-       dlamfull = max(dlamarr,dimension=2)
-       wdlamzero = where(dlamfull eq 0,cdlamzero)  
-       if cdlamzero gt 0 then stop,'oops, the dlam is zero!'
-
-       ;get data in, smooth and interpolate
        contdivarr = dblarr(npixcomb,cgood)
-       contdivarr_smooth = dblarr(npixcomb,cgood)
-       contdivarr_nosmooth = dblarr(npixcomb,cgood)
        contdivivararr = dblarr(npixcomb,cgood)
-       contdivivararr_nosmooth = dblarr(npixcomb,cgood)
-       contdivivararr_smooth = dblarr(npixcomb,cgood)
+       dlamarr = dblarr(npixcomb,cgood)
        for k=0,cgood-1 do begin
           lambnow = (1.+spec.indiv_vhelio[wgood[k]]/3e5)*spec.indiv_lambda[*,wgood[k]] ;shifted to helio centric
           goodpix = where(lambnow ne 0.,cgoodpix)
           lambnow = lambnow(goodpix)
           specnow = spec.indiv_contdiv[goodpix,wgood[k]]
           ivarnow = spec.indiv_contdivivar[goodpix,wgood[k]]
+          dlamnow = spec.indiv_dlam[goodpix,wgood[k]]
+          masknow = spec.indiv_combmask[goodpix,wgood[k]]
           wonlamb = where(lambdafull ge min(lambnow) and lambdafull le max(lambnow),conlamb,$
                           complement=wofflamb,ncomplement=cofflamb)
-          specout = smooth_gauss_wrapper(lambnow,specnow,lambdafull,dlamfull/2.35,ivar1=ivarnow,ivar2=ivarout)
-          contdivarr_smooth[*,k] = specout          
-          contdivivararr_smooth[*,k] = ivarout
-          contdivarr_nosmooth[*,k] = interpol(specnow,lambnow,lambdafull)  ;check here
-          contdivivararr_nosmooth[*,k] = interpol(ivarnow,lambnow,lambdafull)  ;check here too
+          combmaskarr[*,k] = byte(interpol(masknow,lambnow,lambdafull))
+          combmaskarr[wofflamb,k] = 0
+          contdivarr[*,k] = interpol(specnow,lambnow,lambdafull)          
+          contdivivararr[*,k] = interpol(ivarnow,lambnow,lambdafull)
+          dlamarr[*,k] = interpol(dlamnow,lambnow,lambdafull)
           if cofflamb gt 0 then begin 
-             contdivarr_smooth[wofflamb,k]=!VALUES.F_INFINITY
-             contdivarr_nosmooth[wofflamb,k]=!VALUES.F_INFINITY
-             contdivivararr_smooth[wofflamb,k]=0
-             contdivivararr_nosmooth[wofflamb,k]=0
+             combmaskarr[wofflamb,k] = 0
+             contdivarr[wofflamb,k]=1./0.
+             contdivivararr[wofflamb,k]=0
+             dlamarr[wofflamb,k]=1./0.
           endif
        endfor
-
-       ;if the wavelength has only one spectrum, then use the one without smoothing
-       ;also when the dlam of the spectrum is already the maximum
-       ncombmaskarr = total(combmaskarr,2) ;size of ncombpix
-       wnodup = where(ncombmaskarr eq 1, cwnodup)
-       contdivarr = contdivarr_smooth
-       contdivivararr = contdivivararr_smooth
-       if cwnodup gt 0 then begin
-          contdivarr[wnodup,*] = contdivarr_nosmooth[wnodup,*]
-          contdivivararr[wnodup,*] = contdivivararr_nosmooth[wnodup,*]
-       endif
-       dlamfullarr = rebin(dlamfull,npixcomb,cgood) 
-       wmaxdlamb = where(dlamarr eq dlamfullarr,cmaxdlamb)
-       if cmaxdlamb gt 0 then begin
-          contdivarr(wmaxdlamb) = contdivarr_nosmooth(wmaxdlamb)
-          contdivivararr(wmaxdlamb) = contdivivararr_nosmooth(wmaxdlamb)
-       endif
-
        wzero = where(contdivarr eq 0,czero)
        if czero gt 0 then combmaskarr(wzero) = 0
-       ;save the individual spectrum before stacking
-       struct_replace_field,spec,'indiv_contdiv_smooth',dblarr(npixcomb,ndup)
-       struct_replace_field,spec,'indiv_contdivivar_smooth',dblarr(npixcomb,ndup)
-       struct_replace_field,spec,'indiv_lambda_smooth',dblarr(npixcomb,ndup)
-       spec.indiv_contdiv_smooth[*,wgood] = contdivarr
-       spec.indiv_contdivivar_smooth[*,wgood] = contdivivararr
-       spec.indiv_lambda_smooth[*,wgood] = rebin(lambdafull,npixcomb,cgood)
-       ;;;;;;;;;;;;;;;;;;;;;;;;;
 
+       ;weighted average
        ncombmaskarr = total(combmaskarr,2) ;size of ncombpix
        wnodup = where(ncombmaskarr eq 1, cwnodup)
-       ;weighted average
        if cwnodup gt 0 then begin
            for ii=0,cwnodup-1 do begin
               wframe = where(combmaskarr[wnodup[ii],*] eq 1, cwframe)
@@ -159,13 +116,13 @@ pro combspec::combine,spec,noredraw=nosdaredraw
        endif
        wdup = where(ncombmaskarr gt 1, cwdup)
        for ii=0,cwdup-1 do begin
-           wnan = where((contdivivararr[wdup[ii],*] eq 0) or (~finite(contdivarr[wdup[ii],*])) $
-                         or (combmaskarr[wdup[ii],*] eq 0),cnan)
+           wnan = where(~finite(contdivivararr[wdup[ii],*]) or (combmaskarr[wdup[ii],*] eq 0),cnan)
            dcontdiv = 1./sqrt(abs(contdivivararr[wdup[ii],*]))
            if cnan gt 0 then dcontdiv(wnan) = 1./0.
+           err = abs(dcontdiv/contdivarr[wdup[ii],*])
+           spec.dlam[wdup[ii]] = wmean(dlamarr[wdup[ii],*],abs(err*dlamarr[wdup[ii],*]),/nan)
            spec.contdiv[wdup[ii]]=wmean(contdivarr[wdup[ii],*],dcontdiv,error=contdiverr,/nan)
            spec.contdivivar[wdup[ii]]=1./contdiverr^2
-           ;if ~finite(spec.contdiv[wdup[ii]]) then stop
        endfor
        ;signal to noise
        ;create mask
@@ -189,6 +146,7 @@ pro combspec::combine,spec,noredraw=nosdaredraw
    if ~keyword_set(noredraw) then begin
       self->redraw
    endif
+
 end
 
 pro combspec::combine_all
@@ -928,8 +886,7 @@ pro combspec::indivcontinuum, spec
       dev = abs((spec.indiv_spec[wcont,i] - spec.indiv_continuum[wcont,i]) / spec.indiv_continuum[wcont,i])
       avgdev = mean(dev)
       w = where(dev lt 3.0*avgdev, c)
-      angperpix = median(-1.*ts_diff(lambda,1))
-      if c gt 0 then spec.indiv_sn[i] = 1.0/mean(dev[w])/sqrt(angperpix)
+      if c gt 0 then spec.indiv_sn[i] = 1.0/mean(dev[w])/sqrt(median(spec.indiv_dlam[wcont,i]))
    endfor
 end
 
@@ -1101,7 +1058,6 @@ pro combspec::redraw
              if spec.indiv_good[idup] eq 1 then begin
                 ipix = min(where(spec.indiv_lambda[*,idup] ne 0.))
                 fpix = spec.indiv_npix[idup]-1
-                oplot,spec.indiv_lambda_smooth[*,idup]/(1d +znow)*(1.+spec.indiv_vhelio[idup]/3e5),spec.indiv_contdiv_smooth[*,idup],color=fsc_color(indivcolors(idup)),thick=2
                 oplot,spec.indiv_lambda[ipix:fpix,idup]/(1d +znow)*(1.+spec.indiv_vhelio[idup]/3e5),spec.indiv_contdiv[ipix:fpix,idup],color=fsc_color(indivcolors(idup))
              endif
           endfor
@@ -1231,15 +1187,11 @@ pro combspec::getspec, list=list
                     end
                  'lris': begin
                     str = readfits(strtrim(obj.files[iobs],2),hdr)
-                    nlambda = n_elements(str)
-                    goodpix = where(str ne 0,cgoodpix)
-                    ipix = min(goodpix)
-                    fpix = max(goodpix)
-                    indiv_npix = fpix-ipix+1
-                    spec.indiv_spec[0:indiv_npix-1,iobs]=str[ipix:fpix]
+                    indiv_npix = n_elements(str)
+                    spec.indiv_spec[0:indiv_npix-1,iobs]=str
                     cdelt = sxpar(hdr,'cdelt1')
                     crval = sxpar(hdr,'crval1')
-                    spec.indiv_lambda[0:indiv_npix-1,iobs]= (dindgen(nlambda)*cdelt+crval)[ipix:fpix]
+                    spec.indiv_lambda[0:indiv_npix-1,iobs]= dindgen(indiv_npix)*cdelt+crval
                     spec.indiv_npix[iobs] = indiv_npix
                     spec.indiv_combmask[0:indiv_npix-1,iobs]=1
                     spec.indiv_filename[iobs] = obj.files[iobs]
@@ -1260,7 +1212,7 @@ pro combspec::getspec, list=list
                     sigstr = readfits(sigmafile,hdr)
                     if sxpar(hdr,'crval1') ne crval or sxpar(hdr,'cdelt1') ne cdelt then $
                        stop,'check LRIS sigma and spec file:',obj.files[iobs]
-                    spec.indiv_ivar[0:indiv_npix-1,iobs] = (1./sigstr^2)[ipix:fpix]
+                    spec.indiv_ivar[0:indiv_npix-1,iobs] = 1./sigstr^2
                     end
                  'mosfire': begin
                     str = mrdfits(strtrim(obj.files[iobs],2),1)
@@ -1547,9 +1499,6 @@ pro spec__define
            indiv_continuum:dblarr(npix,ndup), $
            indiv_contdiv:dblarr(npix,ndup), $
            indiv_contdivivar:dblarr(npix,ndup), $
-           indiv_contdiv_smooth:dblarr(npix,ndup), $
-           indiv_contdivivar_smooth:dblarr(npix,ndup), $
-           indiv_lambda_smooth:dblarr(npix,ndup), $
            indiv_sn:fltarr(ndup),$
            indiv_ra:dblarr(ndup), $
            indiv_dec:dblarr(ndup), $

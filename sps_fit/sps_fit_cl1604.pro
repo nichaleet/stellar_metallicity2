@@ -102,7 +102,7 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
     nloop=0
     widget_control, widget_info(self.base, find_by_uname='maxnloop'), get_value=maxnloop
     maxnloop = fix(maxnloop[0])
-    if maxnloop eq 0 then maxnloop = 50
+    if maxnloop eq 0 then maxnloop = 30
     print, '* * * * * * * * * * * * * * * * * * * *'
     print, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
     print, '* * * * * * * * * * * * * * * * * * * *'
@@ -128,7 +128,7 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
         rest =0
         if nloop eq 0 then normalize =1 else normalize = 0
         pars = mpfitfun('get_sps_obs', xmp, ymp, dymp, parinfo=pi, /nocatch, bestnorm=bestnorm, dof=dof, perror=perror, ftol=1d-10, gtol=1d-10, xtol=1d-10, covar=covar, nprint=500, status=status, yfit=ympfit, iterproc='sps_iterproc')
-
+        if nloop eq 0 and pi[0].value ge 0.198 then pi[0].value=0.17 ;try to make it not stuck in the edge 
         zdiff = (pi[0].value-pars[0])/pi[0].value
         agediff = (pi[1].value-pars[1])/pi[1].value
         vdispdiff = (pi[2].value-pars[2])/pi[2].value
@@ -256,7 +256,7 @@ pro sps_fit::fitz, science, noredraw=noredraw, nostatusbar=nostatusbar
 
     if ~keyword_set(nostatusbar) then widget_control, widget_info(self.base, find_by_uname='status'), set_value='Fitting ...'
 
-    znow = science.z
+    znow = science.zspec
     reallambda = science.lambda
     nlambda = n_elements(reallambda)
     
@@ -1348,14 +1348,16 @@ pro sps_fit::contmask, science
         w = where(lambda ge linestart[i] and lambda le lineend[i], c)
         if c gt 0 then contmask[w] = 0
     endfor
-    tellstart = [6864., 7591., 8938.]
-    tellend = [6935., 7694., 100000.]
+    tellstart = [6864., 7591., 9300.]
+    tellend = [6935., 7694., 9600.]
     for i=0,n_elements(tellstart)-1 do begin
         w = where(science.lambda ge tellstart[i] and science.lambda le tellend[i], c)
         if c gt 0 then begin
             contmask[w] = 0
         endif
     endfor
+    w = where(lambda eq 0 or science.contdivivar eq 0,c)
+    if c gt 0 then contmask[w]=0
     contmask[0:2] = 0
     contmask[nhalf-3:nhalf+2] = 0
     contmask[n-3:n-1] = 0
@@ -1504,8 +1506,8 @@ pro sps_fit::redraw
            ;;plot the data(*spscontfull) and full model
            oplot, science.lambda, science.contdiv*science.spscontfull, color=fsc_color('black')
            if science.feh ne -999. then begin
-              oplot, science.lambda,science.spsspecfull,color=fsc_color('red')            
-              oplot, science.lambda,science.spscontfull,color=fsc_color('orange')            
+              oplot, science.lambda[0:npix-1],science.spsspecfull[0:npix-1],color=fsc_color('red')            
+              oplot, science.lambda[0:npix-1],science.spscontfull[0:npix-1],color=fsc_color('orange')            
            endif
            ;;make the axes labels
            plot, science.lambda, science.contdiv*science.spscontfull, xrange=self.lambdalim * (1d + science.zspec), yrange=self.ylim, xstyle=1, ystyle=1, background=fsc_color('white'), color=fsc_color('black'), xtitle='!6observed wavelength (!sA!r!u!9 %!6!n)!3', ytitle='!6flux (e!E-!N/hr)!3', /nodata, /noerase
@@ -1816,7 +1818,6 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     wexit = widget_button(file_menu, value='Exit', uvalue='exit', uname='exit')
     tools_menu = widget_button(menu, value='Tools', /menu)
     wdefaultrange = widget_button(tools_menu, value='Default Spectrum Settings', uname='default_range', uvalue='default_range')
-    wdefault_cont = widget_button(tools_menu, value='Default Continuum Regions', uname='default_cont', uvalue='default_cont')
     wdefault_maskall = widget_button(tools_menu, value='Default Pixel Mask All', uname='default_maskall', uvalue='default_maskall')
     wdefault_goodspec = widget_button(tools_menu, value='Default Good Spectrum', uname='default_goodspec', uvalue='default_goodspec')
     wfit_all = widget_button(tools_menu, value='Fit All', uname='fit_all', uvalue='fit_all')
@@ -1835,8 +1836,9 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     wfit = widget_button(wprepbase, value='Fit', uvalue='fit', uname='fit', tab_mode=1, xsize=85)
     wfitz = widget_button(wprepbase, value='Fit redshift', uvalue='fitz', uname='fitz', tab_mode=1, xsize=85)
     windicesbase = widget_base(wleft, /row, /align_center)
-    windices = widget_button(windicesbase, value='Compute Indices', uvalue='indices', uname='indices', tab_mode=1, xsize=100)
-    wdefault_mask = widget_button(windicesbase,value='Default Mask',uvalue='default_mask',uname='default_mask',tab_mode=1,xsize=100)
+    windices = widget_button(windicesbase, value='Compute Indices', uvalue='indices', uname='indices', tab_mode=1, xsize=90)
+    wdefault_cont = widget_button(windicesbase, value='Default Cont', uname='default_cont', uvalue='default_cont',tab_mode=1,xsize=90)
+    wdefault_mask = widget_button(windicesbase,value='Default Mask',uvalue='default_mask',uname='default_mask',tab_mode=1,xsize=90)
     wuncertbase = widget_base(wleft,/row,/align_center)
     wuncertainties = widget_button(wuncertbase,value='cal_uncertainties',uvalue='cal_uncertainties',uname='cal_uncertainties')
     wgoodbase = widget_base(wleft, /column, /align_center)

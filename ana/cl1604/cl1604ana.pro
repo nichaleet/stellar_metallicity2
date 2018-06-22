@@ -1,15 +1,18 @@
-pro ms0451ana
+pro cl1604ana
    ;GETTING SCI DATA
-   sci = mrdfits('/scr2/nichal/workspace4/sps_fit/data/spline/sps_fit.fits.gz',1)
+   scims = mrdfits('/scr2/nichal/workspace4/sps_fit/data/spline_ms0451/sps_fit.fits.gz',1)
+   scicl = mrdfits('/scr2/nichal/workspace4/sps_fit/data/spline_cl1604/sps_fit.fits.gz',1)
    ;sample selection
-   good = where(sci.oiiew gt -5.,cgood)
-   sci = sci(good)
-   ageform = (galage(sci.zfit,1000.)/1.e9-sci.age)>0. ;age of universe when it was formed
+   good = where(scims.oiiew gt -5.,cgood)
+   scims = scims(good)
+
+   good = where(scicl.oiiew gt -10.,cgood)
+   scicl = scicl(good)   
 
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    ;REFERENCE VALUES
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   restore,'leetho18a_avevals.sav'
+   restore,'/scr2/nichal/workspace4/ana/ms0451/leetho18a_avevals.sav'
    hifeh_cl0024 = hifeh
    lofeh_cl0024 = lofeh
    bndry_mass_cl0024 = bndry_mass
@@ -62,32 +65,44 @@ pro ms0451ana
    !p.font = 0
    sunsym = sunsymbol()
 
-   goodfit = where(sci.goodfit eq 1, cgoodfit, complement=badfit,ncomplement=cbadfit)
+   ngals = n_elements(scicl)
+   flagmosfire = bytarr(ngals) 
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    ;S/N histograms
-   sn = sci.snfit
-   wnofit = where(sci.snfit eq 0,cnofit)
-   if cnofit gt 0 then sn(wnofit) = sci(wnofit).sn
+   sn = scicl.snfit
+   dispersion = fltarr(ngals)
+   for i=0,ngals-1 do begin
+      lamnow = scicl[i].lambda
+      goodlam = where(lamnow ne 0. and scicl[i].contdivivar ne 0.)
+      lamnow = lamnow(goodlam)
+      lamdiff = -1.*ts_diff(lamnow(goodlam),1)
+      dispersion[i] = median(lamdiff)
+      if max(lamnow)/(1.+scicl[i].zspec) gt 5300. then flagmosfire[i]=1
+   endfor
+   wmosfire = where(flagmosfire eq 1,cmosfire,complement=wnomosfire,ncomplement=cnomosfire)
+    
+   wnofit = where(scicl.snfit eq 0,cnofit)
+   if cnofit gt 0 then sn(wnofit) = scicl(wnofit).sn
    ;This sn is per pixel. With 600 grating, the resolution is 0.65 A per pixel.
    ;To convert to per angstrom divide by sqrt(0.65) = x1.24
-   sn = 1.24*sn
-   psname='mass_sn.eps'
+   sn = sn/sqrt(dispersion)
+   psname='cl1604mass_sn.eps'
    device, filename = psname,xsize = 15,ysize = 15, $
                 xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
       xrange=[9.5,12]
       binsize=0.25
-      plot,sci.logmstar,sn,xrange=xrange,/nodata,xstyle=5,ytitle='S/N per Angstrom',$
-          position=[0.1,0.45,0.95,0.9],/normal
+      plot,scicl.logmstar_sed_bl,sn,xrange=xrange,/nodata,xstyle=5,ytitle='S/N per Angstrom',$
+          position=[0.1,0.45,0.95,0.9],/normal,yrange=[0,25]
       axis,xaxis=1,xrange=xrange,xstyle=1,xtitle='Log(M/M'+sunsym+')'
-      cgplot,sci(badfit).logmstar,sn(badfit),psym=16,color=fsc_color('cadetblue'),/overplot
-      cgplot,sci(goodfit).logmstar,sn(goodfit),psym=46,color=fsc_color('tomato'),/overplot
-      cglegend,titles=['verified fits','unverified fits'],psyms=[46,16],box=0,charsize=0.8,$
-          colors=['tomato','cadetblue'],location=[0.15,0.85],length=0
+      cgplot,scicl(wnomosfire).logmstar_sed_bl,sn(wnomosfire),psym=46,color=fsc_color('thistle'),/overplot
+      cgplot,scicl(wmosfire).logmstar_sed_bl,sn(wmosfire),psym=46,color=fsc_color('darkorchid'),/overplot
+      cglegend,titles=['with mosfire','without mosfire'],psyms=[46,46],box=0,charsize=0.8,$
+          colors=['darkorchid','thistle'],location=[0.15,0.85],length=0
 
-      plothist,sci.logmstar,bin=binsize,xrange=xrange,xstyle=5,ystyle=5,/fill,fcolor=fsc_color('gray'), $
+      plothist,scicl.logmstar_sed_bl,bin=binsize,xrange=xrange,xstyle=5,ystyle=5,/fill,fcolor=fsc_color('gray'), $
            /noerase,position=[0.1,0.1,0.95,0.45],/normal
-      plothist,sci(goodfit).logmstar,bin=binsize,/overplot,color=fsc_color('org8'),/fill,fcolor=fsc_Color('tomato')
-      plothist,sci(badfit).logmstar,bin=binsize,/overplot,color=fsc_color('seagreen'),/fline,fcolor=fsc_Color('cadetblue'),forientation=45
+      plothist,scicl(wmosfire).logmstar_sed_bl,bin=binsize,/overplot,color=fsc_color('darkslateblue'),/fill,fcolor=fsc_Color('darkorchid')
+      plothist,scicl(wnomosfire).logmstar_sed_bl,bin=binsize,/overplot,color=fsc_color('slateblue'),/fline,fcolor=fsc_Color('thistle'),forientation=45
       axis,xaxis=0,xrange=xrange,xstyle=1,xtitle='Log(M/M'+sunsym+')'
       axis,xaxis=1,xrange=xrange,xtickformat='(A1)',xstyle=1
       axis,yaxis=0,ytitle='# quiescent galaxies'
@@ -95,12 +110,23 @@ pro ms0451ana
 
    device,/close
 
-   psname='ms0451_feh_mass.eps'
+   goodmsfit = where(scims.goodfit eq 1, cgoodmsfit, complement=badmsfit,ncomplement=cbadmsfit)
+   goodsymsize = 1.5/(max(scims(goodmsfit).snfit)-min(scims(goodmsfit).snfit))*scims(goodmsfit).snfit+0.7
+
+   goodclfit = where(scicl.goodfit eq 1, cgoodclfit)
+   goodwmosfire = where(scicl.goodfit eq 1 and flagmosfire eq 1,cgoodwmosfire)
+   badwmosfire = where(scicl.goodfit eq 0 and flagmosfire eq 1,cbadwmosfire)
+   goodwnomosfire = where(scicl.goodfit eq 1 and flagmosfire eq 0, cgoodwnomosfire)
+   badwnomosfire = where(scicl.goodfit eq 0 and flagmosfire eq 0,cbadwmosfire)
+   goodwmosfiresymsize = 1.5/(max(scims(goodmsfit).snfit)-min(scims(goodmsfit).snfit))*scicl(goodwmosfire).snfit+0.7
+   goodwnomosfiresymsize = 1.5/(max(scims(goodmsfit).snfit)-min(scims(goodmsfit).snfit))*scicl(goodwnomosfire).snfit+0.7
+
+   psname='cl1604_feh_mass.eps'
    device, filename = psname,xsize = 15,ysize = 10, $
                 xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
       xrange=[9.5,12]
       yrange=[-1.,0.3]
-      plot,sci.logmstar,sci.feh,/nodata,xrange=xrange,xstyle=5,yrange=yrange,ystyle=5
+      plot,scims.logmstar,scims.feh,/nodata,xrange=xrange,xstyle=5,yrange=yrange,ystyle=5
       ;colorarr=[10,50,203,230,254]
       colorarr= fsc_color(['royalblue','darkorchid','deeppink','maroon','red8'])
       x=[bndry_mass_cl0024,reverse(bndry_mass_cl0024)]
@@ -124,14 +150,25 @@ pro ms0451ana
       axis,yaxis=0,yrange=yrange,ystyle=1,ytitle='[Fe/H]'
       axis,xaxis=1,xrange=xrange,xstyle=1,xtickformat='(A1)'
       axis,yaxis=1,yrange=yrange,ystyle=1,ytickformat='(A1)'
+     
+     ;oplot ms stuff
+      cgerrplot,scims(goodmsfit).logmstar,scims(goodmsfit).fehlower,scims(goodmsfit).fehupper,color='tomato',thick=0.5
+      oplot,scims(badmsfit).logmstar,scims(badmsfit).feh,psym=cgsymcat(16),color=fsc_Color('tomato'),symsize=0.7
+      for i=0,cgoodmsfit-1 do begin
+        oplot,[scims(goodmsfit[i]).logmstar],[scims(goodmsfit[i]).feh],psym=cgsymcat(46),color=fsc_Color('tomato'),$
+              symsize=goodsymsize[i]
+        oplot,[scims(goodmsfit[i]).logmstar],[scims(goodmsfit[i]).feh],psym=cgsymcat(45),color=fsc_color('brown'),$
+              symsize=goodsymsize[i]
+     endfor
 
-      cgerrplot,sci(goodfit).logmstar,sci(goodfit).fehlower,sci(goodfit).fehupper,color='tomato',thick=0.5
-      oplot,sci(badfit).logmstar,sci(badfit).feh,psym=cgsymcat(16),color=fsc_Color('cadetblue'),symsize=0.7
-      goodsymsize = 1.5/(max(sci(goodfit).snfit)-min(sci(goodfit).snfit))*sci(goodfit).snfit+0.7
-      for i=0,cgoodfit-1 do begin
-        oplot,[sci(goodfit[i]).logmstar],[sci(goodfit[i]).feh],psym=cgsymcat(46),color=fsc_Color('tomato'),symsize=goodsymsize[i]
-        oplot,[sci(goodfit[i]).logmstar],[sci(goodfit[i]).feh],psym=cgsymcat(45),color=fsc_color('maroon'),symsize=goodsymsize[i]
-      endfor
+     ;oplot cl stuff
+      oplot,scicl(badwnomosfire).logmstar_sed_bl,scicl(badwnomosfire).feh,psym=cgsymcat(16),color=fsc_color('thistle'),$
+            symsize=0.7
+      oplot,scicl(badwmosfire).logmstar_sed_bl,scicl(badwmosfire).feh,psym=cgsymcat(16),$
+            color=fsc_color('darkorchid'),symsize=0.7
+
+     for i=0,cgoodwnomosfire-1 do oplot,[scicl(goodwnomosfire[i]).logmstar_sed_bl],[scicl(goodwnomosfire[i]).feh],psym=cgsymcat(46),color=fsc_Color('thistle'),symsize=goodwnomosfiresymsize[i]
+     for i=0,cgoodwmosfire-1 do oplot,[scicl(goodwmosfire[i]).logmstar_sed_bl],[scicl(goodwmosfire[i]).feh],psym=cgsymcat(46),color=fsc_Color('darkorchid'),symsize=goodwmosfiresymsize[i]
    device,/close
    stop
 end
