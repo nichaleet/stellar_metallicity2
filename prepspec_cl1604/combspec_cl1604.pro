@@ -102,9 +102,10 @@ pro combspec::combine,spec,noredraw=nosdaredraw
           lambnow = lambnow(goodpix)
           specnow = spec.indiv_contdiv[goodpix,wgood[k]]
           ivarnow = spec.indiv_contdivivar[goodpix,wgood[k]]
+          dlamnow = dlamarr[*,k]
           wonlamb = where(lambdafull ge min(lambnow) and lambdafull le max(lambnow),conlamb,$
                           complement=wofflamb,ncomplement=cofflamb)
-          specout = smooth_gauss_wrapper(lambnow,specnow,lambdafull,dlamfull/2.35,ivar1=ivarnow,ivar2=ivarout)
+          specout = smooth_gauss_wrapper(lambnow,specnow,lambdafull,sqrt(dlamfull^2-dlamnow^2)/2.35,ivar1=ivarnow,ivar2=ivarout)
           contdivarr_smooth[*,k] = specout          
           contdivivararr_smooth[*,k] = ivarout
           contdivarr_nosmooth[*,k] = interpol(specnow,lambnow,lambdafull)  ;check here
@@ -182,7 +183,8 @@ pro combspec::combine,spec,noredraw=nosdaredraw
        dev = abs(spec.contdiv[wcont] - 1.)
        avgdev = mean(dev)
        w = where(dev lt 3.0*avgdev, c)
-       if c gt 0 then spec.sn = 1.0/mean(dev[w])/sqrt(median(spec.dlam))
+       dispersion = abs(median(ts_diff(spec.lambda,1)))
+       if c gt 0 then spec.sn = 1.0/mean(dev[w])/sqrt(dispersion)
    endif
    self->statusbox, spec=spec
 
@@ -867,14 +869,57 @@ pro combspec::default_mask
     self->redraw
 end
 
-pro combspec::default_vhelio
-    widget_control, widget_info(self.base, find_by_uname='iplotcont'), get_value=wplotcon
-    spec = *self.spec
-    spec.indiv_vhelio[wplotcon] = helio_deimos(spec.indiv_ra[wplotcon],spec.indiv_dec[wplotcon],2000,jd=spec.indiv_jd[wplotcon])
+pro combspec::default_vhelio,spec=spec,wplotcont=wplotcon
+    if ~keyword_set(wplotcon) then widget_control, widget_info(self.base, find_by_uname='iplotcont'), get_value=wplotcon
+    if ~keyword_set(spec) then spec = *self.spec
+    ;if it's lris or mosfire (our obs), use normal vhelio calculation. If it's from the ORELSE,
+    ;find the correlation with one of the lris observed spectra
+    instru = strtrim(spec.indiv_instru[wplotcon],2) 
+    if instru eq 'lris' or instru eq 'mosfire' then begin
+        spec.indiv_vhelio[wplotcon] = helio_deimos(spec.indiv_ra[wplotcon],spec.indiv_dec[wplotcon],2000,jd=spec.indiv_jd[wplotcon])
+    endif else begin
+       if instru eq 'lris_old' or instru eq 'deimos_old' and $
+          spec.indiv_count ge 3 then begin
+          ivhelio = spec.indiv_vhelio[wplotcon] ;current guess
+          ;only correlate from 3700 to 4500 A rest frame
+          minwave = 3700*(1.+spec.z)
+          maxwave = 4500*(1.+spec.z)
+          iref = (where(strtrim(spec.indiv_instru,2) eq 'lris'))[0]
+          goodrefwl = where(spec.indiv_lambda[*,iref] gt minwave and spec.indiv_lambda[*,iref] lt maxwave)
+          refspec = spec.indiv_contdiv[goodrefwl,iref]
+          refwave = spec.indiv_lambda[goodrefwl,iref]*(1.+spec.indiv_vhelio[iref]/3.e5)
+          goodwl =  where(spec.indiv_lambda[*,wplotcon] gt minwave and spec.indiv_lambda[*,wplotcon] lt maxwave)
+          specnow  = spec.indiv_contdiv[goodwl,wplotcon]
+          wave = spec.indiv_lambda[goodwl,wplotcon]
+          specivar = spec.indiv_contdivivar[goodwl,wplotcon]
+          zans = im_ztweak(specnow,wave,refspec,refwave,specivar=specivar,minwave=minwave,maxwave=maxwave)
+          print,'vshift vshift err errflag'
+          print,zans.vshift,zans.vshift_err,zans.errflag
+          spec.indiv_vhelio[wplotcon] = zans.vshift 
+       endif
+    endelse
     ptr_free, self.spec
     self.spec = ptr_new(spec)
     self->redraw
     self->statusbox
+end
+
+pro combspec::telluric_correct,spec,i
+   tellstr = *self.tellstr
+   ipix = 0
+   fpix = spec.indiv_npix[i]-1
+   lambda = spec.indiv_lambda[ipix:fpix,i]
+   tell = interpol(tellstr.spec,tellstr.lambda,lambda)
+   tellivar = interpol(tellstr.ivar,tellstr.lambda,lambda)
+   woff = where(lambda lt min(tellstr.lambda) or lambda gt max(Tellstr.lambda),coff)
+   if coff gt 0 then begin
+     tell(woff) = 1.
+     tellivar(woff) = 1./0.
+   endif
+   telldiv = spec.indiv_spec[ipix:fpix,i]/tell
+   telldiv_ivar = 1./(telldiv^2*(1./(tellivar*tell^2)+1./(spec.indiv_ivar[ipix:fpix,i]*(spec.indiv_spec[ipix:fpix,i])^2))) 
+   spec.indiv_telldiv[ipix:fpix,i]=telldiv
+   spec.indiv_telldivivar[ipix:fpix,i]=telldiv_ivar  
 end
 
 pro combspec::indivcontinuum, spec
@@ -882,14 +927,15 @@ pro combspec::indivcontinuum, spec
    common continuum, conttype
    nobs = spec.indiv_count
    for i=0,nobs-1 do begin
+         if strtrim(spec.indiv_instru[i],2) eq 'lris' then self->telluric_correct,spec,i
          ipix=0
          fpix = spec.indiv_npix[i]-1
          contmask = spec.indiv_contmask[ipix:fpix,i]
          contmask[0:15]=0
          contmask[fpix-ipix-15:fpix-ipix]=0
          lambda = spec.indiv_lambda[ipix:fpix,i]
-         ivar = spec.indiv_ivar[ipix:fpix,i]
-         spectrum = spec.indiv_spec[ipix:fpix,i]
+         ivar = spec.indiv_telldivivar[ipix:fpix,i]
+         spectrum = spec.indiv_telldiv[ipix:fpix,i]
          won = where(contmask eq 1, complement=woff, con)
          if con gt 100 then begin
             case conttype of 
@@ -901,7 +947,8 @@ pro combspec::indivcontinuum, spec
                   cont = poly(lambda,reform(coeff))
                 end
                'spline': begin
-                  bkspace =  fix(400./median(abs(ts_diff(lambda,1)))) ;approximately every 400 A
+                  bkspace =  fix(200./median(abs(ts_diff(lambda,1)))) ;approximately every 200 A
+                  ;print, i,bkspace
                   bkpt = slatec_splinefit(lambda[won], spectrum[won], coeff, invvar=ivar[won], $
                                           bkspace=bkspace, upper=3, lower=3, /silent)
                
@@ -912,8 +959,8 @@ pro combspec::indivcontinuum, spec
             endcase
             check = where(finite(cont),ccheck)
             if ccheck lt 10 then stop
-            contdiv = spec.indiv_spec[ipix:fpix,i]/cont
-            contdivivar = spec.indiv_ivar[ipix:fpix,i]*cont^2
+            contdiv = spec.indiv_telldiv[ipix:fpix,i]/cont
+            contdivivar = spec.indiv_telldivivar[ipix:fpix,i]*cont^2
          endif else begin
             contdiv = dblarr(fpix-ipix+1)
             cont = dblarr(fpix-ipix+1)
@@ -924,8 +971,8 @@ pro combspec::indivcontinuum, spec
          spec.indiv_contdivivar[ipix:fpix,i] = contdivivar
          spec.indiv_contdiv[ipix:fpix,i] = contdiv
       wcont = where(spec.indiv_contmask[3:npix-4,i] eq 1)+3
-      wcont = wcont[where(finite(spec.indiv_spec[wcont,i]) and finite(spec.indiv_continuum[wcont,i]) and spec.indiv_continuum[wcont,i] ne 0 and spec.indiv_lambda[wcont,i] gt 6700.)]
-      dev = abs((spec.indiv_spec[wcont,i] - spec.indiv_continuum[wcont,i]) / spec.indiv_continuum[wcont,i])
+      wcont = wcont[where(finite(spec.indiv_telldiv[wcont,i]) and finite(spec.indiv_continuum[wcont,i]) and spec.indiv_continuum[wcont,i] ne 0 and spec.indiv_lambda[wcont,i] gt 6700.)]
+      dev = abs((spec.indiv_telldiv[wcont,i] - spec.indiv_continuum[wcont,i]) / spec.indiv_continuum[wcont,i])
       avgdev = mean(dev)
       w = where(dev lt 3.0*avgdev, c)
       angperpix = median(-1.*ts_diff(lambda,1))
@@ -1101,7 +1148,7 @@ pro combspec::redraw
              if spec.indiv_good[idup] eq 1 then begin
                 ipix = min(where(spec.indiv_lambda[*,idup] ne 0.))
                 fpix = spec.indiv_npix[idup]-1
-                oplot,spec.indiv_lambda_smooth[*,idup]/(1d +znow)*(1.+spec.indiv_vhelio[idup]/3e5),spec.indiv_contdiv_smooth[*,idup],color=fsc_color(indivcolors(idup)),thick=2
+                oplot,spec.indiv_lambda_smooth[*,idup]/(1d +znow),spec.indiv_contdiv_smooth[*,idup],color=fsc_color(indivcolors(idup)),thick=2
                 oplot,spec.indiv_lambda[ipix:fpix,idup]/(1d +znow)*(1.+spec.indiv_vhelio[idup]/3e5),spec.indiv_contdiv[ipix:fpix,idup],color=fsc_color(indivcolors(idup))
              endif
           endfor
@@ -1211,6 +1258,8 @@ pro combspec::getspec, list=list
                     spec.indiv_dec[iobs] = obj.dec[iobs]
                     spec.indiv_dlam[0:indiv_npix-1,iobs] = 1.7 ;DEIMOS 1200 line grating, center at 7500, 1" slit
                     spec.indiv_good[iobs] = 1
+                    spec.indiv_telldiv = spec.indiv_spec
+                    spec.indiv_telldivivar = spec.indiv_ivar
                     end
                  'lris_old': begin
                     str = mrdfits(strtrim(obj.files[iobs],2),1,hdr,/silent,status=status)
@@ -1228,6 +1277,8 @@ pro combspec::getspec, list=list
                     spec.indiv_dec[iobs] = obj.dec[iobs]
                     spec.indiv_dlam[0:indiv_npix-1,iobs] = 9.18 ;LRIS 300 line grating, 1" slit
                     spec.indiv_good[iobs] = 1
+                    spec.indiv_telldiv = spec.indiv_spec
+                    spec.indiv_telldivivar = spec.indiv_ivar
                     end
                  'lris': begin
                     str = readfits(strtrim(obj.files[iobs],2),hdr)
@@ -1250,7 +1301,7 @@ pro combspec::getspec, list=list
                     spec.indiv_dlam[0:indiv_npix-1,iobs] = 6.9 ;LRIS400/8500 grating, 1" slit
                     spec.indiv_good[iobs] = 1
                     spec.indiv_npix[iobs] = indiv_npix
-                    spec.indiv_jd = sxpar(hdr,'mjd-obs')+2400000.5 
+                    spec.indiv_jd[iobs] = sxpar(hdr,'mjd-obs')+2400000.5 
                     basefile =  file_basename(obj.files[iobs])
                     extensions = strsplit(basefile,'.',/extract)
                     spec.indiv_mask[iobs] = extensions[0]
@@ -1278,7 +1329,9 @@ pro combspec::getspec, list=list
                     spec.indiv_dlam[0:indiv_npix-1,iobs] = 3.06 ;MOSFIRE Y BAND
                     spec.indiv_good[iobs] = 1
                     spec.indiv_npix[iobs] = indiv_npix
-                    spec.indiv_jd = sxpar(hdr,'mjd-obs')+2400000.5 
+                    spec.indiv_jd[iobs] = sxpar(hdr,'mjd-obs')+2400000.5 
+                    spec.indiv_telldiv = spec.indiv_spec
+                    spec.indiv_telldivivar = spec.indiv_ivar
                     basefile =  file_basename(obj.files[iobs])
                     extensions = strsplit(basefile,'.',/extract)
                     spec.indiv_mask[iobs] = extensions[1]
@@ -1297,6 +1350,7 @@ pro combspec::getspec, list=list
    
           self->indivmask,spec
           self->indivcontinuum,spec
+          for iobs =0, nobs-1 do self->default_vhelio,spec=spec,wplotcon=iobs
           self->statusbox, spec=spec
           self->writespecindiv,spec
       endfor
@@ -1491,6 +1545,10 @@ function combspec::INIT, directory=directory
     self.linetype = ptr_new(linetype)
     self.indivcolors = ptr_new(['blueviolet','blue','seagreen','springgreen','gold','chocolate','firebrick'])
     self.indivbgcolors = ptr_new(['pbg1','blu1','ryb5','grn1','wt4','org1','red2'])
+
+    tell = mrdfits('/scr2/nichal/workspace4/prepspec_cl1604/telluric/tellcor_gd140_may2018.fits',1)
+;    tell = mrdfits('/scr2/nichal/workspace2/telluric/deimos_telluric_1.0.fits', 1, /silent)
+    self.tellstr = ptr_new(tell)
     common random, seed
     seed = systime(1)
 
@@ -1507,6 +1565,7 @@ pro combspec__define
              specinfo:ptr_new(), $
              spec:ptr_new(), $
              tell:ptr_new(), $
+             tellstr:ptr_new(), $
              lambdalim:[-100d, 100d], $
              ylim:[-100d, 100d], $
              divylim:[-100d, 100d], $
@@ -1544,6 +1603,8 @@ pro spec__define
            indiv_contmask:bytarr(npix,ndup), $
            indiv_combmask:bytarr(npix,ndup), $
            indiv_dlam:dblarr(npix,ndup), $
+           indiv_telldiv:dblarr(npix,ndup),$
+           indiv_telldivivar:dblarr(npix,ndup), $
            indiv_continuum:dblarr(npix,ndup), $
            indiv_contdiv:dblarr(npix,ndup), $
            indiv_contdivivar:dblarr(npix,ndup), $
