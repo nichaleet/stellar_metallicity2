@@ -881,9 +881,10 @@ pro combspec::default_vhelio,spec=spec,wplotcont=wplotcon
        if instru eq 'lris_old' or instru eq 'deimos_old' and $
           spec.indiv_count ge 3 then begin
           ivhelio = spec.indiv_vhelio[wplotcon] ;current guess
-          ;only correlate from 3700 to 4500 A rest frame
-          minwave = 3700*(1.+spec.z)
-          maxwave = 4500*(1.+spec.z)
+          ;only correlate from 3700 to 4500 A rest frame ;if the result is 0, 0 then can change to only
+          ;look at the CaH and CaK lines
+          minwave = 3700*(1.+spec.z) ;3700 
+          maxwave = 3750*(1.+spec.z) ;4500 
           iref = (where(strtrim(spec.indiv_instru,2) eq 'lris'))[0]
           goodrefwl = where(spec.indiv_lambda[*,iref] gt minwave and spec.indiv_lambda[*,iref] lt maxwave)
           refspec = spec.indiv_contdiv[goodrefwl,iref]
@@ -895,7 +896,7 @@ pro combspec::default_vhelio,spec=spec,wplotcont=wplotcon
           zans = im_ztweak(specnow,wave,refspec,refwave,specivar=specivar,minwave=minwave,maxwave=maxwave)
           print,'vshift vshift err errflag'
           print,zans.vshift,zans.vshift_err,zans.errflag
-          spec.indiv_vhelio[wplotcon] = zans.vshift 
+          spec.indiv_vhelio[wplotcon] = -1.*zans.vshift 
        endif
     endelse
     ptr_free, self.spec
@@ -1153,8 +1154,8 @@ pro combspec::redraw
              endif
           endfor
          
-          if total(spec.indiv_good) gt 1 then thick=1 else thick=1 
-          oplot, spec.lambda/(1d +znow), spec.contdiv, color=fsc_color('black'),thick=thick
+          if total(spec.indiv_good) gt 1 then thick=1 else thick=2 
+          oplot, spec.lambda/(1d +znow), spec.contdiv, color=fsc_color('black'),thick=2
 
           ;;highlighting the telluric bands and label line names
           n = n_elements(*self.tellstart)
