@@ -1,8 +1,8 @@
 pro mkfake_deimos_spec,notput=notput
    ;create fake deimos spectra of cl1604
-   zmet = [-0.75,-0.55,-0.25,-0.05,0.15]
+   zmet = [-0.75,-0.55,-0.25,-0.05,0.15] 
    age = [1.,3.,5.]
-   sn  = [10,15.,20.,30.] ;per angstrom 
+   sn  = [5,10,15.,20.,30.] ;per angstrom 
    ;above were restricted to 2 decimal points, integer and integer
    ;accordingly (due to naming issue) but can be fixed easily if you want
    nspec = 5
