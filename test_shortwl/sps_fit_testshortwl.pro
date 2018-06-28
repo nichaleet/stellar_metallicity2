@@ -61,15 +61,7 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
     if cneg gt 0 then reallambda(neg) = reallambda(neg)+10000.
     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-    if min(science.dlam) gt 0.2 and max(science.dlam) lt 10.0 then begin
-        dlam_all = science.dlam
-    endif else begin
-        specresfile = self.directory+'specres_poly.sav'
-        if file_test(specresfile) then begin
-            restore, specresfile
-            dlam_all = poly(science.lambda/1000 - 7.8, specres_poly) / 2.35
-        endif else dlam_all = replicate(3.9/2.35, nlambda)
-    endelse
+    dlam_all = science.dlam;/2.35
 
     pi = replicate({value:0d, fixed:0, limited:[1,1], limits:[0.D,0.D], parname:'', mpprint:0, mpformat:'', step:0d, tied:''}, 4)
    
@@ -116,7 +108,7 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
     widget_control, widget_info(self.base, find_by_uname='maxnloop'), get_value=maxnloop
     maxnloop = fix(maxnloop[0])
     if maxnloop eq 0 then maxnloop = 50
-    maxnloop = 150
+    ;maxnloop = 150
     print, '* * * * * * * * * * * * * * * * * * * *'
     print, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
     print, '* * * * * * * * * * * * * * * * * * * *'
@@ -572,7 +564,7 @@ pro sps_fit::cal_uncertainties_all
     for i=0,self.nspec-1 do begin
         self.i = i
         science = scienceall[self.i]
-        if science.goodfit eq 0 then continue
+        ;if science.goodfit eq 0 then continue
         self->cal_uncertainties, science
         scienceall[self.i] = science
     endfor
