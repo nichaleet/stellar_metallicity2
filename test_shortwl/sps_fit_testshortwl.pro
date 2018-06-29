@@ -2,6 +2,7 @@
 pro sps_iterproc, funcname, p, iter, fnorm, functargs=functargs, parinfo=pi, quiet=quiet, dof=dof
     common sps_iterproc, contiter
     common toprint, agediff, zdiff
+
     if iter gt 1 then begin
        print, contiter, p[0], p[1], p[2],p[3], fnorm/dof, dof,abs(zdiff),abs(agediff),format='(I4,2X,D6.3,1X,D5.2,2X,D6.1,2x,D6.3,1X,D10.5,1X,I4,2X,D8.4,2X,D8.4)'
        if contiter mod 2 eq 0 then begin
@@ -48,6 +49,7 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
     common sps_iterproc, contiter
     common get_sps, dlam, dataivar, datalam, wonfit, contmask, normalize, rest
     common toprint, agediff, zdiff
+    common mask_in, mask_in, copynum
 
     if ~keyword_set(nostatusbar) then widget_control, widget_info(self.base, find_by_uname='status'), set_value='Fitting ...'
     savedata = 0 ;1
@@ -61,11 +63,11 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
     if cneg gt 0 then reallambda(neg) = reallambda(neg)+10000.
     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-    dlam_all = science.dlam;/2.35
+    dlam_all = science.dlam/2.35
 
     pi = replicate({value:0d, fixed:0, limited:[1,1], limits:[0.D,0.D], parname:'', mpprint:0, mpformat:'', step:0d, tied:''}, 4)
    
-    pi[0].limits = [-0.5,0.1] ;this is just for initial parameters
+    pi[0].limits = [-1.0,0.19] ;this is just for initial parameters
     pi[1].limits = [min(spsage),(galage(znow,1000)/1.e9)<max(spsage)]
     pi[3].limits = [-0.3,0.3]+znow
     ;set the prior to velocity dispersion according to Faber-Jackson relation (Dutton2011)
@@ -107,7 +109,7 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
     nloop=0
     widget_control, widget_info(self.base, find_by_uname='maxnloop'), get_value=maxnloop
     maxnloop = fix(maxnloop[0])
-    if maxnloop eq 0 then maxnloop = 50
+    if maxnloop eq 0 then maxnloop = 150
     ;maxnloop = 150
     print, '* * * * * * * * * * * * * * * * * * * *'
     print, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
@@ -115,7 +117,7 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
     print, '  i Z/Z_sun   age sigma_v  redhift    chi^2  DOF   ZDIFF  AGEDIFF'
     print, '--- ------- ----- ------- ---------  -------- ---- -----  ------'
 
-    openw,1,'/scr2/nichal/workspace4/test_shortwl/logsps/sps_fit_testshortwl.log',/append
+    openw,1,'/scr2/nichal/workspace4/test_shortwl/logsps/sps_fit_testshortwl'+copynum+'.log',/append
     printf,1, '* * * * * * * * * * * * * * * * * * * *'
     printf,1,systime()
     printf,1, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
@@ -473,26 +475,36 @@ end
 
 pro sps_fit::cal_uncertainties, science
    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Calculatign uncertainties ...'
-   spec_arr = *self.degen_sps
-   grid_feh = *self.degen_fehgrid
-   grid_age = *self.degen_agegrid 
+   grid_file = *self.degen_file   ;nage
+   grid_feh = *self.degen_fehgrid ;nfeh x nage
+   grid_age = *self.degen_agegrid ;nfeh x nage
 
    ;find where is the spec closest to the input age and feh
-   min_dist = min(sqrt((spec_arr.feh-science.feh)^2+(spec_arr.age-science.age)^2),iref)
-   if min_dist gt 0.05 then stop,'halted because matching might be off grid in make_chisqarr_new.pro'
+   min_dist = min(sqrt((grid_feh-science.feh)^2+(grid_age-science.age)^2),iref)
+   if min_dist gt 0.1 then print,strtrim(string(min_dist))+' matching might be off grid'
+   loc = array_indices(grid_feh,iref)
 
    ;make noisy ref spectra
-   npix = n_elements(spec_arr(iref).lambda)
-   refspec_err = abs(spec_arr(iref).spec/science.snfit)
-   refspec = spec_arr(iref).spec+randomn(seed,npix)*refspec_err
+   specarr = mrdfits(grid_file(loc[1]),1,/silent)
+   refspecstr = specarr(loc[0])
+   if refspecstr.feh ne grid_feh(iref) or refspecstr.age ne grid_age(iref) then stop,'grid does not match with file'
+   npix = n_elements(refspecstr.lambda)
+   refspec_err = abs(refspecstr.spec/science.snfit)
+   refspec = refspecstr.spec+randomn(seed,npix)*refspec_err
 
    ;make chisqarr
-   chisqarr = fltarr(size(grid_feh,/dimensions))
-   for i=0,n_elements(spec_arr)-1 do begin
-      loc = where(grid_feh eq spec_arr[i].feh and grid_age eq spec_arr[i].age,cloc)
-      if cloc ne 1 then stop,'oops'
-      ind = array_indices(grid_feh,loc)
-      chisqarr[ind[0],ind[1]] = total((refspec-spec_arr[i].spec)^2/refspec_err)
+   gridsize = size(grid_feh,/dimensions)
+   chisqarr = fltarr(gridsize)
+
+   for ia = 0,n_elements(grid_file)-1 do begin
+      specarr = mrdfits(grid_file(ia),1,/silent)
+      if gridsize[0] ne n_elements(specarr) then stop,'grid does not match size'
+      for i=0,n_elements(specarr)-1 do begin
+         loc = where(grid_feh eq specarr[i].feh and grid_age eq specarr[i].age,cloc)
+         if cloc ne 1 then stop,'oops'
+         ind = array_indices(grid_feh,loc)
+         chisqarr[ind[0],ind[1]] = total((refspec-specarr[i].spec)^2/refspec_err)
+      endfor
    endfor
 
    feharr = grid_feh[*,0]
@@ -565,6 +577,7 @@ pro sps_fit::cal_uncertainties_all
         self.i = i
         science = scienceall[self.i]
         ;if science.goodfit eq 0 then continue
+        print,strtrim(string(i+1),2)+'/'+strtrim(string(self.nspec),2)
         self->cal_uncertainties, science
         scienceall[self.i] = science
     endfor
@@ -1758,13 +1771,13 @@ end
 
 pro sps_fit::getscience, files=files
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Initializing ...'
-    common mask_in, mask_in
+    common mask_in, mask_in, copynum
     common npixcom, npix
 
     npix = 8500
 
     observatory, 'keck', obs
-    sciencefits = self.directory+(self.lowsn eq 1 ? 'sps_fit_lowsn.fits.gz' : 'sps_fit.fits.gz')
+    sciencefits = self.directory+'sps_fit'+copynum+'.fits.gz'
     if ~file_test(sciencefits) then begin
         if ~keyword_set(files) then message, 'You must specify the FILES keyword if a sps_fit.fits.gz file does not exist.'
         c = n_elements(files)
@@ -1849,6 +1862,7 @@ pro sps_fit::getscience, files=files
             self->oiiew, science
             self->sn, science
             if science.sn gt 3. then science.good = 1
+            science.good = 1
 
             self->mask, science
             science.spscont = 1.0
@@ -1869,7 +1883,8 @@ pro sps_fit::getscience, files=files
         speclist = masks[wgood]+' '+strtrim(string(slits[wgood]), 2)+' '+objnames[wgood]
         widget_control, widget_info(self.base, find_by_uname='filelist'), set_value=speclist
         widget_control, widget_info(self.base, find_by_uname='mode'), set_value=1
-        ;self->fit_all
+        self->writescience
+        self->fit_all
         self->writescience
      endif else begin ;if sps_fit.fits.gz exists or not
         scienceall = mrdfits(sciencefits, 1, /silent)
@@ -1893,7 +1908,7 @@ end
 pro sps_fit::writescience
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Writing to database ...'
     scienceall = *self.science
-    sciencefits = self.directory+(self.lowsn eq 1 ? 'sps_fit_lowsn.fits' : 'sps_fit.fits')
+    sciencefits = self.directory+'sps_fit'+copynum+'.fits'
     mwrfits, scienceall, sciencefits, /create, /silent
     spawn, 'gzip -f '+sciencefits
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Ready.'
@@ -1901,7 +1916,7 @@ end
 
 
 pro sps_fit::initialize_directory, directory=directory
-    common mask_in, mask_in
+    common mask_in, mask_in, copynum
 
     newdirectory = '/scr2/nichal/workspace4/test_shortwl/datasps/'+mask_in+'_cl1604/'
     if ~file_test(newdirectory) then file_mkdir, newdirectory
@@ -1909,12 +1924,9 @@ pro sps_fit::initialize_directory, directory=directory
     if strmid(directory, 0, 1, /reverse_offset) ne '/' then directory = directory + '/'
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Reading directory ...'
 
-    countfiles:
-    files = file_search(directory, mask_in+'*.{fits,fits.gz}', count=c)
-    sciencefits = newdirectory+(self.lowsn eq 1 ? 'sps_fit_lowsn.fits.gz' : 'sps_fit.fits.gz')
-    if c eq 0 then begin
-       files = file_search(directory+'mockdeimos*.{fits,fits.gz}', count=c)
-    endif
+    ;countfiles:
+    sciencefits = self.directory+'sps_fit'+copynum+'.fits.gz'
+    files = file_search(directory+'mockdeimos*.{fits,fits.gz}', count=c)
  
     if c eq 0 and ~file_test(sciencefits) then begin
         message, 'Unknown mask.'
@@ -1936,9 +1948,11 @@ end
 ; =============== INIT ================
 function sps_fit::INIT, directory=directory, lowsn=lowsn
     common sps_spec, sps, spsz, spsage
+    common mask_in, mask_in,copynum
+
     if (size(sps))[1] eq 0 then spsspec = sps_interp(0.0, 5.0)
 
-    base = widget_base(/row, title='sps_fit_mpfit', uvalue=self, mbar=menu, tab_mode=0, units=1)
+    base = widget_base(/row, title='sps_fit_mpfit'+copynum, uvalue=self, mbar=menu, tab_mode=0, units=1)
     file_menu = widget_button(menu, value='File', /menu)
     wexit = widget_button(file_menu, value='Save', uvalue='save', uname='save')
     wexit = widget_button(file_menu, value='Exit', uvalue='exit', uname='exit')
@@ -2088,14 +2102,25 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     self.indend   = ptr_new(indbandend)
     self.indname  = ptr_new(indname)
 
-    degen_sps = mrdfits('/scr2/nichal/workspace2/ana/age_metal_degeneracy/new_grid_spec.fits',1)
-    feharr = degen_sps(uniq(degen_sps.feh,sort(degen_sps.feh))).feh
-    agearr = degen_sps(uniq(degen_sps.age,sort(degen_sps.age))).age
-    nfeh = n_elements(feharr)
-    nage = n_elements(agearr)
-    degen_fehgrid = rebin(feharr,nfeh,nage)
-    degen_agegrid = transpose(rebin(agearr,nage,nfeh))
-    self.degen_sps = ptr_new(degen_sps)
+   degendir = '/scr2/nichal/workspace4/test_shortwl/sspdegen/sspdegen_short/'
+   degenfile = file_search(degendir+'age*_sspdegen_gridspec_shortwl.fits',count=cdegenfile)
+   for i=0,cdegenfile-1 do begin
+      degen_sps = mrdfits(degenfile(i),1,/silent)
+      if i eq 0 then begin
+           nfeh = n_elements(degen_sps)
+           nage = cdegenfile
+           degen_fehgrid = fltarr(nfeh,nage)
+           degen_agegrid = fltarr(nfeh,nage)
+           degen_file = strarr(nage)
+      endif
+      filebase = file_basename(degenfile(i),'.fits')
+      agei = fix(strmid(filebase,3,2))
+
+      degen_file(agei) = degenfile(i)
+      degen_fehgrid(*,agei) = degen_sps.feh
+      degen_agegrid(*,agei) = degen_sps.age
+    endfor 
+    self.degen_file = ptr_new(degen_file)
     self.degen_fehgrid = ptr_new(degen_fehgrid)
     self.degen_agegrid = ptr_new(degen_agegrid)
 
@@ -2129,9 +2154,9 @@ pro sps_fit__define
              indstart:ptr_new(), $
              indend:ptr_new(), $
              indname:ptr_new(), $
-             degen_sps:ptr_new(), $
-             degen_fehgrid:ptr_new(),$
-             degen_agegrid:ptr_new(),$
+             degen_file:ptr_new(), $
+             degen_fehgrid:ptr_new(), $
+             degen_agegrid:ptr_new(), $
              nspec:0L, $
              i:0L, $
              keystate:0, $
@@ -2218,10 +2243,12 @@ pro science__define
 end
 
 
-pro sps_fit_testshortwl
-    common mask_in, mask_in
+pro sps_fit_testshortwl,copyi=copyi
+    common mask_in, mask_in,copynum
     mask = 'test_shortwl'
     mask_in = mask
+    if ~keyword_set(copyi) then copyi=1
+    copynum = strtrim(string(copyi,format='(I02)'),2)
     directory = '/scr2/nichal/workspace4/'+mask+'/mockdata/'
     if ~file_test(directory) then message, 'Mask not found.'
     n = obj_new('sps_fit', directory=directory)

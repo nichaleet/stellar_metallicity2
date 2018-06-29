@@ -72,7 +72,7 @@ pro mkfake_deimos_spec,notput=notput
       spsspec = spsspec/spsmedian      ;normalize to around 1
       ;smooth to vdisp and deimos resolution
       spsspec = smooth_gauss_wrapper(spslambda, spsspec, spslambda, vdisp/clight/2.35*spslambda)
-      spsspec = smooth_gauss_wrapper(spslambda*(1.+redshift), spsspec, lambdaobs, dlam)
+      spsspec = smooth_gauss_wrapper(spslambda*(1.+redshift), spsspec, lambdaobs, dlam/2.35)
       ;apply through put
       if ~keyword_set(notput) then spsspec = spsspec*tput
 
