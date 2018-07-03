@@ -1,26 +1,27 @@
-pro mkfake_deimos_spec,notput=notput
-   ;create fake deimos spectra of cl1604
-   zmet = [-0.75,-0.55,-0.25,-0.05,0.15] 
-   age = [1.,3.,5.]
-   sn  = [5,10,15.,20.,30.] ;per angstrom 
-   ;above were restricted to 2 decimal points, integer and integer
-   ;accordingly (due to naming issue) but can be fixed easily if you want
+pro mkfake_spec_walpha,notput=notput
+   ;The fake data would be similar to that of Deimos data of ms0451
+   zmet = [-0.5,-0.2,0.1]  
+   age = [3.]
+   sn  = [5,10,15,20,30] ;per angstrom 
+   alpha = [-0.25,-0.1.5,0.,0.15,0.25] 
    nspec = 5
-   redshift = 0.9
+   redshift = 0.55
    vdisp = 300. ;km/s in FWHM
+   nfinalspec = n_Elements(zmet)*n_Elements(age)*n_Elements(sn)*n_Elements(alpha)*nspec
+   print,'Making '+strtrim(string(nfinalspec),2)+' spectra.....'
 
    ;setting of DEIMOS spectra
-   dwl = 0.16 ;dispersion per pixel in angstrom
-   iwave = 3400.
-   nwl = 12500
-   nwlreal = 8500
-   dlam = fltarr(nwl)+1.6 ;FWHM in Angstrom       
-   lambdarest = findgen(nwl)*dwl+iwave
-   lambdaobs = lambdarest*(1.+redshift)
+   dwl = 0.65 ;dispersion per pixel in angstrom
+   iwave = 3800.
+   nwl = 4096
+   dlam = fltarr(nwl)+4.7 ;FWHM in Angstrom for Deimos600ZD grating 1" slit      
+   lambdaobs = findgen(nwl)*dwl+iwave*(1.+redshift)
+   lambdarest = lambdaobs/(1.+redshift)
    snperpix = sn*sqrt(dwl)
+
    ;setup for output names
-   dir = '/scr2/nichal/workspace4/test_shortwl/mockdata/'
-   prefix = 'mockdeimos_cl1604'
+   dir = '/scr2/nichal/workspace4/test_alpha/mockdata/'
+   prefix = 'mockms0451_alpha'
    zmetname = strarr(n_Elements(zmet))
    for i=0,n_Elements(zmet)-1 do begin
       tmpz = strsplit(strtrim(string(zmet(i)),2),'.',/extract)
@@ -31,11 +32,20 @@ pro mkfake_deimos_spec,notput=notput
    endfor
    agename = '_'+strtrim(string(age,format='(I)'),2)+'gyr' 
    snname =  '_sn'+strtrim(string(sn,format='(I)'),2)
+   alphaname = strarr(n_Elements(alpha))
+   for i=0,n_Elements(alpha)-1 do begin
+      tmpp = strsplit(strtrim(string(alpha(i)),2),'.',/extract)
+      mop = (strmid(tmpp[0],0,1) eq '-') ? 'm' : 'p'
+      fdg = (strmid(tmpp[0],0,1) eq '-') ? strmid(tmpp[0],1,1) : strmid(tmpp[0],0,1)
+      sdg = strmid(tmpp[1],0,2)
+      alphaname[i] = '_alpha'+mop+fdg+'d'+sdg
+   endfor
    idname =  '_'+strtrim(string(indgen(nspec)+1,format='(I)'),2)
 
    ;constant
    clight = 299792.458
-   readcol,'sens_1200G_03OCT2017_0054.dat',wltput,tput,comment='#'
+   ;throughput
+   readcol,'thr_g600_65_gg455.asc',wltput,tput,comment='#'
    tput = interpol(tput,wltput,lambdaobs)
    tput = tput/median(tput)
 
@@ -59,7 +69,7 @@ pro mkfake_deimos_spec,notput=notput
    won = where(contmask eq 1, complement=woff, con)
 
    ;create spectrum!!!
-   for iz=0,n_elements(zmet)-1 do for ia=0,n_elements(age)-1 do begin
+   for iz=0,n_elements(zmet)-1 do for ia=0,n_elements(age)-1 for iap=0,n_elements(alpha) do begin
       spsstruct = sps_interp(zmet(iz), age(ia))
       spslambda = spsstruct.lambda
       spsspec = spsstruct.spec
@@ -70,9 +80,12 @@ pro mkfake_deimos_spec,notput=notput
       spsspec = spsspec*clight/spslambda^2      ;change fnu(Lsun/Hz) to flambda 
       spsmedian = median(spsspec)
       spsspec = spsspec/spsmedian      ;normalize to around 1
-      ;smooth to vdisp and deimos resolution
+      ;smooth to vdisp
       spsspec = smooth_gauss_wrapper(spslambda, spsspec, spslambda, vdisp/clight/2.35*spslambda)
-      spsspec = smooth_gauss_wrapper(spslambda*(1.+redshift), spsspec, lambdaobs, dlam)
+
+      ;add response function to alphas
+      ;smooth to deimos resolution and get observed wavelength array
+      spsspec = smooth_gauss_wrapper(spslambda*(1.+redshift), spsspec, lambdaobs, dlam/2.35)
       ;apply through put
       if ~keyword_set(notput) then spsspec = spsspec*tput
 

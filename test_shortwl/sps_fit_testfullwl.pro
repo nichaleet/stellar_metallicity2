@@ -117,7 +117,7 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
     print, '  i Z/Z_sun   age sigma_v  redhift    chi^2  DOF   ZDIFF  AGEDIFF'
     print, '--- ------- ----- ------- ---------  -------- ---- -----  ------'
 
-    openw,1,'/scr2/nichal/workspace4/test_shortwl/logsps/sps_fit_testshortwl'+copynum+'.log',/append
+    openw,1,'/scr2/nichal/workspace4/test_shortwl/logsps/sps_fit_testfullwl'+copynum+'.log',/append
     printf,1, '* * * * * * * * * * * * * * * * * * * *'
     printf,1,systime()
     printf,1, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
@@ -271,7 +271,7 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
     endif
     ;;;;;;;;;;;;;;;;;;;
 
-    ;self->statusbox, science=science
+    self->statusbox, science=science
     if ~keyword_set(noredraw) then begin
         self->redraw
     endif
@@ -557,10 +557,10 @@ pro sps_fit::fit_all
         self->default_range
         science = scienceall[self.i]
         if science.good eq 0 then continue
+	;if science.good eq 0 and science.goodfit eq 0 then continue
         self->fit, science
         if (keepoldfit eq 0 and science.chisq lt scienceall[self.i].chisq) or (keepoldfit eq 1) then $
             scienceall[self.i] = science
-        scienceall[self.i] = science
         self->statusbox
     endfor
     ptr_free, self.science
@@ -656,7 +656,7 @@ pro sps_fit::handle_button, ev
            self->fit, science, /noredraw
            widget_control, widget_info(self.base, find_by_uname='keepoldfit'), get_value=keepoldfit
            if (keepoldfit eq 0 and science.chisq lt scienceall[self.i].chisq) or (keepoldfit eq 1) then $
-               scienceall[self.i] = science
+              scienceall[self.i] = science
            ptr_free, self.science
            self.science = ptr_new(scienceall)
            self->redraw
@@ -1780,7 +1780,7 @@ pro sps_fit::getscience, files=files
     common mask_in, mask_in, copynum
     common npixcom, npix
 
-    npix = 8500
+    npix = 12500
 
     observatory, 'keck', obs
     sciencefits = self.directory+'sps_fit'+copynum+'.fits.gz'
@@ -1826,10 +1826,10 @@ pro sps_fit::getscience, files=files
             science.ra = 0.
             science.dec = 0.
             
-            science.lambda = data.lambda
-            science.contdiv = data.contdiv
-            science.contdivivar = data.contdivivar
-            science.dlam = data.dlam
+            science.lambda = data.lambdafull
+            science.contdiv = data.contdivfull
+            science.contdivivar = data.contdivivarfull
+            science.dlam = data.dlamfull
 
             science.phot_color = 'BV'
             science.spec1dfile = files[i]
@@ -1892,6 +1892,7 @@ pro sps_fit::getscience, files=files
         self->writescience
         self->fit_all
         self->writescience
+        self->cal_uncertainties_all
      endif else begin ;if sps_fit.fits.gz exists or not
         scienceall = mrdfits(sciencefits, 1, /silent)
 
@@ -2072,7 +2073,6 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     wspeccontrol = widget_base(wright, /row, /align_center, tab_mode=1)
     wkeepoldfitcontrol = widget_base(wspeccontrol,/row,/frame)
     wkeepoldfit = cw_bgroup(wkeepoldfitcontrol, ['compare old chisq','dont compare(replace)'],/exclusive, set_value=1, uname='keepoldfit', uvalue='keepoldfit',row=1)
-
     wycontrol = widget_base(wspeccontrol, /frame, /row)
     wylow = widget_text(wycontrol, xsize=8, /editable, uname='ylow', uvalue='ylow')
     wylabel = widget_label(wycontrol, value=' < y < ', /align_center, uname='ylabel')
@@ -2112,8 +2112,8 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     self.indend   = ptr_new(indbandend)
     self.indname  = ptr_new(indname)
 
-   degendir = '/scr2/nichal/workspace4/test_shortwl/sspdegen/sspdegen_short/'
-   degenfile = file_search(degendir+'age*_sspdegen_gridspec_shortwl.fits',count=cdegenfile)
+   degendir = '/scr2/nichal/workspace4/test_shortwl/sspdegen/sspdegen_full/'
+   degenfile = file_search(degendir+'age*_sspdegen_gridspec_fullwl.fits',count=cdegenfile)
    for i=0,cdegenfile-1 do begin
       degen_sps = mrdfits(degenfile(i),1,/silent)
       if i eq 0 then begin
@@ -2172,7 +2172,6 @@ pro sps_fit__define
              keystate:0, $
              lambda1:0d, $
              lowsn:0b}
-
 end
 
 
@@ -2254,14 +2253,14 @@ pro science__define
 end
 
 
-pro sps_fit_testshortwl,copyi=copyi,all=all
+pro sps_fit_testfullwl,copyi=copyi,all=all
     common mask_in, mask_in,copynum
-    mask = 'test_shortwl'
+    mask = 'test_fullwl'
     mask_in = mask
     if ~keyword_set(copyi) then copyi=1
     copynum = strtrim(string(copyi,format='(I02)'),2)
     if keyword_set(all) then copynum='all'
-    directory = '/scr2/nichal/workspace4/'+mask+'/mockdata/'
+    directory = '/scr2/nichal/workspace4/test_shortwl/mockdata/'
     if ~file_test(directory) then message, 'Mask not found.'
     n = obj_new('sps_fit', directory=directory)
 end

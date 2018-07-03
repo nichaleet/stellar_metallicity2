@@ -15,7 +15,7 @@ pro mkfake_deimos_spec,notput=notput
    nwl = 12500
    nwlreal = 8500
    dlam = fltarr(nwl)+1.6 ;FWHM in Angstrom       
-   lambdarest = findgen(nwl)*dwl+iwave
+   lambdarest = findgen(nwl)*dwl+iwave  ;calculate lambdarest first because ORELSE give data in rest frame
    lambdaobs = lambdarest*(1.+redshift)
    snperpix = sn*sqrt(dwl)
    ;setup for output names

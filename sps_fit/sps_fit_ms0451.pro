@@ -2267,7 +2267,7 @@ pro sps_fit_ms0451
     common mask_in, mask_in
     mask = 'spline'
     mask_in = mask
-    directory = '/scr2/nichal/workspace4/prepspec/data/'+mask
+    directory = '/scr2/nichal/workspace4/prepspec_ms0451/data/'+mask
     if ~file_test(directory) then message, 'Mask not found.'
     n = obj_new('sps_fit', directory=directory)
 end
