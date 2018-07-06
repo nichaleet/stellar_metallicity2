@@ -3,7 +3,9 @@ pro mkfake_spec_walpha,notput=notput
    zmet = [-0.5,-0.2,0.1]  
    age = [3.]
    sn  = [5,10,15,20,30] ;per angstrom 
-   alpha = [-0.25,-0.1.5,0.,0.15,0.25] 
+   alpha = [-0.25,-0.15,0.,0.15,0.25] 
+   element=['Mg','O','Si','Ca','Ti']
+   nelements = n_elements(element)
    nspec = 5
    redshift = 0.55
    vdisp = 300. ;km/s in FWHM
@@ -20,8 +22,8 @@ pro mkfake_spec_walpha,notput=notput
    snperpix = sn*sqrt(dwl)
 
    ;setup for output names
-   dir = '/scr2/nichal/workspace4/test_alpha/mockdata/'
-   prefix = 'mockms0451_alpha'
+   dir = '/scr2/nichal/workspace4/test_alpha/mockdata_alpha/'
+   prefix = 'mockms0451'
    zmetname = strarr(n_Elements(zmet))
    for i=0,n_Elements(zmet)-1 do begin
       tmpz = strsplit(strtrim(string(zmet(i)),2),'.',/extract)
@@ -69,8 +71,8 @@ pro mkfake_spec_walpha,notput=notput
    won = where(contmask eq 1, complement=woff, con)
 
    ;create spectrum!!!
-   for iz=0,n_elements(zmet)-1 do for ia=0,n_elements(age)-1 for iap=0,n_elements(alpha) do begin
-      spsstruct = sps_interp(zmet(iz), age(ia))
+   for iz=0,n_elements(zmet)-1 do for ia=0,n_elements(age)-1 do for iap=0,n_elements(alpha)-1 do begin
+      spsstruct = sps_interp(zmet[iz], age[ia])
       spslambda = spsstruct.lambda
       spsspec = spsstruct.spec
       w = where(spslambda gt 3000 and spslambda lt 6000, c)
@@ -78,12 +80,15 @@ pro mkfake_spec_walpha,notput=notput
       spslambda = spslambda[w]
       spsspec = spsspec[w]
       spsspec = spsspec*clight/spslambda^2      ;change fnu(Lsun/Hz) to flambda 
+      ;add response function
+      abund = fltarr(nelements)+alpha(iap)
+      spsspec = add_response(spslambda,spsspec,[zmet[iz],age[ia]],element,abund)
+      ;normalize to around 1
       spsmedian = median(spsspec)
-      spsspec = spsspec/spsmedian      ;normalize to around 1
+      spsspec = spsspec/spsmedian     
       ;smooth to vdisp
       spsspec = smooth_gauss_wrapper(spslambda, spsspec, spslambda, vdisp/clight/2.35*spslambda)
 
-      ;add response function to alphas
       ;smooth to deimos resolution and get observed wavelength array
       spsspec = smooth_gauss_wrapper(spslambda*(1.+redshift), spsspec, lambdaobs, dlam/2.35)
       ;apply through put
@@ -103,8 +108,9 @@ pro mkfake_spec_walpha,notput=notput
          contdiv = spec/cont
          contdivivar = ivar*cont^2
 
-         outstr = {lambda:lambdaobs[0:nwlreal-1],contdiv:contdiv[0:nwlreal-1],contdivivar:contdivivar[0:nwlreal-1],dlam:dlam[0:nwlreal-1],lambdafull:lambdaobs,contdivfull:contdiv,contdivivarfull:contdivivar,dlamfull:dlam,z:redshift}
-         outname = dir+prefix+zmetname(iz)+agename(ia)+snname(isn)+idname(ispec)+'.fits'
+         outstr = {lambda:lambdaobs,contdiv:contdiv,contdivivar:contdivivar,dlam:dlam,z:redshift,zmet:zmet(iz),age:age(ia),sn:sn(isn),element:element,element_abund:alpha(iap)}
+
+         outname = dir+prefix+zmetname(iz)+agename(ia)+alphaname(iap)+snname(isn)+idname(ispec)+'.fits'
          mwrfits,outstr,outname,/create,/silent
       endfor
    endfor
