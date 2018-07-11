@@ -340,8 +340,8 @@ pro sps_fit::fitalpha, science, noredraw=noredraw, nostatusbar=nostatusbar
     won = where(science.fitmask eq 1 and finite(science.contdiv) and finite(science.contdivivar) and science.contdivivar gt 0 and reallambda/(1.+znow) gt 3500. and reallambda/(1.+znow) lt 7400., con)
 
     if con lt 10 then begin
-        pi.value = [-999d, -999d, -999d,-999d]
-        perror = [-999d, -999d, -999d, -999d]
+        pi.value = [-999d, -999d, -999d,-999d,-999d]
+        perror = [-999d, -999d, -999d, -999d,-999d]
         science.spsspec = -999d
         goto, done
     endif
@@ -375,8 +375,8 @@ pro sps_fit::fitalpha, science, noredraw=noredraw, nostatusbar=nostatusbar
     printf,1, '--- ------- ----- ------- --------- --------- -------- ---- -----  ------'
 ;;things to keep during the while loop
     bestchisq = 9999.
-    bestvalue = [99.,99.,99.,99.]
-    besterror = [99.,99.,99.,99.]
+    bestvalue = [99.,99.,99.,99.,99.]
+    besterror = [99.,99.,99.,99.,99.]
     chisqarr = fltarr(maxnloop)
     valuearr = fltarr(5,maxnloop)
     errorarr = fltarr(5,maxnloop)
@@ -423,8 +423,8 @@ pro sps_fit::fitalpha, science, noredraw=noredraw, nostatusbar=nostatusbar
        
         bkpt = slatec_splinefit(restlambda[won], science.contdiv[won]/spsbestfit[won], coeff, invvar=science.contdivivar[won]*(spsbestfit[won])^2, bkspace=150, upper=3, lower=3, /silent)
         if bkpt[0] eq -1 then begin
-            pi.value = [-999d, -999d, -999d, -999d]
-            perror = [-999d, -999d, -999d, -999d]
+            pi.value = [-999d, -999d, -999d, -999d,-999d]
+            perror = [-999d, -999d, -999d, -999d,-999d]
             science.spsspec = -999d
             science.spscont = -999d 
             break
@@ -784,16 +784,22 @@ end
 pro sps_fit::cal_uncertainties, science
    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Calculatign uncertainties ...'
    grid_file = *self.degen_file   ;nage
-   grid_feh = *self.degen_fehgrid ;nfeh x nage
-   grid_age = *self.degen_agegrid ;nfeh x nage
+   grid_feh = *self.degen_fehgrid ;nfeh x nage x nalpha
+   grid_age = *self.degen_agegrid ;nfeh x nage x nalpha
+   grid_alpha = *self.degen_alphagrid ;nfeh x nage x nalpha
+   loc_alpha = where(grid_alpha[0,0,*] eq 0.,cloc_alpha)
+   loc_ext = loc_alpha[0]+1
+   if cloc_alpha ne 1 then stop,'Zero or more than one of where alpha/Fe = 0'
+   grid_Feh = grid_feh[*,*,loc_alpha]
+   grid_age = grid_age[*,*,loc_alpha]
 
-   ;find where is the spec closest to the input age and feh
+   ;find where is the spec closest to the input age and feh and alpha
    min_dist = min(sqrt((grid_feh-science.feh)^2+(grid_age-science.age)^2),iref)
    if min_dist gt 0.1 then print,strtrim(string(min_dist))+' matching might be off grid'
    loc = array_indices(grid_feh,iref)
 
    ;make noisy ref spectra
-   specarr = mrdfits(grid_file(loc[1]),1,/silent)
+   specarr = mrdfits(grid_file(loc[1]),loc_ext,/silent)
    refspecstr = specarr(loc[0])
    if refspecstr.feh ne grid_feh(iref) or refspecstr.age ne grid_age(iref) then stop,'grid does not match with file'
    npix = n_elements(refspecstr.lambda)
@@ -805,7 +811,7 @@ pro sps_fit::cal_uncertainties, science
    chisqarr = fltarr(gridsize)
 
    for ia = 0,n_elements(grid_file)-1 do begin
-      specarr = mrdfits(grid_file(ia),1,/silent)
+      specarr = mrdfits(grid_file(ia),loc_ext,/silent)
       if gridsize[0] ne n_elements(specarr) then stop,'grid does not match size'
       for i=0,n_elements(specarr)-1 do begin
          loc = where(grid_feh eq specarr[i].feh and grid_age eq specarr[i].age,cloc)
@@ -852,7 +858,91 @@ pro sps_fit::cal_uncertainties, science
    science.agelower = science.age+(interpol(agearr,cumprobage,0.16)-midagevalue)
    science.fehupper = science.feh+(interpol(feharr,cumprobfeh,0.84)-midfehvalue)
    science.fehlower = science.feh+(interpol(feharr,cumprobfeh,0.16)-midfehvalue)
+   science.alphafeupper = -999.
+   science.alphafelower = -999.
+   widget_control, widget_info(self.base, find_by_uname='status'), set_value='Ready ...'
+end
 
+pro sps_fit::cal_uncertainties_alpha, science
+   widget_control, widget_info(self.base, find_by_uname='status'), set_value='Calculatign uncertainties ...'
+   grid_file = *self.degen_file   ;nage
+   grid_feh = *self.degen_fehgrid ;nfeh x nage x nalpha
+   grid_age = *self.degen_agegrid ;nfeh x nage x nalpha
+   grid_alpha = *self.degen_alphagrid ;nfeh x nage x nalpha
+   ;find where is the spec closest to the input age and feh and alpha
+   min_dist = min(sqrt((grid_feh-science.feh)^2+(grid_age-science.age)^2+(grid_alpha-science.alphafe)^2),iref)
+   if min_dist gt 0.1 then print,strtrim(string(min_dist))+' matching might be off grid'
+   loc = array_indices(grid_feh,iref)
+
+   ;make noisy ref spectra
+   specarr = mrdfits(grid_file(loc[1]),loc[2]+1,/silent)
+   refspecstr = specarr(loc[0])
+   if refspecstr.feh ne grid_feh(iref) or refspecstr.age ne grid_age(iref) or refspecstr.alpha ne grid_alpha(iref) $
+        then stop,'grid does not match with file'
+   npix = n_elements(refspecstr.lambda)
+   refspec_err = abs(refspecstr.spec/science.snfit)
+   refspec = refspecstr.spec+randomn(seed,npix)*refspec_err
+
+   ;make chisqarr
+   gridsize = size(grid_feh,/dimensions)
+   chisqarr = fltarr(gridsize)
+
+   for ia = 0,n_elements(grid_file)-1 do for iap = 1,gridsize[2] do begin
+      specarr = mrdfits(grid_file(ia),iap,/silent)
+      if gridsize[0] ne n_elements(specarr) then stop,'grid does not match size'
+      for i=0,n_elements(specarr)-1 do begin
+         loc = where(grid_feh eq specarr[i].feh and grid_age eq specarr[i].age and $
+               grid_alpha eq specarr[i].alpha,cloc)
+         if cloc ne 1 then stop,'oops'
+         ind = array_indices(grid_feh,loc)
+         chisqarr[ind[0],ind[1],ind[2]] = total((refspec-specarr[i].spec)^2/refspec_err)
+      endfor
+   endfor
+
+   feharr = grid_feh[*,0,0]
+   agearr = reform(grid_age[0,*,0])
+   alphaarr = reform(grid_alpha[0,0,*])
+
+   deltafeh = grid_feh[1,0,0]-grid_feh[0,0,0]
+   deltaage = grid_age[0,1,0]-grid_age[0,0,0]
+   deltaalpha = grid_alpha[0,0,1]-grid_alpha[0,0,0]
+   ;read the chisq grid and calculate probability
+   Lgrid = -0.5*(chisqarr-min(chisqarr))
+   probgrid = exp(double(Lgrid))
+   volume = 0
+   arr_dimen = size(grid_feh,/dimension)
+   for ii=0,arr_dimen(0)-1 do for jj=0,arr_dimen(1)-1 do for kk=0,arr_dimen(2)-1 do begin
+         volume = volume+deltafeh*deltaage*deltaalpha*probgrid[ii,jj,kk]
+   endfor
+   probgrid = probgrid/volume
+
+   probfeh = fltarr(arr_dimen(0))
+   probage = fltarr(arr_dimen(1))
+   probalpha = fltarr(arr_dimen(2))
+   for ii=0,arr_dimen(0)-1 do probfeh(ii) = int_tabulated_2d(grid_age[ii,*,*],grid_alpha[ii,*,*],probgrid[ii,*,*])
+   for jj=0,arr_dimen(1)-1 do probage(jj) = int_tabulated_2d(grid_feh[*,jj,*],grid_alpha[*,jj,*],probgrid[*,jj,*])
+   for kk=0,arr_dimen(2)-1 do probalpha(kk) = int_tabulated_2d(grid_age[*,*,kk],grid_feh[*,*,kk],probgrid[*,*,kk])
+   probfeh = probfeh/int_tabulated(feharr,probfeh)
+   probage = probage/int_tabulated(agearr,probage)
+   probalpha = probalpha/int_tabulated(alphaarr,probalpha)
+
+   cumprobfeh = fltarr(arr_dimen(0))
+   for jj=1,arr_dimen(0)-1 do cumprobfeh(jj) = int_tabulated(feharr[0:jj],probfeh[0:jj])
+   cumprobage = fltarr(arr_dimen(1))
+   for jj=1,arr_dimen(1)-1 do cumprobage(jj) = int_tabulated(agearr[0:jj],probage[0:jj])
+   cumprobalpha = fltarr(arr_dimen(2))
+   for kk=1,arr_dimen(2)-1 do cumprobalpha(kk) = int_tabulated(alphaarr[0:kk],probalpha[0:kk])
+
+   midagevalue = interpol(agearr,cumprobage,0.5)
+   midfehvalue = interpol(feharr,cumprobfeh,0.5)
+   midalphavalue = interpol(alphaarr,cumprobalpha,0.5)
+
+   science.ageupper = science.age+(interpol(agearr,cumprobage,0.84)-midagevalue)
+   science.agelower = science.age+(interpol(agearr,cumprobage,0.16)-midagevalue)
+   science.fehupper = science.feh+(interpol(feharr,cumprobfeh,0.84)-midfehvalue)
+   science.fehlower = science.feh+(interpol(feharr,cumprobfeh,0.16)-midfehvalue)
+   science.alphafeupper = science.alphafe+(interpol(alphaarr,cumprobalpha,0.84)-midalphavalue) 
+   science.alphafelower = science.alphafe+(interpol(alphaarr,cumprobalpha,0.16)-midalphavalue)
    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Ready ...'
 end
 
@@ -869,9 +959,16 @@ pro sps_fit::fit_all,alpha=alpha
            self->mask, science ,/includemg
            self->fitalpha, science
         endelse
-        if (keepoldfit eq 0 and science.chisq lt scienceall[self.i].chisq) or (keepoldfit eq 1) then $
+        if (keepoldfit eq 0 and science.chisq lt scienceall[self.i].chisq) or (keepoldfit eq 1) then begin
+            if keepoldfit eq 0 then print,'chisq is smaller, replaced fit' 
+            print, scienceall[self.i].feh,scienceall[self.i].age,scienceall[self.i].vdisp,scienceall[self.i].zfit,scienceall[self.i].alphafe,scienceall[self.i].chisq,format='(5x,D6.3,2x,D6.2,2x,D6.1,2x,D4.2,2x,D6.3,2X,D10.5)'
             scienceall[self.i] = science
-        scienceall[self.i] = science
+        endif else begin
+            if keepoldfit eq 0 then begin
+            print, 'chisq is larger, use previous fit'
+            print, scienceall[self.i].feh,scienceall[self.i].age,scienceall[self.i].vdisp,scienceall[self.i].zfit,scienceall[self.i].alphafe,scienceall[self.i].chisq,format='(5x,D6.3,2x,D6.2,2x,D6.1,2x,D4.2,2x,D6.3,2X,D10.5)'
+            endif
+        endelse
         self->statusbox
     endfor
     ptr_free, self.science
@@ -883,7 +980,7 @@ pro sps_fit::fit_all,alpha=alpha
     self->redraw    
 end
 
-pro sps_fit::cal_uncertainties_all
+pro sps_fit::cal_uncertainties_all,alpha=alpha
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Calculatign uncertainties ...'
     scienceall = *self.science
     curi = self.i
@@ -892,7 +989,8 @@ pro sps_fit::cal_uncertainties_all
         science = scienceall[self.i]
         ;if science.goodfit eq 0 then continue
         print,strtrim(string(i+1),2)+'/'+strtrim(string(self.nspec),2)
-        self->cal_uncertainties, science
+        if ~keyword_set(alpha) then self->cal_uncertainties, science else $
+                                    self->cal_uncertainties_alpha,science
         scienceall[self.i] = science
     endfor
     ptr_free, self.science
@@ -902,7 +1000,6 @@ pro sps_fit::cal_uncertainties_all
     science = scienceall[self.i]
     self->statusbox, science=science
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Ready'
-
 end
 
 ; =================
@@ -966,8 +1063,16 @@ pro sps_fit::handle_button, ev
            science = scienceall[self.i]
            self->fit, science, /noredraw
            widget_control, widget_info(self.base, find_by_uname='keepoldfit'), get_value=keepoldfit
-           if (keepoldfit eq 0 and science.chisq lt scienceall[self.i].chisq) or (keepoldfit eq 1) then $
+           if (keepoldfit eq 0 and science.chisq lt scienceall[self.i].chisq) $
+           or (keepoldfit eq 1) then begin ;keep the value
+               if keepoldfit eq 0 then print,'chisq is smaller, replaced fit'
                scienceall[self.i] = science
+           endif else begin
+              if keepoldfit eq 0 then begin ;don't keep the value-just print to screen
+               print, 'chisq is larger, use previous fit'
+               print, scienceall[self.i].feh,scienceall[self.i].age,scienceall[self.i].vdisp,scienceall[self.i].zfit,scienceall[self.i].alphafe,scienceall[self.i].chisq,format='(5x,D6.3,2x,D6.2,2x,D6.1,2x,D4.2,2x,D6.3,2X,D10.5)'
+               endif
+           endelse 
            ptr_free, self.science
            self.science = ptr_new(scienceall)
            self->redraw
@@ -979,8 +1084,16 @@ pro sps_fit::handle_button, ev
            self->mask, science ,/includemg
            self->fitalpha, science, /noredraw
            widget_control, widget_info(self.base, find_by_uname='keepoldfit'), get_value=keepoldfit
-           if (keepoldfit eq 0 and science.chisq lt scienceall[self.i].chisq) or (keepoldfit eq 1) then $
+           if (keepoldfit eq 0 and science.chisq lt scienceall[self.i].chisq) $
+           or (keepoldfit eq 1) then begin ;keep the value
+               if keepoldfit eq 0 then print,'chisq is smaller, replaced fit'
                scienceall[self.i] = science
+           endif else begin
+              if keepoldfit eq 0 then begin ;don't keep the value-just print to screen
+               print, 'chisq is larger, use previous fit'
+               print, scienceall[self.i].feh,scienceall[self.i].age,scienceall[self.i].vdisp,scienceall[self.i].zfit,scienceall[self.i].alphafe,scienceall[self.i].chisq,format='(5x,D6.3,2x,D6.2,2x,D6.1,2x,D4.2,2x,D6.3,2X,D10.5)'
+               endif
+           endelse
            ptr_free, self.science
            self.science = ptr_new(scienceall)
            self->redraw
@@ -1007,9 +1120,20 @@ pro sps_fit::handle_button, ev
            self.science = ptr_new(scienceall)
            self->statusbox, science=science
         end
+        'cal_uncertainties_alpha': begin
+           scienceall = *self.science
+           science = scienceall[self.i]
+           self->cal_uncertainties_alpha,science
+           scienceall[self.i]=science
+           ptr_free, self.science
+           self.science = ptr_new(scienceall)
+           self->statusbox, science=science
+        end
+
         'fit_all': self->fit_all
         'fit_alpha_all':self->fit_all,/alpha
         'cal_uncertainties_all':self->cal_uncertainties_all
+        'cal_uncertainties_alpha_all':self->cal_uncertainties_all,/alpha
         'default_cont': self->default_cont
         'default_mask': self->default_mask
         'default_maskall': self->default_maskall
@@ -2090,7 +2214,8 @@ pro sps_fit::statusbox, science=science
     widget_control, widget_info(self.base, find_by_uname='curfeh'), set_value=science.feh gt -100 ? strcompress(string(science.feh, format='(D10.2)'), /rem)+(science.feherr le 0 ? '' : ' +/- '+strcompress(string(science.feherr, format='(D10.2)'), /rem)) : unknown
     widget_control, widget_info(self.base, find_by_uname='curfehuncert'), set_value=science.fehlower gt -100 ? strcompress(string(science.fehlower, format='(D10.2)'), /rem)+(science.fehupper ge -100 ? ' : '+strcompress(string(science.fehupper, format='(D10.2)'), /rem):'') : unknown
     widget_control, widget_info(self.base, find_by_uname='curoii'), set_value=science.oiiew ne -999 ? strcompress(string(science.oiiew, format='(D10.2)'), /rem)+(science.oiiewerr le 0 ? '' : ' +/- '+strcompress(string(science.oiiewerr, format='(D10.2)'), /rem))+' A' : unknown
-    widget_control, widget_info(self.base, find_by_uname='curalpha'), set_value=science.alphafeerr gt 0 ? strcompress(string(science.alphafe, format='(D10.2)'), /rem)+(science.alphafeerr le 0 ? '' : ' +/- '+strcompress(string(science.alphafeerr, format='(D10.2)'), /rem)) : unknown
+    widget_control, widget_info(self.base, find_by_uname='curalpha'), set_value=science.alphafe gt -100 ? strcompress(string(science.alphafe, format='(D10.2)'), /rem)+(science.alphafeerr le 0 ? '' : ' +/- '+strcompress(string(science.alphafeerr, format='(D10.2)'), /rem)) : unknown
+   widget_control, widget_info(self.base, find_by_uname='alphauncert'), set_value=science.alphafelower gt -100 ? strcompress(string(science.alphafelower, format='(D10.2)'), /rem)+(science.alphafeupper ge -100 ? ' : '+strcompress(string(science.alphafeupper, format='(D10.2)'), /rem):'') : unknown
     widget_control, widget_info(self.base, find_by_uname='curgband'), set_value=science.gbanderr gt 0 ? strcompress(string(science.gband, format='(D10.2)'), /rem)+(science.gbanderr le 0 ? '' : ' +/- '+strcompress(string(science.gbanderr, format='(D10.2)'), /rem)) : unknown
     widget_control, widget_info(self.base, find_by_uname='curchisq'), set_value=science.chisq gt 0 ? strcompress(string(science.chisq, format='(D10.2)'), /rem) : unknown
     widget_control, widget_info(self.base, find_by_uname='maxnloop'), set_value=science.nloop gt 0 ? strcompress(string(science.nloop, format='(I4)'), /rem) : unknown
@@ -2298,8 +2423,8 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     wdefault_goodspec = widget_button(tools_menu, value='Default Good Spectrum', uname='default_goodspec', uvalue='default_goodspec')
     wfit_all = widget_button(tools_menu, value='Fit All', uname='fit_all', uvalue='fit_all')
     wfitalpha_all = widget_button(tools_menu, value='Fit Alpha All', uname='fit_alpha_all', uvalue='fit_alpha_all')
-
     wcal_uncertainties_all = widget_button(tools_menu, value='Cal uncertainties All',uname='cal_uncertainties_all',uvalue='cal_uncertainties_all')
+    wcal_uncertainties_alpha_all = widget_button(tools_menu, value='Cal uncertainties alpha All',uname='cal_uncertainties_alpha_all',uvalue='cal_uncertainties_alpha_all')
     wleft = widget_base(base, /column, uname='left')
     wright = widget_base(base, /column, uname='right')
     widget_control, /managed, base
@@ -2317,7 +2442,9 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     windices = widget_button(windicesbase, value='Compute Indices', uvalue='indices', uname='indices', tab_mode=1, xsize=100)
     wdefault_mask = widget_button(windicesbase,value='Default Mask',uvalue='default_mask',uname='default_mask',tab_mode=1,xsize=100)
     wuncertbase = widget_base(wleft,/row,/align_center)
-    wuncertainties = widget_button(wuncertbase,value='cal_uncertainties',uvalue='cal_uncertainties',uname='cal_uncertainties')
+    wuncertainties = widget_button(wuncertbase,value='cal uncertainties',uvalue='cal_uncertainties',uname='cal_uncertainties')
+    wuncertainties_alpha = widget_button(wuncertbase,value='cal uncertainties alpha',uvalue='cal_uncertainties_alpha',uname='cal_uncertainties_alpha')
+    ;stopped here
     wgoodbase = widget_base(wleft, /column, /align_center)
     wgood = cw_bgroup(wgoodbase, ['good spectrum','good fit'], /nonexclusive, set_value=[0, 0], uname='good', uvalue='good')
 
@@ -2354,8 +2481,12 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     wfehuncert = widget_label(wfehuncertbase,value='      ',/align_left, uname='curfehuncert', uvalue='curfehuncert', xsize=150)
 
     walphabase = widget_base(wcurobj, /align_center, /row)
-    walphalabel = widget_label(walphabase, value='[Mg/Fe] = ', /align_right, uname='alphalabel', xsize=95)
+    walphalabel = widget_label(walphabase, value='[Mg/Fe] = ', /align_right, uname='alphalabel', xsize=95)   
     wcuralha = widget_label(walphabase, value='     ', /align_left, uname='curalpha', uvalue='curalpha', xsize=150)
+    walphauncertbase = widget_base(wcurobj, /align_center, /row)
+    walphauncertlabel = widget_label(walphauncertbase,value='    ',/align_right,uname='alphauncertlabel',xsize=95)
+    walphauncert = widget_label(walphauncertbase,value='      ',/align_left, uname='curalphauncert', uvalue='curalphauncert', xsize=150)
+
     wgbandbase = widget_base(wcurobj, /align_center, /row)
     wgbandlabel = widget_label(wgbandbase, value='Gband = ', /align_right, uname='gbandlabel', xsize=95)
     wcurgband = widget_label(wgbandbase, value='     ', /align_left, uname='curgband', uvalue='curgband', xsize=150)
@@ -2401,7 +2532,7 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
 
     wspeccontrol = widget_base(wright, /row, /align_center, tab_mode=1)
     wkeepoldfitcontrol = widget_base(wspeccontrol,/row,/frame)
-    wkeepoldfit = cw_bgroup(wkeepoldfitcontrol, ['compare old chisq','dont compare(replace)'],/exclusive, set_value=1, uname='keepoldfit', uvalue='keepoldfit',row=1)
+    wkeepoldfit = cw_bgroup(wkeepoldfitcontrol, ['compare old chisq','dont compare(replace)'],/exclusive, set_value=0, uname='keepoldfit', uvalue='keepoldfit',row=1)
 
     wycontrol = widget_base(wspeccontrol, /frame, /row)
     wylow = widget_text(wycontrol, xsize=8, /editable, uname='ylow', uvalue='ylow')
@@ -2442,28 +2573,34 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     self.indend   = ptr_new(indbandend)
     self.indname  = ptr_new(indname)
 
-   degendir = '/scr2/nichal/workspace4/test_shortwl/sspdegen/sspdegen_short/'
-   degenfile = file_search(degendir+'age*_sspdegen_gridspec_shortwl.fits',count=cdegenfile)
+   degendir = '/scr2/nichal/workspace4/sps_fit/sspdegen/sspdegen_ms0451/'
+   degenfile = file_search(degendir+'age*_sspdegen_gridspec_ms0451.fits',count=cdegenfile)
    for i=0,cdegenfile-1 do begin
       degen_sps = mrdfits(degenfile(i),1,/silent)
       if i eq 0 then begin
+           fits_info,degenfile(i),/silent,n_ext=nalpha
            nfeh = n_elements(degen_sps)
            nage = cdegenfile
-           degen_fehgrid = fltarr(nfeh,nage)
-           degen_agegrid = fltarr(nfeh,nage)
+           degen_fehgrid = fltarr(nfeh,nage,nalpha)
+           degen_agegrid = fltarr(nfeh,nage,nalpha)
+           degen_alphagrid = fltarr(nfeh,nage,nalpha)
            degen_file = strarr(nage)
+           for j=0,nalpha-1 do begin
+              degen_sps = mrdfits(degenfile(i),j+1,/silent)
+              degen_alphagrid[*,*,j] = rebin(degen_sps.alpha,nfeh,nage)
+           endfor
       endif
       filebase = file_basename(degenfile(i),'.fits')
       agei = fix(strmid(filebase,3,2))
 
-      degen_file(agei) = degenfile(i)
-      degen_fehgrid(*,agei) = degen_sps.feh
-      degen_agegrid(*,agei) = degen_sps.age
+      degen_file[agei] = degenfile(i)
+      degen_fehgrid[*,agei,*] = rebin(degen_sps.feh,nfeh,nalpha)
+      degen_agegrid[*,agei,*] = rebin(degen_sps.age,nfeh,nalpha)
     endfor 
     self.degen_file = ptr_new(degen_file)
     self.degen_fehgrid = ptr_new(degen_fehgrid)
     self.degen_agegrid = ptr_new(degen_agegrid)
-
+    self.degen_alphagrid = ptr_new(degen_alphagrid)
     common random, seed
     seed = systime(1)
     
@@ -2497,6 +2634,7 @@ pro sps_fit__define
              degen_file:ptr_new(), $
              degen_fehgrid:ptr_new(), $
              degen_agegrid:ptr_new(), $
+             degen_alphagrid:ptr_new(), $
              nspec:0L, $
              i:0L, $
              keystate:0, $

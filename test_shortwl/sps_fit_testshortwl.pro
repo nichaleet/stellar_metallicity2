@@ -558,9 +558,11 @@ pro sps_fit::fit_all
         science = scienceall[self.i]
         if science.good eq 0 then continue
         self->fit, science
-        if (keepoldfit eq 0 and science.chisq lt scienceall[self.i].chisq) or (keepoldfit eq 1) then $
+        if (keepoldfit eq 0 and science.chisq lt scienceall[self.i].chisq) or (keepoldfit eq 1) then begin
             scienceall[self.i] = science
-        scienceall[self.i] = science
+            if keepoldfit eq 0  then widget_control, widget_info(self.base, find_by_uname='status'), set_value='Replaced fit'
+
+        endif
         self->statusbox
     endfor
     ptr_free, self.science

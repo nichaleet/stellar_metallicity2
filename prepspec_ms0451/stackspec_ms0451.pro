@@ -11,7 +11,6 @@ pro stackspec::combine,spec,noredraw=noredraw
    endif
 
    if cgood gt 1 then begin ;stack continuum and make output structure (strout)
-       spec.exptime = total(spec.indiv_exptime[wgood])
        sn = spec.indiv_sn[wgood]
        ;shift velocity to heliocentric frame
        lambdaarr = spec.indiv_lambda[*,wgood] ;[npix,cgood]
@@ -562,7 +561,6 @@ pro stackspec::redraw
    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Ready.'
 end
 
-
 pro stackspec::statusbox, spec=spec
     common npixcom, npix,ndup
     if ~keyword_set(spec) then spec = *self.spec
@@ -585,58 +583,74 @@ pro stackspec::statusbox, spec=spec
     widget_control, widget_info(self.base, find_by_uname='z'), set_value=strcompress(string(self.z, format='(D5.3)'), /rem)
 end
 
+pro stackspec::smoothspec, spec
+   common smoothpar, smooth_veldisp
+   common npixcom, npix,ndup
+   ndup = spec.indiv_count
+   dlam = fltarr(npix)+smooth_veldisp
+   for iobs=0,ndup-1 do begin
+      spec.indiv_spec_smoothed[*,iobs] = smooth_gauss_wrapper(spec.indiv_lambda[*,iobs],$
+                spec.indiv_spec[*,iobs],spec.indiv_lambda[*,iobs],dlam,ivar1=spec.indiv_ivar[*,iobs],$
+                ivar2=ivarout)
+      spec.indiv_ivar_smoothed = ivarout
+   endfor
+end
 
-pro stackspec::getspec, list=list, redo=redo
+pro stackspec::getspec, redo=redo
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Initializing ...'
     common npixcom, npix,ndup
-    common mask_in, mask_in, listfile
+    common file, inputfile, massrange, outfits
 
-    npix = 2834
-    objname = (strsplit(listfile,'ms',/extract,/regex))[0]
-    specfits = self.directory+objname+'.fits'
-    datadir = '/scr2/nichal/workspace_lowmass/dbsp_data/'
-    if ~file_test(specfits) or keyword_set(redo) then begin 
-       ndup = n_elements(list)
-       spec = {spec}
-       spec.mask = mask_in
-       spec.objname = objname
-       spec.indiv_count = ndup
-       for iobs =0, ndup-1 do begin
-           filenow = datadir+mask_in+'/'+list[iobs]
-           if file_test(filenow) eq 0 then begin
-               stop, 'cannot find file '+filenow
-               continue
-           endif
-           array = readfits(filenow,hdr,/silent)
-           spec.indiv_spec[*,iobs] = array[*,0,0]
-           spec.indiv_lambda[*,iobs] = (findgen(npix)-sxpar(hdr,'CRPIX1')+1)*sxpar(hdr,'CD1_1')+sxpar(hdr,'CRVAL1')
-           spec.indiv_ivar[*,iobs] = 1./(array[*,0,3])^2
-           spec.indiv_sky[*,iobs] = array[*,0,2]
-           spec.indiv_combmask[*,iobs]=1
-           spec.indiv_airmass[iobs] = float(sxpar(hdr,'airmass'))
-           spec.indiv_jd[iobs] = double(sxpar(hdr,'jd'))
-           radec = stringradec2deci(sxpar(hdr,'ra'), sxpar(hdr,'dec'))
-           spec.indiv_ra[iobs] = radec[0] 
-           spec.indiv_dec[iobs] = radec[1]
-           spec.indiv_objname[iobs] = sxpar(hdr,'OBJECT')
-           spec.indiv_filename[iobs] = filenow
-           spec.indiv_exptime[iobs] = float(sxpar(hdr,'exptime'))
-           spec.indiv_vhelio[iobs] = 0. 
-           spec.indiv_good[iobs] = 1
-      endfor
-      self->indivsn,spec
-      self->combine,spec,/noredraw
-      self->statusbox, spec=spec
-      self->writespec,spec
-      ptr_free, self.spec
-      self->readspec
-   endif else begin
-      spec = mrdfits(specfits, 1, /silent)
-      ptr_free,self.spec
-      self.spec = ptr_new(spec)
-      self.i = 0
-      self->readspec
-   endelse
+    npix = 8192
+    if ~file_test(outfits[0]) or keyword_set(redo) then begin 
+       ;read all the spec files
+       data = mrdfits(inputfile,1)
+       ;calculate sn per angstrom
+       snperpix = data.sn
+       snperang = sn
+       for i=0,n_elements(snperpix)-1 do begin
+          dlam = median(-1.*ts_diff(data[i].lambda,1)/(1.+data.z)) ;rest lambda
+          snperang[i] = snperpix/sqrt(dlam)  
+       endfor
+       ;get data for each mass range
+       for i=0,n_elements(massrange)-2 do begin
+          sel = where(data.logmstar ge massrange[i] and data.logmstar lt massrange[i+1] $
+                      and snperang gt 3 and snperang le 10,ndup)
+          if csel lt 3 then stop,'Warning: there are less than 3 galaxies in this mass range'
+          spec = {spec}
+          objname = file_basename(outfits[i],'.fits') 
+          spec.mask = 'spline'
+          spec.fileref = inputfile
+          spec.objname = objname
+          spec.indiv_count = ndup
+          for iobs =0, ndup-1 do begin
+             datanow = data[sel[iobs]]
+             znow = datanow.zspec 
+             if znow le 0. then znow = datanow.z
+             spec.indiv_spec[*,iobs] = datanow.contdiv
+             spec.indiv_lambda[*,iobs] = datanow.lambda/(1.+znow)
+             spec.indiv_ivar[*,iobs] = datanow.contdivivar
+             spec.indiv_combmask[*,iobs]=1
+             spec.indiv_objname[iobs] = datanow.objname
+             spec.indiv_sn[iobs] = snperang[sel[iobs]]
+             spec.indiv_vhelio[iobs] = 0. 
+             spec.indiv_good[iobs] = 1
+         endfor
+         self->smoothspec,spec
+         ;NL stopped here
+         self->combine,spec,/noredraw
+        
+         self->statusbox, spec=spec
+         self->writespec,spec
+         ptr_free, self.spec
+         self->readspec
+      endif else begin
+         spec = mrdfits(specfits, 1, /silent)
+         ptr_free,self.spec
+         self.spec = ptr_new(spec)
+         self.i = 0
+         self->readspec
+      endelse
 end
 
 
@@ -662,21 +676,23 @@ pro stackspec::readspec
 
 end
 
-pro stackspec::initialize_directory, directory=directory,redo=redo
+pro stackspec::initialize_directory, inputfile=inputfile,redo=redo
+   common file, inputspecfile, massrange
+   common mask_in, mask_in, outfits
 
-   common mask_in, mask_in, listfile
-   datadir = '/scr2/nichal/workspace_lowmass/dbsp_data/'
-   readcol,datadir+mask_in+'/'+listfile,list,format='A'
-
-   newdirectory = '/scr2/nichal/workspace_lowmass/dbsp_data/reduced_data/'+mask_in+'/'
+   newdirectory = '/scr2/nichal/workspace4/prepspec_ms0451/data/stacked/'
    if ~file_test(newdirectory) then file_mkdir, newdirectory
 
    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Reading directory ...'
-
-   specfits = newdirectory+(strsplit(listfile,'ms',/extract,/regex))[0]+'.fits'
+   
+   nfiles = n_elements(massrange)-1
+   outfits = strarr(nfiles)
+   for i=0,nfiles-1 do outfits[i] = newdirectory+'stackedms0451_mass'+$
+                                     strtrim(string(massrange[i],format='(f4.1)'),2)+'_'+$
+                                     strtrim(string(massrange[i+1],format='(f4.1)'),2)+'.fits'
    self.directory = newdirectory
 
-   self->getspec, list=list, redo=redo
+   self->getspec, inputfile=inputfile
    self->readspec
    spec = *self.spec
    self->statusbox, spec=spec
@@ -780,7 +796,7 @@ function stackspec::INIT, inputfile=inputfile
     common random, seed
     seed = systime(1)
 
-    self->initialize_directory, directory=directory
+    self->initialize_directory, inputfile=inputfile
     return, 1
 end
 
@@ -819,22 +835,17 @@ pro spec__define
            lambda:dblarr(npix), $
            spec:dblarr(npix), $
            ivar:dblarr(npix), $
-           sky:dblarr(npix), $
            sn:-999d, $
-           exptime:-999d, $
+           fileref:'', $
            indiv_spec:dblarr(npix,ndup), $
            indiv_lambda:dblarr(npix,ndup), $
            indiv_ivar:dblarr(npix,ndup), $
-           indiv_sky:bytarr(npix,ndup), $
+           indiv_spec_smoothed:dblarr(npix,ndup), $
+           indiv_ivar_smoothed:dblarr(npix,ndup), $
            indiv_combmask:bytarr(npix,ndup), $
-           indiv_airmass:fltarr(ndup), $ 
-           indiv_jd:fltarr(ndup), $
-           indiv_ra:fltarr(ndup), $
-           indiv_dec:dblarr(ndup), $
            indiv_sn:fltarr(ndup),$
            indiv_objname:strarr(ndup),$
            indiv_filename:strarr(ndup),$
-           indiv_exptime:dblarr(ndup), $
            indiv_vhelio:dblarr(ndup), $
            indiv_good:bytarr(ndup), $
            indiv_count:-999L}
@@ -844,7 +855,10 @@ end
 pro stackspec_ms0451
    common file, inputspecfile, massrange
    common npixcom, npix,ndup
-   inputfile = '/scr2/nichal/workspace4/sps_fit/data/spline/sps_fit.fits.gz'
+   common smoothpar, smooth_veldisp
+   inputfile = '/scr2/nichal/workspace4/sps_fit/data/spline_ms0451/sps_fit01.fits.gz'
+   smooth_veldisp = 350 ;km/s
+   if file_test(inputfile) eq 0 then stop,'Stopped: cannot find input file'
    massrange = [10.,10.5,11.,11.5]   
    n = obj_new('stackspec',inputfile=inputfile)
 

@@ -8,7 +8,8 @@ pro combinesps,files,nameout,dir=dir
    nameout = dir+nameout
    str = mrdfits(dir+files[0],1,/silent)
    if nfiles gt 1 then for i=1,nfiles-1 do begin
-      newstr = mrdfits(files[i],1,/silent)
+      if file_test(dir+files[i]) eq 0 then stop,'cannot find file '+dir+files[i]
+      newstr = mrdfits(dir+files[i],1,/silent)
       wreplace = where(newstr.chisq lt str.chisq,nreplace)
       if nreplace gt 0 then begin
          str(wreplace) = newstr(wreplace) 

@@ -2,7 +2,7 @@ pro mkfake_spec_walpha,notput=notput
    ;The fake data would be similar to that of Deimos data of ms0451
    zmet = [-0.5,-0.2,0.1]  
    age = [3.]
-   sn  = [5,10,15,20,30] ;per angstrom 
+   sn  = [5,10,15,20,30] ;per angstrom at observed wl
    alpha = [-0.25,-0.15,0.,0.15,0.25] 
    element=['Mg','O','Si','Ca','Ti']
    nelements = n_elements(element)
@@ -19,7 +19,7 @@ pro mkfake_spec_walpha,notput=notput
    dlam = fltarr(nwl)+4.7 ;FWHM in Angstrom for Deimos600ZD grating 1" slit      
    lambdaobs = findgen(nwl)*dwl+iwave*(1.+redshift)
    lambdarest = lambdaobs/(1.+redshift)
-   snperpix = sn*sqrt(dwl)
+   snperpix = sn*sqrt(dwl) 
 
    ;setup for output names
    dir = '/scr2/nichal/workspace4/test_alpha/mockdata_alpha/'
