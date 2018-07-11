@@ -724,7 +724,7 @@ end
 
 pro sps_fit::cal_uncertainties, science
    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Calculatign uncertainties ...'
-   spec_arr = *self.degen_sps
+   grid_file = *self.degen_file   ;nage
    grid_feh = *self.degen_fehgrid
    grid_age = *self.degen_agegrid 
    grid_alpha = *self.degen_alphagrid ;nfeh x nage x nalpha

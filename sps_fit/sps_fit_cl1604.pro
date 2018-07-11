@@ -710,10 +710,22 @@ end
 
 pro sps_fit::cal_uncertainties, science
    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Calculatign uncertainties ...'
-   spec_arr = *self.degen_sps
-   grid_feh = *self.degen_fehgrid
-   grid_age = *self.degen_agegrid
-   grid_alpha = *self.degen_alphagrid ;nfeh x nage x nalpha
+           science.npix = nlamb
+            science.lambda[0:nlamb-1] = data.lambda
+
+   if max(science.lambda)/(1.+science.zspec) lt 5000. then begin
+      grid_file   = *self.degenshort_file
+      grid_feh   = *self.degenshort_fehgrid
+      grid_age   = *self.degenshort_agegrid
+      grid_alpha = *self.degenshort_alphagrid ;nfeh x nage x nalpha
+      print, 'use short wavelength degen grid'
+   endif else begin
+      grid_file   = *self.degenfull_file
+      grid_feh   = *self.degenfull_fehgrid
+      grid_age   = *self.degenfull_agegrid
+      grid_alpha = *self.degenfull_alphagrid ;nfeh x nage x nalpha
+      print, 'use full wavelength degen grid'
+   endelse
    loc_alpha = where(grid_alpha[0,0,*] eq 0.,cloc_alpha)
    loc_ext = loc_alpha+1
    if cloc_alpha eq 0 then stop,'Cannot find where alpha/Fe = 0'
@@ -789,10 +801,19 @@ end
 
 pro sps_fit::cal_uncertainties_alpha, science
    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Calculatign uncertainties ...'
-   grid_file = *self.degen_file   ;nage
-   grid_feh = *self.degen_fehgrid ;nfeh x nage x nalpha
-   grid_age = *self.degen_agegrid ;nfeh x nage x nalpha
-   grid_alpha = *self.degen_alphagrid ;nfeh x nage x nalpha
+   if max(science.lambda)/(1.+science.zspec) lt 5000. then begin
+      grid_file   = *self.degenshort_file
+      grid_feh   = *self.degenshort_fehgrid
+      grid_age   = *self.degenshort_agegrid
+      grid_alpha = *self.degenshort_alphagrid ;nfeh x nage x nalpha
+      print, 'use short wavelength degen grid'
+   endif else begin
+      grid_file   = *self.degenfull_file
+      grid_feh   = *self.degenfull_fehgrid
+      grid_age   = *self.degenfull_agegrid
+      grid_alpha = *self.degenfull_alphagrid ;nfeh x nage x nalpha
+      print, 'use full wavelength degen grid'
+   endelse
    ;find where is the spec closest to the input age and feh and alpha
    min_dist = min(sqrt((grid_feh-science.feh)^2+(grid_age-science.age)^2+(grid_alpha-science.alphafe)^2),iref)
    if min_dist gt 0.1 then print,strtrim(string(min_dist))+' matching might be off grid'
@@ -2451,9 +2472,14 @@ pro sps_fit__define
              indstart:ptr_new(), $
              indend:ptr_new(), $
              indname:ptr_new(), $
-             degen_sps:ptr_new(), $
-             degen_fehgrid:ptr_new(),$
-             degen_agegrid:ptr_new(),$
+             degenshort_file:ptr_new(), $
+             degenshort_fehgrid:ptr_new(),$
+             degenshort_agegrid:ptr_new(),$
+             degenshort_alphagrid:ptr_new(), $
+             degenfull_file:ptr_new(), $
+             degenfull_fehgrid:ptr_new(),$
+             degenfull_agegrid:ptr_new(),$
+             degenfull_alphagrid:ptr_new(), $
              nspec:0L, $
              i:0L, $
              keystate:0, $
