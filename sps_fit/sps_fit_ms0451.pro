@@ -2,10 +2,12 @@
 pro sps_iterproc, funcname, p, iter, fnorm, functargs=functargs, parinfo=pi, quiet=quiet, dof=dof
     common sps_iterproc, contiter
     common toprint, agediff, zdiff
+    common mask_in, mask_in, copynum
+
     if iter gt 1 then begin
        print, contiter, p[0], p[1], p[2],p[3], fnorm/dof, dof,abs(zdiff),abs(agediff),format='(I4,2X,D6.3,1X,D5.2,2X,D6.1,2x,D6.3,1X,D10.5,1X,I4,2X,D8.4,2X,D8.4)'
        if contiter mod 2 eq 0 then begin
-          printf,1,contiter, p[0], p[1], p[2],p[3], fnorm/dof, dof,abs(zdiff),abs(agediff),format='(I4,2X,D6.3,1X,D5.2,2X,D6.1,2x,D6.3,1X,D10.5,1X,I4,2X,D8.4,2X,D8.4)'
+          printf,copynum,contiter, p[0], p[1], p[2],p[3], fnorm/dof, dof,abs(zdiff),abs(agediff),format='(I4,2X,D6.3,1X,D5.2,2X,D6.1,2x,D6.3,1X,D10.5,1X,I4,2X,D8.4,2X,D8.4)'
        endif
     endif
 end
@@ -14,11 +16,12 @@ pro sps_iterproc_alpha, funcname, p, iter, fnorm, functargs=functargs, $
                          parinfo=pi, quiet=quiet, dof=dof
     common sps_iterproc, contiter
     common toprint, agediff, zdiff
+    common mask_in, mask_in, copynum
 
     if iter gt 1 then begin
        print, contiter, p[0], p[1], p[2],p[3],p[4], fnorm/dof, dof,abs(zdiff),abs(agediff),format='(I4,2X,D6.3,1X,D5.2,2X,D6.1,2x,D5.2,2x,D6.3,1X,D10.5,1X,I4,2X,D8.4,2X,D8.4)'
        if contiter mod 2 eq 0 then begin
-       printf,1,contiter, p[0], p[1], p[2],p[3], fnorm/dof, dof,abs(zdiff),abs(agediff),format='(I4,2X,D6.3,1X,D5.2,2X,D6.1,2x,D5.2,2x,D6.3,1X,D10.5,1X,I4,2X,D8.4,2X,D8.4)'
+       printf,copynum,contiter, p[0], p[1], p[2],p[3], fnorm/dof, dof,abs(zdiff),abs(agediff),format='(I4,2X,D6.3,1X,D5.2,2X,D6.1,2x,D5.2,2x,D6.3,1X,D10.5,1X,I4,2X,D8.4,2X,D8.4)'
        endif
     endif
 end
@@ -66,6 +69,7 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
     savedata = 0 ;1
 
     znow = science.zspec
+    if znow lt 0 then znow = science.z
     if znow lt 0 then stop
     reallambda = science.lambda
     nlambda = n_elements(reallambda)
@@ -76,6 +80,10 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
     dlam_all = science.dlam  ;this is already sigma, not fwhm
+    baddlam = where(~finite(dlam_all),cbaddlam,complement=gooddlam)
+    if cbaddlam gt 0 then begin
+       dlam_all(baddlam) = interpol(dlam_all(gooddlam),reallambda(gooddlam),reallambda(baddlam))
+    endif
 
     pi = replicate({value:0d, fixed:0, limited:[1,1], limits:[0.D,0.D], parname:'', mpprint:0, mpformat:'', step:0d, tied:''}, 4)
    
@@ -100,8 +108,9 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
     pi.mpformat = ['(D6.3)', '(D5.2)', '(D6.1)','(D6.3)']
     print, 'prior range:',pi.limits
 
-    won = where(science.fitmask eq 1 and finite(science.contdiv) and finite(science.contdivivar) and science.contdivivar gt 0 and reallambda/(1.+znow) gt 3500. and reallambda/(1.+znow) lt 7400., con)
-
+    won = where(science.fitmask eq 1 and finite(science.contdiv) and finite(science.dlam) and $
+                finite(science.contdivivar) and science.contdivivar gt 0 and $
+                reallambda/(1.+znow) gt 3500. and reallambda/(1.+znow) lt 7400., con)
     if con lt 10 then begin
         pi.value = [-999d, -999d, -999d,-999d]
         perror = [-999d, -999d, -999d, -999d]
@@ -121,20 +130,21 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
     nloop=0
     widget_control, widget_info(self.base, find_by_uname='maxnloop'), get_value=maxnloop
     maxnloop = fix(maxnloop[0])
-    if maxnloop eq 0 then maxnloop = 50
+    if maxnloop eq 0 then maxnloop = 150
+    maxnloop = 150
     print, '* * * * * * * * * * * * * * * * * * * *'
     print, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
     print, '* * * * * * * * * * * * * * * * * * * *'
     print, '  i Z/Z_sun   age sigma_v  redhift    chi^2  DOF   ZDIFF  AGEDIFF'
     print, '--- ------- ----- ------- ---------  -------- ---- -----  ------'
 
-    openw,1,'/scr2/nichal/workspace4/sps_fit/logsps/sps_fit_ms0451'+copynum+'.log',/append
-    printf,1, '* * * * * * * * * * * * * * * * * * * *'
-    printf,1,systime()
-    printf,1, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
-    printf,1, '* * * * * * * * * * * * * * * * * * * *'
-    printf,1, '  i Z/Z_sun   age sigma_v  redhift    chi^2  DOF   ZDIFF  AGEDIFF'
-    printf,1, '--- ------- ----- ------- ---------  -------- ---- -----  ------'
+    openw,copynum,'/scr2/nichal/workspace4/sps_fit/logsps/sps_fit_ms0451'+copynum+'.log',/append
+    printf,copynum, '* * * * * * * * * * * * * * * * * * * *'
+    printf,copynum,systime()
+    printf,copynum, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
+    printf,copynum, '* * * * * * * * * * * * * * * * * * * *'
+    printf,copynum, '  i Z/Z_sun   age sigma_v  redhift    chi^2  DOF   ZDIFF  AGEDIFF'
+    printf,copynum, '--- ------- ----- ------- ---------  -------- ---- -----  ------'
 
 ;;things to keep during the while loop
     bestchisq = 9999.
@@ -186,10 +196,11 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
        
         bkpt = slatec_splinefit(restlambda[won], science.contdiv[won]/spsbestfit[won], coeff, invvar=science.contdivivar[won]*(spsbestfit[won])^2, bkspace=150, upper=3, lower=3, /silent)
         if bkpt[0] eq -1 then begin
-            pi.value = [-999d, -999d, -999d, -999d]
-            perror = [-999d, -999d, -999d, -999d]
-            science.spsspec = -999d
-            science.spscont = -999d 
+            pi.value = [-999d, -999d, -999d, science.z]
+            perror = [-999d, -999d, -999d, science.z]
+            science.spsspec = 1
+            science.spscont = 1
+            !p.multi=[0,1,1]
             break
         endif
         cont = slatec_bvalu(restlambda, bkpt, coeff)
@@ -224,9 +235,8 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
         valuearr[*,nloop] = pars
         errorarr[*,nloop] = perror
         nloop +=1
-
      endwhile
-
+    close,copynum
     if savedata eq 1 then begin
        str = {chisq:chisqarr,param:valuearr,perror:errorarr,paraname:['Z','age','sigmav','redshift'],objname:strtrim(science.objname, 2),dof:dof}
        save,str,filename=self.directory+'/sps_fit_data_'+strtrim(string(self.i+1, format='(I3)'), 2)+'.sav'
@@ -313,6 +323,10 @@ pro sps_fit::fitalpha, science, noredraw=noredraw, nostatusbar=nostatusbar
     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
     dlam_all = science.dlam
+    baddlam = where(~finite(dlam_all),cbaddlam,complement=gooddlam)
+    if cbaddlam gt 0 then begin
+       dlam_all(baddlam) = interpol(dlam_all(gooddlam),reallambda(gooddlam),reallambda(baddlam))
+    endif
 
     pi = replicate({value:0d, fixed:0, limited:[1,1], limits:[0.D,0.D], parname:'', mpprint:0, mpformat:'', step:0d, tied:''}, 5)
 
@@ -359,7 +373,7 @@ pro sps_fit::fitalpha, science, noredraw=noredraw, nostatusbar=nostatusbar
     widget_control, widget_info(self.base, find_by_uname='maxnloop'), get_value=maxnloop
     maxnloop = fix(maxnloop[0])
     if maxnloop eq 0 then maxnloop = 150
-    ;maxnloop = 150
+    maxnloop = 150
     print, '* * * * * * * * * * * * * * * * * * * *'
     print, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
     print, '* * * * * * * * * * * * * * * * * * * *'
@@ -367,12 +381,12 @@ pro sps_fit::fitalpha, science, noredraw=noredraw, nostatusbar=nostatusbar
     print, '--- ------- ----- ------- --------- --------- -------- ---- -----  ------'
 
     openw,1,'/scr2/nichal/workspace4/sps_fit/logsps/sps_fit_ms0451alpha'+copynum+'.log',/append
-    printf,1, '* * * * * * * * * * * * * * * * * * * *'
-    printf,1,systime()
-    printf,1, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
-    printf,1, '* * * * * * * * * * * * * * * * * * * *'
-    printf,1, '  i Z/Z_sun   age sigma_v  redhift  alpha   chi^2  DOF   ZDIFF  AGEDIFF'
-    printf,1, '--- ------- ----- ------- --------- --------- -------- ---- -----  ------'
+    printf,copynum, '* * * * * * * * * * * * * * * * * * * *'
+    printf,copynum,systime()
+    printf,copynum, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
+    printf,copynum, '* * * * * * * * * * * * * * * * * * * *'
+    printf,copynum, '  i Z/Z_sun   age sigma_v  redhift  alpha   chi^2  DOF   ZDIFF  AGEDIFF'
+    printf,copynum, '--- ------- ----- ------- --------- --------- -------- ---- -----  ------'
 ;;things to keep during the while loop
     bestchisq = 9999.
     bestvalue = [99.,99.,99.,99.,99.]
@@ -461,8 +475,7 @@ pro sps_fit::fitalpha, science, noredraw=noredraw, nostatusbar=nostatusbar
         nloop +=1
 
      endwhile
-
-    close,1
+    close,copynum
     if savedata eq 1 then begin
        str = {chisq:chisqarr,param:valuearr,perror:errorarr,paraname:['Z','age','sigmav','redshift'],objname:strtrim(science.objname, 2),dof:dof}
        save,str,filename=self.directory+'/sps_fit_data_'+strtrim(string(self.i+1, format='(I3)'), 2)+'.sav'
@@ -1847,9 +1860,9 @@ pro sps_fit::mask, science, nomask=nomask, zfind=zfind, nozfind=nozfind, nmc=nmc
         ;   if cw gt 0 then mask[w]=0
         ;endfor
         ; 5) extreme noises
-        w = where(science.contdiv gt 2. or science.contdiv lt -0.5, cw)
-        nlambda = n_elements(science.lambda)
-        if cw gt 0 then for i=0,cw-1 do mask[w[i]-2>0:w[i]+2<nlambda-1]=0
+   ;     w = where(science.contdiv gt 2. or science.contdiv lt -0.5, cw)
+   ;     nlambda = n_elements(science.lambda)
+   ;     if cw gt 0 then for i=0,cw-1 do mask[w[i]-2>0:w[i]+2<nlambda-1]=0
 
         ;6) where it's not finite
         w = where(~finite(science.contdiv) or ~finite(science.lambda),c)
@@ -2163,7 +2176,7 @@ pro sps_fit::getscience, files=files
     npix = 8192
 
     observatory, 'keck', obs
-    sciencefits = self.directory+(self.lowsn eq 1 ? 'sps_fit_lowsn.fits.gz' : 'sps_fit.fits.gz')
+    sciencefits = self.directory+'sps_fit'+copynum+'.fits.gz'
     if ~file_test(sciencefits) then begin
         if ~keyword_set(files) then message, 'You must specify the FILES keyword if a sps_fit.fits.gz file does not exist.'
         c = n_elements(files)
@@ -2344,6 +2357,7 @@ pro sps_fit::writescience
     mwrfits, scienceall, sciencefits, /create, /silent
     spawn, 'gzip -f '+sciencefits
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Ready.'
+    print, 'saved file'
 end
 
 
@@ -2413,7 +2427,8 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     wforward = widget_button(wstep, value='--->', uvalue='forward', uname='forward', tab_mode=1, xsize=75)
     wprepbase = widget_base(wleft, /row, /align_center)
     wfit = widget_button(wprepbase, value='Fit', uvalue='fit', uname='fit', tab_mode=1, xsize=85)
-    wfitz = widget_button(wprepbase, value='Fit redshift', uvalue='fitz', uname='fitz', tab_mode=1, xsize=85)
+;    wfitz = widget_button(wprepbase, value='Fit redshift', uvalue='fitz', uname='fitz', tab_mode=1, xsize=85)
+    wfitalpha = widget_button(wprepbase, value='Fit alpha', uvalue='fitalpha', uname='fitalpha', tab_mode=1, xsize=85)
     windicesbase = widget_base(wleft, /row, /align_center)
     windices = widget_button(windicesbase, value='Compute Indices', uvalue='indices', uname='indices', tab_mode=1, xsize=100)
     wdefault_mask = widget_button(windicesbase,value='Default Mask',uvalue='default_mask',uname='default_mask',tab_mode=1,xsize=100)

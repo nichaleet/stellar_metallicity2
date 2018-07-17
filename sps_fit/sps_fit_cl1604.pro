@@ -2,10 +2,12 @@
 pro sps_iterproc, funcname, p, iter, fnorm, functargs=functargs, parinfo=pi, quiet=quiet, dof=dof
     common sps_iterproc, contiter
     common toprint, agediff, zdiff
+    common mask_in, mask_in, copynum
+
     if iter gt 1 then begin
        print, contiter, p[0], p[1], p[2],p[3], fnorm/dof, dof,abs(zdiff),abs(agediff),format='(I4,2X,D6.3,1X,D5.2,2X,D6.1,2x,D6.3,1X,D10.5,1X,I4,2X,D8.4,2X,D8.4)'
        if contiter mod 2 eq 0 then begin
-          printf,1,contiter, p[0], p[1], p[2],p[3], fnorm/dof, dof,abs(zdiff),abs(agediff),format='(I4,2X,D6.3,1X,D5.2,2X,D6.1,2x,D6.3,1X,D10.5,1X,I4,2X,D8.4,2X,D8.4)'
+          printf,copynum,contiter, p[0], p[1], p[2],p[3], fnorm/dof, dof,abs(zdiff),abs(agediff),format='(I4,2X,D6.3,1X,D5.2,2X,D6.1,2x,D6.3,1X,D10.5,1X,I4,2X,D8.4,2X,D8.4)'
        endif
     endif
 end
@@ -14,11 +16,12 @@ pro sps_iterproc_alpha, funcname, p, iter, fnorm, functargs=functargs, $
                         parinfo=pi, quiet=quiet, dof=dof
     common sps_iterproc, contiter
     common toprint, agediff, zdiff
+    common mask_in, mask_in, copynum
 
     if iter gt 1 then begin
        print, contiter, p[0], p[1], p[2],p[3],p[4], fnorm/dof, dof,abs(zdiff),abs(agediff),format='(I4,2X,D6.3,1X,D5.2,2X,D6.1,2x,D5.2,2x,D6.3,1X,D10.5,1X,I4,2X,D8.4,2X,D8.4)'
        if contiter mod 2 eq 0 then begin
-       printf,1,contiter, p[0], p[1], p[2],p[3], fnorm/dof, dof,abs(zdiff),abs(agediff),format='(I4,2X,D6.3,1X,D5.2,2X,D6.1,2x,D5.2,2x,D6.3,1X,D10.5,1X,I4,2X,D8.4,2X,D8.4)'
+       printf,copynum,contiter, p[0], p[1], p[2],p[3], fnorm/dof, dof,abs(zdiff),abs(agediff),format='(I4,2X,D6.3,1X,D5.2,2X,D6.1,2x,D5.2,2x,D6.3,1X,D10.5,1X,I4,2X,D8.4,2X,D8.4)'
        endif
     endif
 end
@@ -130,12 +133,12 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
     print, '--- ------- ----- ------- ---------  -------- ---- -----  ------'
 
     openw,1,'/scr2/nichal/workspace4/sps_fit/logsps/sps_fit_cl1604'+copynum+'.log',/append
-    printf,1, '* * * * * * * * * * * * * * * * * * * *'
-    printf,1,systime()
-    printf,1, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
-    printf,1, '* * * * * * * * * * * * * * * * * * * *'
-    printf,1, '  i Z/Z_sun   age sigma_v  redhift    chi^2  DOF   ZDIFF  AGEDIFF'
-    printf,1, '--- ------- ----- ------- ---------  -------- ---- -----  ------'
+    printf,copynum, '* * * * * * * * * * * * * * * * * * * *'
+    printf,copynum,systime()
+    printf,copynum, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
+    printf,copynum, '* * * * * * * * * * * * * * * * * * * *'
+    printf,copynum, '  i Z/Z_sun   age sigma_v  redhift    chi^2  DOF   ZDIFF  AGEDIFF'
+    printf,copynum, '--- ------- ----- ------- ---------  -------- ---- -----  ------'
 
 ;;things to keep during the while loop
     bestchisq = 9999.
@@ -219,6 +222,7 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
         nloop +=1
 
      endwhile
+    close,copynum
 
     print,agediff,zdiff,format='("--- ------- ----- ------- ---------  -------- ----",D9.6,2X,D9.6)'                            
     ;;check if the last chisq is the best chisq
@@ -355,12 +359,12 @@ pro sps_fit::fitalpha, science, noredraw=noredraw, nostatusbar=nostatusbar
     print, '--- ------- ----- ------- --------- --------- -------- ---- -----  ------'
 
     openw,1,'/scr2/nichal/workspace4/sps_fit/logsps/sps_fit_cl1604alpha'+copynum+'.log',/append
-    printf,1, '* * * * * * * * * * * * * * * * * * * *'
-    printf,1,systime()
-    printf,1, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
-    printf,1, '* * * * * * * * * * * * * * * * * * * *'
-    printf,1, '  i Z/Z_sun   age sigma_v  redhift  alpha   chi^2  DOF   ZDIFF  AGEDIFF'
-    printf,1, '--- ------- ----- ------- --------- --------- -------- ---- -----  ------'
+    printf,copynum, '* * * * * * * * * * * * * * * * * * * *'
+    printf,copynum,systime()
+    printf,copynum, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
+    printf,copynum, '* * * * * * * * * * * * * * * * * * * *'
+    printf,copynum, '  i Z/Z_sun   age sigma_v  redhift  alpha   chi^2  DOF   ZDIFF  AGEDIFF'
+    printf,copynum, '--- ------- ----- ------- --------- --------- -------- ---- -----  ------'
 ;;things to keep during the while loop
     bestchisq = 9999.
     bestvalue = [99.,99.,99.,99.,99.]
@@ -448,7 +452,7 @@ pro sps_fit::fitalpha, science, noredraw=noredraw, nostatusbar=nostatusbar
         nloop +=1
 
      endwhile
-    close,1
+    close,copynum
     if savedata eq 1 then begin
        str = {chisq:chisqarr,param:valuearr,perror:errorarr,paraname:['Z','age','sigmav','redshift'],objname:strtrim(science.objname, 2),dof:dof}
        save,str,filename=self.directory+'/sps_fit_data_'+strtrim(string(self.i+1, format='(I3)'), 2)+'.sav'
@@ -2055,12 +2059,12 @@ end
 
 pro sps_fit::getscience, files=files
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Initializing ...'
-    common mask_in, mask_in
+    common mask_in, mask_in, copynum
     common npixcom, npix
     npix = 12619
     
     observatory, 'keck', obs
-    sciencefits = self.directory+(self.lowsn eq 1 ? 'sps_fit_lowsn.fits.gz' : 'sps_fit.fits.gz')
+    sciencefits = self.directory+'sps_fit'+copynum+'.fits.gz'
     if ~file_test(sciencefits) then begin
         if ~keyword_set(files) then message, 'You must specify the FILES keyword if a sps_fit.fits.gz file does not exist.'
         ;only take quiescent galaxies with redshift z=0.8 to 1.0
@@ -2205,7 +2209,7 @@ end
 
 
 pro sps_fit::initialize_directory, directory=directory
-    common mask_in, mask_in
+    common mask_in, mask_in, copynum
 
     newdirectory = '/scr2/nichal/workspace4/sps_fit/data/'+mask_in+'_cl1604/'
     if ~file_test(newdirectory) then file_mkdir, newdirectory
@@ -2588,9 +2592,12 @@ end
 
 
 pro sps_fit_cl1604
-    common mask_in, mask_in
+    common mask_in, mask_in, copynum
     mask = 'spline'
     mask_in = mask
+    if ~keyword_set(copyi) then copyi=1
+    copynum = strtrim(string(copyi,format='(I02)'),2)
+    if keyword_set(all) then copynum='all'
     directory = '/scr2/nichal/workspace4/prepspec_cl1604/data/'+mask
     if ~file_test(directory) then message, 'Mask not found.'
     n = obj_new('sps_fit', directory=directory)
