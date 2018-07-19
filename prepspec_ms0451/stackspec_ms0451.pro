@@ -1,13 +1,14 @@
 pro stackspec::combine,spec,noredraw=noredraw
    common npixcom, npix,ndup
+   common smoothpar, smooth_veldisp
+
    wgood = where(spec.indiv_good eq 1, cgood)
    if cgood eq 1 then begin
        spec.lambda = spec.indiv_lambda[*,wgood[0]]*(1.+spec.indiv_vhelio[wgood[0]]/3.e5)
        spec.spec = spec.indiv_spec[*,wgood[0]]
        spec.ivar = spec.indiv_ivar[*,wgood[0]]
-       spec.sky = spec.sky[*,wgood[0]]
-       spec.exptime = spec.indiv_exptime[wgood[0]]
        spec.sn = spec.indiv_sn[wgood[0]]
+       spec.dlam = spec.indiv_dlam[wgood[0]]
    endif
 
    if cgood gt 1 then begin ;stack continuum and make output structure (strout)
@@ -23,6 +24,8 @@ pro stackspec::combine,spec,noredraw=noredraw
        ;use the lambda of the spec with max sn as ref
        lambdafull = lambdaarr[*,ref]
        spec.lambda = lambdafull
+       fdlam = (smooth_veldisp/3.e5)*lambdafull/2.35
+       spec.dlam = fdlam
 
        ;deal with the mask
        combmaskarr = bytarr(npix,cgood)+1
@@ -42,10 +45,19 @@ pro stackspec::combine,spec,noredraw=noredraw
        framearr = bytarr(npix,cgood)+1
        for k=0,cgood-1 do begin
           loc = value_locate(lambdaarr[*,k],lambdafull) ;refvec,value
-          woffrange = where(loc eq -1 or loc eq npix-1,coffrange,complement = winrange)
-          specarr[winrange,k]=interpol(spec.indiv_spec[*,wgood[k]],lambdaarr[*,k],lambdafull[winrange])
-          ivararr[winrange,k]=interpol(spec.indiv_ivar[*,wgood[k]],lambdaarr[*,k],lambdafull[winrange])
-          skyarr[winrange,k]=interpol(spec.indiv_sky[*,wgood[k]],lambdaarr[*,k],lambdafull[winrange])
+          woffrange = where(loc eq -1 or loc eq npix-1,coffrange,complement=winrange,$
+                             ncomplement=cinrange)
+          idlam = interpol(spec.indiv_dlam[*,wgood[k]],lambdaarr[*,k],lambdafull)
+          specout = smooth_gauss_wrapper(lambdaarr[*,k],spec.indiv_spec[*,wgood[k]],$
+                        lambdafull,sqrt(fdlam^2-idlam^2),ivar1=spec.indiv_ivar[*,wgood[k]],$
+                        ivar2=ivarout)
+          if coffrange gt 0 then begin
+             specout[woffrange] = !values.f_infinity
+             ivarout[woffrange] = 0
+          endif  
+          specarr[*,k] = specout
+          ivararr[*,k] = ivarout
+
           framearr[woffrange,k] = 0
           woff = where(combmaskarr[*,k] eq 0,coff)
           if coff gt 0 then framearr[woff,k]=0
@@ -60,16 +72,14 @@ pro stackspec::combine,spec,noredraw=noredraw
               if cwframe ne 1 then stop,'oops something is wrong'
               spec.spec[wnodup[ii]] = specarr[wnodup[ii],wframe]
               spec.ivar[wnodup[ii]] = ivararr[wnodup[ii],wframe]
-              spec.sky[wnodup[ii]] = skyarr[wnodup[ii],wframe]
            endfor
        endif
        wdup = where(nframearr gt 1, cwdup)
        for ii=0,cwdup-1 do begin
-           wnan = where(~finite(ivararr[wdup[ii],*]) or ~finite(specarr[wdup[ii],*]) or (framearr[wdup[ii],*] eq 0),cnan)
+           wnan = where(~finite(ivararr[wdup[ii],*]) or (ivararr[wdup[ii],*] eq 0) $
+                   or ~finite(specarr[wdup[ii],*]) or (framearr[wdup[ii],*] eq 0),cnan)
            dspec = 1./sqrt(abs(ivararr[wdup[ii],*]))
            if cnan gt 0 then dspec(wnan) = 1./0.
-           err = abs(dspec/specarr[wdup[ii],*])
-           spec.sky[wdup[ii]] = wmean(skyarr[wdup[ii],*],abs(err*skyarr[wdup[ii],*]),/nan)
            spec.spec[wdup[ii]]=wmean(specarr[wdup[ii],*],dspec,error=specerr,/nan)
            spec.ivar[wdup[ii]]=1./specerr^2
        endfor
@@ -82,8 +92,10 @@ pro stackspec::combine,spec,noredraw=noredraw
        dev = abs((spec.spec-cont)/cont)
        avgdev = mean(dev)
        w = where(dev lt 3.0*avgdev, c)
-       if c gt 0 then sn_perpix = 1.0/mean(dev[w])
-       spec.sn = sn_perpix
+       if c gt 0 then begin
+          sn_perpix = 1.0/mean(dev[w])
+          spec.sn = sn_perpix
+       endif else spec.sn = 0.
    endif
    self->statusbox, spec=spec
 
@@ -151,6 +163,8 @@ pro stackspec::handle_button, ev
     widget_control, ev.top, get_uvalue=obj
     widget_control, ev.id, get_uvalue=uvalue
     case (uvalue) of
+        'back': self->newspec, increment=-1
+        'next': self->newspec, increment=1
 	'default_range': begin
 	    self->default_range
 	    self->redraw
@@ -164,9 +178,10 @@ pro stackspec::handle_button, ev
 	end
 	'default_mask': self->default_mask
 	'default_vhelio':self->default_vhelio
+        'backward': self->step, -1
+        'forward': self->step, 1
 	'save': begin
 	    spec = *self.spec
-	    self->writespec,spec
 	    self->writespec,spec
 	end
 	'savespec':begin
@@ -183,6 +198,19 @@ pro stackspec::handle_button, ev
     widget_control, widget_info(self.base, find_by_uname='spec'), /input_focus
 end
 
+pro stackspec::step, increment
+    common npixcom, npix,ndup
+    curi = self.indivi
+    curi += increment
+    if curi ge ndup then curi=0
+    if curi lt 0 then curi = ndup-1
+
+    self.indivi = curi
+
+    self.keystate = 0
+    self->statusbox
+    self->redraw
+end
 
 
 pro stackspec::toggle_good
@@ -196,9 +224,27 @@ pro stackspec::toggle_good
     
 end
 
-pro stackspec::newspec, noredraw=noredraw
-
+pro stackspec::newspec, increment=increment, noredraw=noredraw
+   common npixcom, npix,ndup
+    if ~keyword_set(increment) then increment=0
+    newi= self.i
+    newi += increment
+    if newi lt 0 then begin
+        widget_control, widget_info(self.base, find_by_uname='status'), set_value='This is the first spectrum.'
+        return
+    endif
+    if newi gt self.nspec-1 then begin
+        widget_control, widget_info(self.base, find_by_uname='status'), set_value='This is the last spectrum.'
+        return
+    endif
+    widget_control, widget_info(self.base, find_by_uname='filelist'), set_combobox_select=newi
+    self.i = newi
+    self.indivi = 0
     self->readspec
+    spec = *self.spec
+    ndup =  spec.indiv_count
+    newindivlist = strcompress(indgen(ndup),/rem)+'/'+strcompress(ndup, /rem)+' '+spec.indiv_objname 
+    widget_control, widget_info(self.base, find_by_uname='indivfilelist'), set_value=(*self.spec).objname
     self->statusbox    
     self.ylim = minmax((*self.spec).indiv_spec,/nan)
 
@@ -241,13 +287,8 @@ pro stackspec::handle_text, ev
     widget_control, widget_info(self.base, find_by_uname='spec'), /input_focus
 end
 
-pro stackspec::editz,z
-    self.z=z
-    self->redraw
-end
-
 pro stackspec::editvhelio,vhelio,noredraw=noredraw
-   widget_control, widget_info(self.base, find_by_uname='iplotcont'), get_value=wplotcon
+   wplotcon = self.indivi
    spec = *self.spec
    spec.indiv_vhelio[wplotcon]=vhelio
    ptr_free, self.spec
@@ -345,7 +386,8 @@ pro stackspec::handle_draw_key, ev
    key = string(ev.ch)
    coords = convert_coord(ev.x, ev.y, /device, /to_data)
    spec= *self.spec
-   widget_control, widget_info(self.base, find_by_uname='iplotcont'), get_value=wplotcon
+   wplotcon = self.indivi
+
    case key of
        'f': begin
            case self.keystate of
@@ -442,7 +484,7 @@ pro stackspec::cleanup
 end
 
 pro stackspec::default_mask
-    widget_control, widget_info(self.base, find_by_uname='iplotcont'), get_value=wplotcon
+    wplotcon = self.indivi
     spec = *self.spec
     spec.indiv_combmask[*,wplotcon] = 1
     ptr_free, self.spec
@@ -451,7 +493,7 @@ pro stackspec::default_mask
 end
 
 pro stackspec::default_vhelio
-    widget_control, widget_info(self.base, find_by_uname='iplotcont'), get_value=wplotcon
+    wplotcon = self.indivi
     spec = *self.spec
     spec.indiv_vhelio[wplotcon] = 0. 
     ptr_free, self.spec
@@ -467,24 +509,22 @@ pro stackspec::redraw
    spec = *self.spec
    indivcolors = *self.indivcolors
    indivbgcolors = *self.indivbgcolors
-   widget_control, widget_info(self.base, find_by_uname='iplotcont'), get_value=wplotcon       
-   znow = self.z
+   wplotcon = self.indivi
 
    ;plot zoom
     widget_control, widget_info(self.base, find_by_uname='zoom'), get_value=index
     wset, index
-    z = self.z
-    plot,spec.lambda/(1.+z),spec.spec,xrange=[3700,3760],title='OII',position=[0.05,0.08,0.32,0.9],/normal, background=fsc_color('white'), color=fsc_color('black')
-    for iplot=spec.indiv_count-1,0,-1 do oplot,spec.indiv_lambda[*,iplot]/(1.+z)*(1.+spec.indiv_vhelio[iplot]/3e5),spec.indiv_spec[*,iplot],color=fsc_color((*self.indivcolors)[iplot])
-    oplot,spec.lambda/(1.+z),spec.spec,color=fsc_color('black'),thick=2
+    plot,spec.lambda,spec.spec,xrange=[3700,3760],title='OII',position=[0.05,0.08,0.32,0.9],/normal, background=fsc_color('white'), color=fsc_color('black')
+    oplot,spec.indiv_lambda[*,wplotcon]*(1.+spec.indiv_vhelio[wplotcon]/3e5),spec.indiv_spec[*,wplotcon],color=fsc_color((*self.indivcolors)[0])
+    oplot,spec.lambda,spec.spec,color=fsc_color('black'),thick=2
 
-    plot,spec.lambda/(1.+z),spec.spec,xrange=[3900,4000],title='CaII',position=[0.37,0.08,0.64,0.9],/noerase,/normal, background=fsc_color('white'), color=fsc_color('black')
-    for iplot=spec.indiv_count-1,0,-1 do oplot,spec.indiv_lambda[*,iplot]/(1.+z)*(1.+spec.indiv_vhelio[iplot]/3e5),spec.indiv_spec[*,iplot],color=fsc_color((*self.indivcolors)[iplot])
-    oplot,spec.lambda/(1.+z),spec.spec,color=fsc_color('black'),thick=2
+    plot,spec.lambda,spec.spec,xrange=[3900,4000],title='CaII',position=[0.37,0.08,0.64,0.9],/noerase,/normal, background=fsc_color('white'), color=fsc_color('black')
+    oplot,spec.indiv_lambda[*,wplotcon]*(1.+spec.indiv_vhelio[wplotcon]/3e5),spec.indiv_spec[*,wplotcon],color=fsc_color((*self.indivcolors)[0])
+    oplot,spec.lambda,spec.spec,color=fsc_color('black'),thick=2
 
-    plot,spec.lambda/(1.+z),spec.spec,xrange=[4830,4890],title='Hb',position=[0.69,0.08,0.96,0.9],/noerase,/normal, background=fsc_color('white'), color=fsc_color('black')
-    for iplot=spec.indiv_count-1,0,-1 do oplot,spec.indiv_lambda[*,iplot]/(1.+z)*(1.+spec.indiv_vhelio[iplot]/3e5),spec.indiv_spec[*,iplot],color=fsc_color((*self.indivcolors)[iplot])
-    oplot,spec.lambda/(1.+z),spec.spec,color=fsc_color('black'),thick=2
+    plot,spec.lambda,spec.spec,xrange=[4830,4890],title='Hb',position=[0.69,0.08,0.96,0.9],/noerase,/normal, background=fsc_color('white'), color=fsc_color('black')
+    oplot,spec.indiv_lambda[*,wplotcon]*(1.+spec.indiv_vhelio[wplotcon]/3e5),spec.indiv_spec[*,wplotcon],color=fsc_color((*self.indivcolors)[0])
+    oplot,spec.lambda,spec.spec,color=fsc_color('black'),thick=2
 
    ;plot main
    self->default_range, /update
@@ -518,12 +558,13 @@ pro stackspec::redraw
 
       for i=0,cstart-1 do begin
          multfactor = (1.+spec.indiv_vhelio[wplotcon]/3e5)
-         x = ([spec.indiv_lambda[wstart[i],wplotcon]*multfactor, spec.indiv_lambda[wstart[i],wplotcon]*multfactor, $
+         x = ([spec.indiv_lambda[wstart[i],wplotcon]*multfactor,$
+               spec.indiv_lambda[wstart[i],wplotcon]*multfactor, $
                spec.indiv_lambda[wend[i],wplotcon]*multfactor, $
                spec.indiv_lambda[wend[i],wplotcon]*multfactor] > (self.lambdalim[0])) < (self.lambdalim[1])
          dy = 0.05*(self.ylim[1]-self.ylim[0])
          y = [self.ylim[0]+dy, self.ylim[1]-dy, self.ylim[1]-dy, self.ylim[0]+dy]
-         polyfill, x, y, color=fsc_color(indivbgcolors[wplotcon],/brewer)
+         polyfill, x, y, color=fsc_color(indivbgcolors[0],/brewer)
       endfor
       ;;finish highlighting masked regions
    endif
@@ -531,29 +572,20 @@ pro stackspec::redraw
    oplot, [-1d6, 1d6], [0.0, 0.0], color=fsc_color('pink')
    oplot, [-1d6, 1d6], [1.0, 1.0], color=fsc_color('pale green')
 
-   for idup=0,ndup-1 do begin
-      if spec.indiv_good[idup] eq 1 then begin
-         oplot,spec.indiv_lambda[*,idup]*(1.+spec.indiv_vhelio[idup]/3e5),spec.indiv_spec[*,idup],color=fsc_color(indivcolors(idup))
-      endif
-   endfor
+   ;plot spectrum
+   oplot,spec.indiv_lambda[*,wplotcon]*(1.+spec.indiv_vhelio[wplotcon]/3e5),spec.indiv_spec[*,wplotcon],color=fsc_color(indivcolors[0])
+   oplot,spec.lambda,spec.indiv_spec_smoothed[*,wplotcon],color=fsc_color(indivcolors[0])
    
    if total(spec.indiv_good) gt 1 then thick=2 else thick=1 
    oplot, spec.lambda, spec.spec, color=fsc_color('black'),thick=thick
 
    ;;highlighting the telluric bands and label line names
-   n = n_elements(*self.tellstart)
-   for i=0,n-1 do begin
-      oplot, [(*self.tellstart)[i], (*self.tellend)[i]], 0.04*!Y.CRANGE[0]+0.96*!Y.CRANGE[1]+[0, 0], color=fsc_color('green'), thick=(*self.tellthick)[i]
-   endfor
    n = n_elements(*self.linewaves)
    for i=0,n-1 do begin
-      z = self.z
-      if (*self.linewaves)[i]*(1.+z) le !X.CRANGE[0] or (*self.linewaves)[i]*(1.+z) ge !X.CRANGE[1] then continue
-      oplot, [(*self.linewaves)[i]*(1.+z), (*self.linewaves)[i]*(1.+z)], [0.06*!Y.CRANGE[0]+0.94*!Y.CRANGE[1], 0.02*!Y.CRANGE[0]+0.98*!Y.CRANGE[1]], color=fsc_color((*self.linecolors)[i])
-      xyouts, (*self.linewaves)[i]*(1.+z)+0.002*(!X.CRANGE[1]-!X.CRANGE[0]), 0.07*!Y.CRANGE[0]+0.93*!Y.CRANGE[1], (*self.linenames)[i], orientation=90, alignment=1, color=fsc_color((*self.linecolors)[i])
+      if (*self.linewaves)[i] le !X.CRANGE[0] or (*self.linewaves)[i] ge !X.CRANGE[1] then continue
+      oplot, [(*self.linewaves)[i], (*self.linewaves)[i]], [0.06*!Y.CRANGE[0]+0.94*!Y.CRANGE[1], 0.02*!Y.CRANGE[0]+0.98*!Y.CRANGE[1]], color=fsc_color((*self.linecolors)[i])
+      xyouts, (*self.linewaves)[i]+0.002*(!X.CRANGE[1]-!X.CRANGE[0]), 0.07*!Y.CRANGE[0]+0.93*!Y.CRANGE[1], (*self.linenames)[i], orientation=90, alignment=1, color=fsc_color((*self.linecolors)[i])
    endfor
-
-
 
    widget_control, widget_info(self.base, find_by_uname='lambdalow'), set_value=strcompress(string(self.lambdalim[0], format='(D7.1)'), /rem)
    widget_control, widget_info(self.base, find_by_uname='lambdahigh'), set_value=strcompress(string(self.lambdalim[1], format='(D7.1)'), /rem)
@@ -565,120 +597,134 @@ pro stackspec::statusbox, spec=spec
     common npixcom, npix,ndup
     if ~keyword_set(spec) then spec = *self.spec
     unknown = '???'
-    widget_control, widget_info(self.base, find_by_uname='include'), set_value=spec.indiv_good
+    curi = self.indivi
+    ndup = spec.indiv_count
+    widget_control, widget_info(self.base, find_by_uname='include'), set_value=~spec.indiv_good[curi]
     widget_control, widget_info(self.base, find_by_uname='curid'), set_value=strtrim(spec.objname, 2)
     widget_control, widget_info(self.base, find_by_uname='cursn'), set_value=strcompress(string(spec.sn, format='(D7.2)'), /rem)
 
-    widget_control, widget_info(self.base, find_by_uname='curexptime'), set_value=strcompress(string(spec.exptime, format='(I8)'), /rem)
-
-    inditable = replicate({id:'',vhelio:-999,sn:-999,exptime:-999},ndup)
-    inditable.id = strcompress(spec.indiv_objname)
-    inditable.vhelio = spec.indiv_vhelio
-    inditable.sn =  spec.indiv_sn
-    inditable.exptime = spec.indiv_exptime
+    widget_control, widget_info(self.base, find_by_uname='indivfilelist'), set_combobox_select=curi
+    inditable = replicate({id:'',vhelio:-999,sn:-999,z:-999},5)
+    fi = curi+4 < (ndup-1)
+    nshow = fi-curi
+    inditable[0:nshow].id = strcompress(spec.indiv_objname[curi:fi],/rem)
+    inditable[0:nshow].vhelio = spec.indiv_vhelio[curi:fi]
+    inditable[0:nshow].sn =  spec.indiv_sn[curi:fi]
+    inditable[0:nshow].z = spec.indiv_z[curi:fi]
     widget_control,widget_info(self.base,find_by_uname='curinditable'),set_value = inditable
  
-    widget_control, widget_info(self.base, find_by_uname='iplotcont'), get_value=wplotcon
-    widget_control, widget_info(self.base, find_by_uname='vhelio'), set_value=strcompress(string(spec.indiv_vhelio[wplotcon], format='(D7.2)'), /rem)
-    widget_control, widget_info(self.base, find_by_uname='z'), set_value=strcompress(string(self.z, format='(D5.3)'), /rem)
-end
-
-pro stackspec::smoothspec, spec
-   common smoothpar, smooth_veldisp
-   common npixcom, npix,ndup
-   ndup = spec.indiv_count
-   dlam = fltarr(npix)+smooth_veldisp
-   for iobs=0,ndup-1 do begin
-      spec.indiv_spec_smoothed[*,iobs] = smooth_gauss_wrapper(spec.indiv_lambda[*,iobs],$
-                spec.indiv_spec[*,iobs],spec.indiv_lambda[*,iobs],dlam,ivar1=spec.indiv_ivar[*,iobs],$
-                ivar2=ivarout)
-      spec.indiv_ivar_smoothed = ivarout
-   endfor
+    widget_control, widget_info(self.base, find_by_uname='vhelio'), set_value=strcompress(string(spec.indiv_vhelio[curi], format='(D7.2)'), /rem)
 end
 
 pro stackspec::getspec, redo=redo
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Initializing ...'
     common npixcom, npix,ndup
     common file, inputfile, massrange, outfits
-
+    nspec = n_Elements(outfits)
+    checkfile = file_test(outfits)
+    self.nspec = nspec
+    speclist = file_basename(outfits,'.fits')
+    widget_control, widget_info(self.base, find_by_uname='filelist'), set_value=speclist
     npix = 8192
-    if ~file_test(outfits[0]) or keyword_set(redo) then begin 
+    if (total(checkfile) ne nspec) or keyword_set(redo) then begin 
        ;read all the spec files
        data = mrdfits(inputfile,1)
        ;calculate sn per angstrom
        snperpix = data.sn
-       snperang = sn
+       snperang = snperpix
        for i=0,n_elements(snperpix)-1 do begin
-          dlam = median(-1.*ts_diff(data[i].lambda,1)/(1.+data.z)) ;rest lambda
-          snperang[i] = snperpix/sqrt(dlam)  
+          dlam = median(-1.*ts_diff(data[i].lambda,1)/(1.+data[i].z)) ;rest lambda
+          snperang[i] = snperpix[i]/sqrt(dlam)  
        endfor
        ;get data for each mass range
        for i=0,n_elements(massrange)-2 do begin
           sel = where(data.logmstar ge massrange[i] and data.logmstar lt massrange[i+1] $
-                      and snperang gt 3 and snperang le 10,ndup)
-          if csel lt 3 then stop,'Warning: there are less than 3 galaxies in this mass range'
-          spec = {spec}
+                      and snperang gt 3 and snperang le 15 and data.oiiew gt -5.,ndup)
+          if ndup lt 3 then stop,'Warning: there are less than 3 galaxies in this mass range'
+          print, outfits[i],ndup
+
+          spec = {mask:'', $
+           objname:'', $
+           indiv_count:0.d, $
+           lambda:dblarr(npix), $
+           spec:dblarr(npix), $
+           ivar:dblarr(npix), $
+           dlam:dblarr(npix), $
+           sn:-999d, $
+           fileref:'', $
+           indiv_spec:dblarr(npix,ndup), $
+           indiv_lambda:dblarr(npix,ndup), $
+           indiv_ivar:dblarr(npix,ndup), $
+           indiv_spec_smoothed:dblarr(npix,ndup), $
+           indiv_ivar_smoothed:dblarr(npix,ndup), $
+           indiv_combmask:bytarr(npix,ndup), $
+           indiv_dlam:dblarr(npix,ndup), $
+           indiv_sn:fltarr(ndup),$
+           indiv_objname:strarr(ndup),$
+           indiv_filename:strarr(ndup),$
+           indiv_z:dblarr(ndup), $
+           indiv_vhelio:dblarr(ndup), $
+           indiv_good:bytarr(ndup)}
+
           objname = file_basename(outfits[i],'.fits') 
           spec.mask = 'spline'
           spec.fileref = inputfile
           spec.objname = objname
-          spec.indiv_count = ndup
+          spec.indiv_count = float(ndup)
+          print, spec.indiv_count,'!!!!!!!!!!'
           for iobs =0, ndup-1 do begin
              datanow = data[sel[iobs]]
              znow = datanow.zspec 
              if znow le 0. then znow = datanow.z
+             spec.indiv_z[iobs] = znow
              spec.indiv_spec[*,iobs] = datanow.contdiv
              spec.indiv_lambda[*,iobs] = datanow.lambda/(1.+znow)
              spec.indiv_ivar[*,iobs] = datanow.contdivivar
+             spec.indiv_dlam[*,iobs] = datanow.dlam/(1.+znow)
              spec.indiv_combmask[*,iobs]=1
              spec.indiv_objname[iobs] = datanow.objname
              spec.indiv_sn[iobs] = snperang[sel[iobs]]
              spec.indiv_vhelio[iobs] = 0. 
              spec.indiv_good[iobs] = 1
-         endfor
-         self->smoothspec,spec
-         ;NL stopped here
+           endfor
+         self.i = i
          self->combine,spec,/noredraw
-        
          self->statusbox, spec=spec
          self->writespec,spec
-         ptr_free, self.spec
-         self->readspec
-      endif else begin
-         spec = mrdfits(specfits, 1, /silent)
-         ptr_free,self.spec
-         self.spec = ptr_new(spec)
-         self.i = 0
-         self->readspec
-      endelse
+      endfor
+   endif 
+   self.i = 0
 end
 
 
 pro stackspec::writespec,spec
-    common mask_in, mask_in, listfile
-    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Writing spectrum to database ...'
-    specfits = self.directory+(strsplit(listfile,'ms',/extract,/regex))[0]+'.fits'
+    common file, inputfile, massrange, outfits
 
+    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Writing spectrum to database ...'
+    specfits = outfits[self.i]
+    help, spec,/str
+    stop
     mwrfits, spec, specfits, /create, /silent
-    spawn, 'gzip -f '+specfits
+    help, spec,/str
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Ready.'
+    stop
 end
 
 pro stackspec::readspec
-    common mask_in, mask_in, listfile
+    common file, inputfile, massrange, outfits
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Reading spectrum from database ...'
-    specfits = self.directory+(strsplit(listfile,'ms',/extract,/regex))[0]+'.fits.gz'
+    specfits = outfits[self.i]
     if file_test(specfits) eq 0 then stop,'no file found'
     spec = mrdfits(specfits,1,/silent)
+    stop
     ptr_free,self.spec
     self.spec = ptr_new(spec)    
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Ready.'
 
 end
 
-pro stackspec::initialize_directory, inputfile=inputfile,redo=redo
-   common file, inputspecfile, massrange
-   common mask_in, mask_in, outfits
+pro stackspec::initialize_directory,directory=directory, redo=redo
+   common file, inputfile, massrange, outfits
 
    newdirectory = '/scr2/nichal/workspace4/prepspec_ms0451/data/stacked/'
    if ~file_test(newdirectory) then file_mkdir, newdirectory
@@ -688,11 +734,12 @@ pro stackspec::initialize_directory, inputfile=inputfile,redo=redo
    nfiles = n_elements(massrange)-1
    outfits = strarr(nfiles)
    for i=0,nfiles-1 do outfits[i] = newdirectory+'stackedms0451_mass'+$
-                                     strtrim(string(massrange[i],format='(f4.1)'),2)+'_'+$
-                                     strtrim(string(massrange[i+1],format='(f4.1)'),2)+'.fits'
+                                     strtrim(string(massrange[i],format='(f5.2)'),2)+'_'+$
+                                     strtrim(string(massrange[i+1],format='(f5.2)'),2)+'.fits'
    self.directory = newdirectory
 
-   self->getspec, inputfile=inputfile
+   self->getspec
+   self.i = 0
    self->readspec
    spec = *self.spec
    self->statusbox, spec=spec
@@ -703,10 +750,10 @@ pro stackspec::initialize_directory, inputfile=inputfile,redo=redo
 end
 
 ; =============== INIT ================
-function stackspec::INIT, inputfile=inputfile
-    common file, inputspecfile, massrange
+function stackspec::INIT,directory=directory
+    common file, inputfile, massrange, outfits
     common npixcom, npix,ndup
-
+    ndup = 15
     base = widget_base(/row, title='stack_spec_ms0451', uvalue=self, mbar=menu, tab_mode=0, units=1)
     file_menu = widget_button(menu, value='File', /menu)
     wexit = widget_button(file_menu, value='Save', uvalue='save', uname='save')
@@ -726,26 +773,32 @@ function stackspec::INIT, inputfile=inputfile
     wdefaultmask = widget_button(wdefaultmaskbase,value='Default Mask',uvalue='default_mask',uname='default_mask',tab_mode=1,xsize=120)    
     wdefaultvheliobase = widget_base(windivbase,/row,/align_center)
     wdefaultvhelio = widget_button(wdefaultvheliobase,value='Reset Vhelio',uvalue='default_vhelio',uname='default_vhelio',tab_mode=1,xsize=120)
+
+    windivfile = widget_base(wleft, /row, /align_center)
+    windivfilelist = widget_combobox(windivfile, uname='indivfilelist', value='            ', tab_mode=1, /dynamic_resize)
+    wstep = widget_base(wleft, /row, /align_center)
+    wbackward = widget_button(wstep, value='<---', uvalue='backward', uname='backward', tab_mode=1, xsize=75)
+    wforward = widget_button(wstep, value='--->', uvalue='forward', uname='forward', tab_mode=1, xsize=75)
     wincludebase = widget_base(wleft, /row, /align_center,/frame)
-    wincluderadio = cw_bgroup(wincludebase,strtrim(string(indgen(ndup)),2),/column,/nonexclusive,set_value=bytarr(ndup)+1,uname='include',uvalue='include',label_top='include')
-    wplotconradio = cw_bgroup(wincludebase,strtrim(string(indgen(ndup)),2),/column,/exclusive,set_value=0,uname='iplotcont',uvalue='iplotcont',label_top='plot')
+    wincluderadio = cw_bgroup(wincludebase,["include","discard"],/exclusive,set_value=0,uname='include',uvalue='include',label_top='include',/row)
     wcurobj = widget_base(wleft, /column, /align_center, tab_mode=0, /frame)
     widbase = widget_base(wcurobj, /align_left, /row, xsize=235)
     widlabel = widget_label(widbase, value='object ID:', /align_right, uname='idlabel', xsize=65)
     wcurid = widget_label(widbase, value='     ', /align_left, uname='curid', uvalue='curid', xsize=180)
     wsnbase = widget_base(wcurobj, /align_center, /row)
-    wsnlabel = widget_label(wsnbase, value='s/n = ', /align_right, uname='snlabel', xsize=95)
+    wsnlabel = widget_label(wsnbase, value='final s/n = ', /align_right, uname='snlabel', xsize=95)
     wcursn = widget_label(wsnbase, value='     ', /align_left, uname='cursn', uvalue='cursn', xsize=150)
 
-    wexptimebase = widget_base(wcurobj, /align_center, /row)
-    wexptimelabel = widget_label(wexptimebase, value='Exp time = ', /align_right, uname='exptimelabel', xsize=95)
-    wcurexptime = widget_label(wexptimebase, value='     ', /align_left, uname='curexptime', uvalue='curexptime', xsize=150)
 
     windibase = widget_base(wcurobj,/align_left,/row,xsize=400)
-    winditable = widget_table(windibase,value=replicate({id:'',redshift:-999,mass:-999,sn:-999},ndup),/row_major,column_labels=['id','redshift','mass','sn'],uname='curinditable',uvalue='curinditable')
+    winditable = widget_table(windibase,value=replicate({id:'',vhelio:-999,sn:-999,z:-999},5),/row_major,column_labels=['id','vhelio','sn','redshift'],uname='curinditable',uvalue='curinditable')
 
     ; ------ RIGHT -------
     wfile = widget_base(wright, /frame, /row, /align_left, tab_mode=1)
+    wback = widget_button(wfile, value='Back', uvalue='back', uname='back', tab_mode=1)
+    wfilelist = widget_combobox(wfile, uname='filelist', value='                 ', tab_mode=1, /dynamic_resize)
+    wnext = widget_button(wfile, value='Next', uvalue='next', uname='next', tab_mode=1)
+
     wstatus = widget_text(wfile, xsize=108, value='Initializing ...', uname='status', uvalue='status', tab_mode=0)
 
     wspec = widget_base(wright, /frame, /column)
@@ -766,10 +819,6 @@ function stackspec::INIT, inputfile=inputfile
     wvheliocontrol = widget_base(wspeccontrol,/frame,/row)
     wvheliolabel = widget_label(wvheliocontrol,value='vehelio:',/align_center,uname='vheliolabel',font='-urw-standard symbols l-medium-r-normal--0-0-0-0-p-0-adobe-symbol')
     wvhelio = widget_text(wvheliocontrol,xsize=8,/editable,uname='vhelio',uvalue='vhelio')
-
-    wzcontrol = widget_base(wspeccontrol,/frame,/row)
-    wzlabel = widget_label(wzcontrol,value='z:',/align_center,uname='zlabel',font='-urw-standard symbols l-medium-r-normal--0-0-0-0-p-0-adobe-symbol')
-    wz = widget_text(wzcontrol,xsize=8,/editable,uname='z',uvalue='z')
 
     widget_control, base, /realize
     self.base = base
@@ -796,7 +845,7 @@ function stackspec::INIT, inputfile=inputfile
     common random, seed
     seed = systime(1)
 
-    self->initialize_directory, inputfile=inputfile
+    self->initialize_directory,directory=directory
     return, 1
 end
 
@@ -823,43 +872,20 @@ pro stackspec__define
              lambda1:0d, $
              indivcolors:ptr_new(),$
              indivbgcolors:ptr_new(),$
-             z:0d, $
-             cont:ptr_new()}
-end
-
-pro spec__define
-   common npixcom, npix,ndup
-   spec = {spec, $
-           mask:'', $
-           objname:'', $
-           lambda:dblarr(npix), $
-           spec:dblarr(npix), $
-           ivar:dblarr(npix), $
-           sn:-999d, $
-           fileref:'', $
-           indiv_spec:dblarr(npix,ndup), $
-           indiv_lambda:dblarr(npix,ndup), $
-           indiv_ivar:dblarr(npix,ndup), $
-           indiv_spec_smoothed:dblarr(npix,ndup), $
-           indiv_ivar_smoothed:dblarr(npix,ndup), $
-           indiv_combmask:bytarr(npix,ndup), $
-           indiv_sn:fltarr(ndup),$
-           indiv_objname:strarr(ndup),$
-           indiv_filename:strarr(ndup),$
-           indiv_vhelio:dblarr(ndup), $
-           indiv_good:bytarr(ndup), $
-           indiv_count:-999L}
+             cont:ptr_new(),$
+             i:0L,$
+             indivi:0L}
 
 end
 
 pro stackspec_ms0451
-   common file, inputspecfile, massrange
+   common file, inputfile, massrange, outfits
    common npixcom, npix,ndup
    common smoothpar, smooth_veldisp
    inputfile = '/scr2/nichal/workspace4/sps_fit/data/spline_ms0451/sps_fit01.fits.gz'
    smooth_veldisp = 350 ;km/s
    if file_test(inputfile) eq 0 then stop,'Stopped: cannot find input file'
-   massrange = [10.,10.5,11.,11.5]   
-   n = obj_new('stackspec',inputfile=inputfile)
+   massrange=[9.,10.,10.5,10.7,10.82,11.0,11.5]
+   n = obj_new('stackspec',directory=directory)
 
 end
