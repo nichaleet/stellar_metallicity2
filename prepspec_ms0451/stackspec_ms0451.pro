@@ -646,12 +646,12 @@ pro stackspec::getspec, redo=redo
           spec = {mask:'', $
            objname:'', $
            indiv_count:0.d, $
+           sn:-999d, $
+           fileref:'', $
            lambda:dblarr(npix), $
            spec:dblarr(npix), $
            ivar:dblarr(npix), $
            dlam:dblarr(npix), $
-           sn:-999d, $
-           fileref:'', $
            indiv_spec:dblarr(npix,ndup), $
            indiv_lambda:dblarr(npix,ndup), $
            indiv_ivar:dblarr(npix,ndup), $
@@ -671,7 +671,6 @@ pro stackspec::getspec, redo=redo
           spec.fileref = inputfile
           spec.objname = objname
           spec.indiv_count = float(ndup)
-          print, spec.indiv_count,'!!!!!!!!!!'
           for iobs =0, ndup-1 do begin
              datanow = data[sel[iobs]]
              znow = datanow.zspec 
