@@ -714,8 +714,6 @@ end
 
 pro sps_fit::cal_uncertainties, science
    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Calculatign uncertainties ...'
-           science.npix = nlamb
-            science.lambda[0:nlamb-1] = data.lambda
 
    if max(science.lambda)/(1.+science.zspec) lt 5000. then begin
       grid_file   = *self.degenshort_file
@@ -905,7 +903,7 @@ pro sps_fit::fit_all,alpha=alpha
         if science.good eq 0 then continue
         ;if science.good eq 0 and science.goodfit eq 0 then continue
         if ~keyword_set(alpha) then self->fit, science else begin
-           self->mask, science ,/includemg
+           ;self->mask, science ,/includemg
            self->fitalpha, science
         endelse
         if (keepoldfit eq 0 and science.chisq lt scienceall[self.i].chisq) or (keepoldfit eq 1) then begin
@@ -1068,6 +1066,7 @@ pro sps_fit::handle_button, ev
         end
 
         'fit_all': self->fit_all
+        'fit_alpha_all':self->fit_all,/alpha
         'cal_uncertainties_all':self->cal_uncertainties_all
         'cal_uncertainties_alpha_all':self->cal_uncertainties_all,/alpha
         'default_cont': self->default_cont
@@ -1570,7 +1569,7 @@ pro sps_fit::handle_draw_key, ev
                 'g': begin
                     case self.keystate of
                         0: begin
-                            widget_control, widget_info(self.base, find_by_uname='good'), set_value=[science.good, ~science.goodfit]
+                            widget_control, widget_info(self.base, find_by_uname='good'), set_value=[~science.good, science.goodfit]
                             self->toggle_good
                         end
                         else: widget_control, widget_info(self.base, find_by_uname='status'), set_value='Key not recognized.'
@@ -1702,7 +1701,7 @@ end
 pro sps_fit::default_mask
     scienceall = *self.science
     science = scienceall[self.i]
-    self->mask, science, nmc=0
+    self->mask, science, nmc=0,/includemg
     scienceall[self.i] = science
     ptr_free, self.science
     self.science = ptr_new(scienceall)
@@ -1710,17 +1709,20 @@ pro sps_fit::default_mask
 end
 
 pro sps_fit::default_maskall
+  widget_control, widget_info(self.base, find_by_uname='status'), set_value='Defaulting all masks'
+
   curi = self.i
   for i=0,self.nspec-1 do begin
      self.i=i
      scienceall = *self.science
      science = scienceall[self.i]
-     self->mask, science, nmc=0
+     self->mask, science, nmc=0,/includemg
      scienceall[self.i] = science
      ptr_free, self.science
      self.science = ptr_new(scienceall)
   endfor
   self.i = curi
+  widget_control, widget_info(self.base, find_by_uname='status'), set_value='Ready'
   self->redraw
 end
 
@@ -2046,7 +2048,7 @@ pro sps_fit::statusbox, science=science
     widget_control, widget_info(self.base, find_by_uname='curfehuncert'), set_value=science.fehlower gt -100 ? strcompress(string(science.fehlower, format='(D10.2)'), /rem)+(science.fehupper ge -100 ? ' : '+strcompress(string(science.fehupper, format='(D10.2)'), /rem):'') : unknown
     widget_control, widget_info(self.base, find_by_uname='curoii'), set_value=science.oiiew ne -999 ? strcompress(string(science.oiiew, format='(D10.2)'), /rem)+(science.oiiewerr le 0 ? '' : ' +/- '+strcompress(string(science.oiiewerr, format='(D10.2)'), /rem))+' A' : unknown
     widget_control, widget_info(self.base, find_by_uname='curoiicat'), set_value=science.ew_oii ne -999 ? strcompress(string(science.ew_oii, format='(D10.2)'), /rem)+(science.ew_oiierr le 0 ? '' : ' +/- '+strcompress(string(science.ew_oiierr, format='(D10.2)'), /rem))+' A' : unknown
-    widget_control, widget_info(self.base, find_by_uname='curcah'), set_value=science.caherr gt 0 ? strcompress(string(science.cah, format='(D10.2)'), /rem)+(science.caherr le 0 ? '' : ' +/- '+strcompress(string(science.caherr, format='(D10.2)'), /rem)) : unknown
+    widget_control, widget_info(self.base, find_by_uname='curalpha'), set_value=science.alphafe gt -100 ? strcompress(string(science.alphafe, format='(D10.2)'), /rem)+(science.alphafeerr le 0 ? '' : ' +/- '+strcompress(string(science.alphafeerr, format='(D10.2)'), /rem)) : unknown
     widget_control, widget_info(self.base, find_by_uname='curchisq'), set_value=science.chisq gt 0 ? strcompress(string(science.chisq, format='(D10.2)'), /rem) : unknown
     widget_control, widget_info(self.base, find_by_uname='maxnloop'), set_value=science.nloop gt 0 ? strcompress(string(science.nloop, format='(I4)'), /rem) : unknown
 
@@ -2056,6 +2058,128 @@ pro sps_fit::statusbox, science=science
 
 end
 
+pro sps_fit::getstackedscience, files=files
+    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Initializing ...'
+    common mask_in, mask_in, copynum
+    common npixcom, npix
+    npix = 12619
+
+    observatory, 'keck', obs
+    sciencefits = self.directory+'sps_fit'+copynum+'.fits.gz'
+    if ~file_test(sciencefits) then begin
+        if ~keyword_set(files) then message, 'You must specify the FILES keyword if a sps_fit.fits.gz file does not exist.'
+        redshift = 0.91
+        c = n_elements(files)
+        masks = strarr(c)
+        slits = strarr(c)
+        objnames = strarr(c)
+
+        for i=0,c-1 do begin
+            basefile = file_basename(files[i])
+            extensions = strsplit(basefile, '_.', /extract)
+            masks[i] = mask_in
+            slits[i] = extensions[0]
+            objnames[i] = extensions[1]
+        endfor
+
+        nspec = n_elements(objnames)
+        self.nspec = nspec
+        speclist = strtrim(string(slits), 2)+' '+objnames
+        widget_control, widget_info(self.base, find_by_uname='filelist'), set_value=speclist
+
+        scienceall = replicate({science}, nspec)
+        wgood = bytarr(nspec)+1
+
+        for i=0,nspec-1 do begin
+            science = {science}
+            restore, files[i]
+            data = spec
+
+            science.conttype = slits[i]
+            science.objnum = i
+            science.objname = objnames[i]
+
+            nlamb = n_elements(data.lambda)
+            science.npix = nlamb
+            science.lambda[0:nlamb-1] = data.lambda*(1.+redshift)
+            science.contdiv[0:nlamb-1] = data.spec
+            science.contdivivar[0:nlamb-1] = data.ivar
+            science.dlam[0:nlamb-1] = data.dlam*(1.+redshift)
+            if nlamb lt npix then science.contdiv[nlamb:npix-1] = !values.f_infinity
+            science.zspec = redshift
+            science.zcat = redshift
+            ;calculate mass (s/n weighted mass)
+            meanerr,data.indiv_mass,data.indiv_mass/data.indiv_sn,massmean,sigmam,sigmad,sigmas
+            science.logmstar_sed_blerr = sigmad 
+            science.logmstar_sed_bl = massmean
+
+            science.spec1dfile = files[i]
+            science.age = -999d
+            science.ageerr = -999d
+            science.feh = -999d
+            science.feherr = -999d
+            science.vdisp = -999d
+            science.vdisperr = -999d
+
+            self.i = i
+
+            tell = mrdfits('/scr2/nichal/workspace2/telluric/deimos_telluric_1.0.fits', 1, /silent)
+            wtell = n_elements(tell)-1
+            tell = tell[wtell]
+            ptr_free, self.tell
+            self.tell = ptr_new(tell)
+
+            t = (-1*ts_diff(science.lambda, 1))[0:nlamb-2]
+            wt = where(t le 0, ct)
+            if ct gt 0 then begin
+                message, 'Wavelength array for '+strtrim(objnames[i], 2)+' is not monotonic.  Omitting.', /info
+                wgood[i] = 0
+                continue
+            endif
+
+            self->contmask, science
+            self->oiiew, science
+            self->sn, science
+            if science.sn gt 3. then science.good = 1
+
+            self->mask, science
+            science.spscont = 1.0
+            self->indices, science, /noredraw
+
+            self->statusbox, science=science
+            scienceall[i] = science
+        endfor
+
+        self.i = 0
+        wgood = where(wgood eq 1, cgood)
+        scienceall = scienceall[wgood]
+        ptr_free, self.science
+        self.science = ptr_new(scienceall)
+        self.nspec = cgood
+        ;self->specres_mask, self.directory
+
+        speclist = strtrim(string(slits[wgood]), 2)+' '+objnames[wgood]
+        widget_control, widget_info(self.base, find_by_uname='filelist'), set_value=speclist
+        widget_control, widget_info(self.base, find_by_uname='mode'), set_value=1
+        ;self->fit_all
+        self->writescience
+    endif else begin ;if sps_fit.fits.gz exists or not
+        scienceall = mrdfits(sciencefits, 1, /silent)
+
+        self.nspec = n_elements(scienceall)
+        speclist = scienceall.conttype+' '+scienceall.objname
+        widget_control, widget_info(self.base, find_by_uname='filelist'), set_value=speclist
+
+        tell = (mrdfits('/scr2/nichal/workspace2/telluric/deimos_telluric_1.0.fits', 1, /silent))
+        wtell = n_elements(tell)-1
+        tell = tell[wtell]
+        ptr_free, self.tell
+        self.tell = ptr_new(tell)
+        ptr_free, self.science
+        self.science = ptr_new(scienceall)
+        widget_control, widget_info(self.base, find_by_uname='mode'), set_value=1
+    endelse
+end
 
 pro sps_fit::getscience, files=files
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Initializing ...'
@@ -2199,12 +2323,14 @@ end
 
 
 pro sps_fit::writescience
+    common mask_in, mask_in, copynum
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Writing to database ...'
     scienceall = *self.science
-    sciencefits = self.directory+(self.lowsn eq 1 ? 'sps_fit_lowsn.fits' : 'sps_fit.fits')
+    sciencefits = self.directory+'sps_fit'+copynum+'.fits'
     mwrfits, scienceall, sciencefits, /create, /silent
     spawn, 'gzip -f '+sciencefits
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Ready.'
+    print, 'saved file'
 end
 
 
@@ -2223,6 +2349,11 @@ pro sps_fit::initialize_directory, directory=directory
     if c eq 0 then begin
        files = file_search(directory+'*/'+mask_in+'*.{fits,fits.gz}', count=c)
     endif
+
+    if c eq 0 then begin
+       files = file_search(directory, mask_in+'*.sav', count=c)
+       if c gt 0 then wsav = 1
+    endif
  
     if c eq 0 and ~file_test(sciencefits) then begin
         message, 'Unknown mask.'
@@ -2230,7 +2361,7 @@ pro sps_fit::initialize_directory, directory=directory
 
     self.directory = newdirectory
 
-    self->getscience, files=files
+    if wsav eq 0 then self->getscience, files=files else self->getstackedscience, files=files
     self.i = 0
     science = (*self.science)[self.i]
     self->statusbox, science=science
@@ -2255,6 +2386,7 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     wdefault_maskall = widget_button(tools_menu, value='Default Pixel Mask All', uname='default_maskall', uvalue='default_maskall')
     wdefault_goodspec = widget_button(tools_menu, value='Default Good Spectrum', uname='default_goodspec', uvalue='default_goodspec')
     wfit_all = widget_button(tools_menu, value='Fit All', uname='fit_all', uvalue='fit_all')
+    wfitalpha_all = widget_button(tools_menu, value='Fit Alpha All', uname='fit_alpha_all', uvalue='fit_alpha_all')
     wcal_uncertainties_all = widget_button(tools_menu, value='Cal uncertainties All',uname='cal_uncertainties_all',uvalue='cal_uncertainties_all')
     wleft = widget_base(base, /column, uname='left')
     wright = widget_base(base, /column, uname='right')
@@ -2268,7 +2400,8 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     wforward = widget_button(wstep, value='--->', uvalue='forward', uname='forward', tab_mode=1, xsize=75)
     wprepbase = widget_base(wleft, /row, /align_center)
     wfit = widget_button(wprepbase, value='Fit', uvalue='fit', uname='fit', tab_mode=1, xsize=85)
-    wfitz = widget_button(wprepbase, value='Fit redshift', uvalue='fitz', uname='fitz', tab_mode=1, xsize=85)
+;    wfitz = widget_button(wprepbase, value='Fit redshift', uvalue='fitz', uname='fitz', tab_mode=1, xsize=85)
+    wfitalpha = widget_button(wprepbase, value='Fit alpha', uvalue='fitalpha', uname='fitalpha', tab_mode=1, xsize=85)
     windicesbase = widget_base(wleft, /row, /align_center)
     windices = widget_button(windicesbase, value='Compute Indices', uvalue='indices', uname='indices', tab_mode=1, xsize=90)
     wdefault_cont = widget_button(windicesbase, value='Default Cont', uname='default_cont', uvalue='default_cont',tab_mode=1,xsize=90)
@@ -2308,9 +2441,9 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     wfehuncertlabel = widget_label(wfehuncertbase,value='    ',/align_right,uname='fehuncertlabel',xsize=95)
     wfehuncert = widget_label(wfehuncertbase,value='      ',/align_left, uname='curfehuncert', uvalue='curfehuncert', xsize=150)
 
-    wcahbase = widget_base(wcurobj, /align_center, /row)
-    wcahlabel = widget_label(wcahbase, value='CaH = ', /align_right, uname='cahlabel', xsize=95)
-    wcurcah = widget_label(wcahbase, value='     ', /align_left, uname='curcah', uvalue='curcah', xsize=150)
+    walphabase = widget_base(wcurobj, /align_center, /row)
+    walphalabel = widget_label(walphabase, value='[Mg/Fe] = ', /align_right, uname='alphalabel', xsize=95)
+    wcuralha = widget_label(walphabase, value='     ', /align_left, uname='curalpha', uvalue='curalpha', xsize=150)
 
     wvdispbase = widget_base(wcurobj, /align_center, /row)
     wvdisplabel = widget_label(wvdispbase, value='sigma_v = ', /align_right, uname='vdisplabel', xsize=95)
@@ -2349,6 +2482,8 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     w2dplot = widget_draw(wspec, xsize=1600, ysize=300, uname='2d', /tracking_events, /motion_events)
 
     wspeccontrol = widget_base(wright, /row, /align_center, tab_mode=1)
+    wkeepoldfitcontrol = widget_base(wspeccontrol,/row,/frame)
+    wkeepoldfit = cw_bgroup(wkeepoldfitcontrol, ['compare old chisq','dont compare(replace)'],/exclusive, set_value=0, uname='keepoldfit', uvalue='keepoldfit',row=1)
     wycontrol = widget_base(wspeccontrol, /frame, /row)
     wylow = widget_text(wycontrol, xsize=8, /editable, uname='ylow', uvalue='ylow')
     wylabel = widget_label(wycontrol, value=' < y < ', /align_center, uname='ylabel')
@@ -2388,8 +2523,8 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     self.indend   = ptr_new(indbandend)
     self.indname  = ptr_new(indname)
 
-   degendir = '/scr2/nichal/workspace4/test_shortwl/sspdegen/'
-   degenfile = file_search(degendir+'sspdegen_short/age*_sspdegen_gridspec_shortwl.fits',count=cdegenfile)
+   degendir = '/scr2/nichal/workspace4/sps_fit/sspdegen/'
+   degenfile = file_search(degendir+'sspdegen_cl1604_short/age*_sspdegen_gridspec_shortwl.fits',count=cdegenfile)
    for i=0,cdegenfile-1 do begin
       degen_sps = mrdfits(degenfile(i),1,/silent)
       if i eq 0 then begin
@@ -2417,7 +2552,7 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     self.degenshort_agegrid = ptr_new(degen_agegrid)
     self.degenshort_alphagrid = ptr_new(degen_alphagrid)
 
-     degenfile = file_search(degendir+'sspdegen_full/age*_sspdegen_gridspec_fullwl.fits',count=cdegenfile)
+     degenfile = file_search(degendir+'sspdegen_cl1604_full/age*_sspdegen_gridspec_fullwl.fits',count=cdegenfile)
    for i=0,cdegenfile-1 do begin
       degen_sps = mrdfits(degenfile(i),1,/silent)
       if i eq 0 then begin
@@ -2591,9 +2726,9 @@ pro science__define
 end
 
 
-pro sps_fit_cl1604
+pro sps_fit_cl1604,mask=mask,copyi=copyi,all=all
     common mask_in, mask_in, copynum
-    mask = 'spline'
+    if ~keyword_set(mask) then mask = 'spline'
     mask_in = mask
     if ~keyword_set(copyi) then copyi=1
     copynum = strtrim(string(copyi,format='(I02)'),2)

@@ -1,6 +1,7 @@
 pro ms0451alphaana
    ;GETTING SCI DATA
    sci = mrdfits('/scr2/nichal/workspace4/sps_fit/data/spline_ms0451/sps_fit01.fits.gz',1)
+   stack = mrdfits('/scr2/nichal/workspace4/sps_fit/data/stacked_ms0451/sps_fit01.fits.gz',1)
    ;sample selection
    good = where(sci.oiiew gt -5.,cgood)
    sci = sci(good)
@@ -104,6 +105,8 @@ pro ms0451alphaana
         oplot,[sci(goodfit[i]).logmstar],[sci(goodfit[i]).feh],psym=cgsymcat(46),color=fsc_Color('tomato'),symsize=goodsymsize[i]
         oplot,[sci(goodfit[i]).logmstar],[sci(goodfit[i]).feh],psym=cgsymcat(45),color=fsc_color('maroon'),symsize=goodsymsize[i]
       endfor
+      ;draw stacked results
+      oplot,stack.logmstar,stack.feh,psym=cgsymcat(16),color=fsc_color('indianred'),symsize=2
    device,/close
 
   psname='ms0451alpha_feh_alpha.eps'

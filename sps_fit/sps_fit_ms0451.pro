@@ -341,6 +341,7 @@ pro sps_fit::fitalpha, science, noredraw=noredraw, nostatusbar=nostatusbar
 ;       print, 'velocity dispersion prior = ',pi[2].limits,' km/s'      
 ;    endif else pi[2].limits = [40.,400.]; [30.,200.]
     pi[2].limits = [0.,600.]
+    if mask_in eq 'stacked' then pi[2].limits = [50.,400.]
    ;;make the initial guesses unfix but within limits except redshift
     pi.value = randomu(seed,5)*(pi.limits[1,*]-pi.limits[0,*])+pi.limits[0,*]
     pi[3].value = znow
@@ -353,7 +354,6 @@ pro sps_fit::fitalpha, science, noredraw=noredraw, nostatusbar=nostatusbar
     print, 'prior range:',pi.limits
 
     won = where(science.fitmask eq 1 and finite(science.contdiv) and finite(science.contdivivar) and science.contdivivar gt 0 and reallambda/(1.+znow) gt 3500. and reallambda/(1.+znow) lt 7400., con)
-
     if con lt 10 then begin
         pi.value = [-999d, -999d, -999d,-999d,-999d]
         perror = [-999d, -999d, -999d, -999d,-999d]
@@ -909,7 +909,7 @@ pro sps_fit::fit_all,alpha=alpha
         if science.good eq 0 then continue
 	;if science.good eq 0 and science.goodfit eq 0 then continue
         if ~keyword_set(alpha) then self->fit, science else begin
-           self->mask, science ,/includemg
+           ;self->mask, science ,/includemg
            self->fitalpha, science
         endelse
         if (keepoldfit eq 0 and science.chisq lt scienceall[self.i].chisq) or (keepoldfit eq 1) then begin
@@ -2164,6 +2164,130 @@ pro sps_fit::statusbox, science=science
     if science.vdisp_smm gt 0 then widget_control, widget_info(self.base, find_by_uname='curvdispsmm'), set_value=strcompress(string(science.vdisp_smm, format='(D10.1)'), /rem)+(science.vdisperr_smm le 0 ? '' : ' +/- '+strcompress(string(science.vdisperr_smm, format='(D10.1)'), /rem))+' km/s (SMM)' else widget_control, widget_info(self.base, find_by_uname='curvdispsmm'), set_value=unknown
 end
 
+pro sps_fit::getstackedscience, files=files
+    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Initializing ...'
+    common mask_in, mask_in, copynum
+    common npixcom, npix
+    npix = 8192
+
+    observatory, 'keck', obs
+    sciencefits = self.directory+'sps_fit'+copynum+'.fits.gz'
+    if ~file_test(sciencefits) then begin
+        if ~keyword_set(files) then message, 'You must specify the FILES keyword if a sps_fit.fits.gz file does not exist.'
+        redshift = 0.55
+        c = n_elements(files)
+        masks = strarr(c)
+        slits = strarr(c)
+        objnames = strarr(c)
+      
+        for i=0,c-1 do begin
+            basefile = file_basename(files[i])
+            extensions = strsplit(basefile, '_.', /extract)
+            masks[i] = mask_in
+            slits[i] = extensions[0]
+            objnames[i] = extensions[1]
+        endfor
+
+        nspec = n_elements(objnames)
+        self.nspec = nspec
+        speclist = strtrim(string(slits), 2)+' '+objnames
+        widget_control, widget_info(self.base, find_by_uname='filelist'), set_value=speclist
+
+        scienceall = replicate({science}, nspec)
+        wgood = bytarr(nspec)+1
+
+        for i=0,nspec-1 do begin
+            science = {science}
+            restore, files[i]
+            data = spec
+
+            science.objname = data.objname
+            science.mask = slits[i]
+            science.slit = i
+
+            science.lambda = data.lambda*(1.+redshift)
+            science.contdiv = data.spec
+            science.contdivivar = data.ivar
+            science.dlam = data.dlam*(1.+redshift)
+            science.z = redshift
+            science.zspec = redshift
+            science.zcat = redshift
+            ;calculate mass (s/n weighted mass)
+            meanerr,data.indiv_mass,data.indiv_mass/data.indiv_sn,massmean,sigmam,sigmad,sigmas
+            science.nuverr = sigmad   ;i use this to keep the sigmad of mass, sorry for confusion!
+            science.logmstar = massmean
+
+            science.phot_color = 'BV'
+
+            science.spec1dfile = files[i]
+            science.age = -999d
+            science.ageerr = -999d
+            science.feh = -999d
+            science.feherr = -999d
+            science.vdisp = -999d
+            science.vdisperr = -999d
+
+            self.i = i
+
+            n = n_elements(science.lambda)
+
+            tell = mrdfits('/scr2/nichal/workspace2/telluric/deimos_telluric_1.0.fits', 1, /silent)
+            wtell = n_elements(tell)-1
+            tell = tell[wtell]
+            ptr_free, self.tell
+            self.tell = ptr_new(tell)
+
+            t = (-1*ts_diff(science.lambda, 1))[0:n-2]
+            wt = where(t le 0, ct)
+            if ct gt 0 then begin
+                message, 'Wavelength array for '+strtrim(objnames[i], 2)+' is not monotonic.  Omitting.', /info
+                wgood[i] = 0
+                continue
+            endif
+
+            self->contmask, science
+            self->oiiew, science
+            self->sn, science
+            if science.sn gt 3. then science.good = 1
+
+            self->mask, science
+            science.spscont = 1.0
+            self->indices, science, /noredraw
+
+            self->statusbox, science=science
+            scienceall[i] = science
+        endfor
+
+        self.i = 0
+        wgood = where(wgood eq 1, cgood)
+        scienceall = scienceall[wgood]
+        ptr_free, self.science
+        self.science = ptr_new(scienceall)
+        self.nspec = cgood
+        ;self->specres_mask, self.directory
+        speclist = masks[wgood]+' '+strtrim(string(slits[wgood]), 2)+' '+objnames[wgood]
+        widget_control, widget_info(self.base, find_by_uname='filelist'), set_value=speclist
+        widget_control, widget_info(self.base, find_by_uname='mode'), set_value=1
+        ;self->fit_all
+        self->writescience
+    endif else begin ;if sps_fit.fits.gz exists or not
+        scienceall = mrdfits(sciencefits, 1, /silent)
+
+        self.nspec = n_elements(scienceall)
+        speclist = scienceall.mask+' '+strtrim(string(scienceall.slit), 2)+' '+scienceall.objname
+        widget_control, widget_info(self.base, find_by_uname='filelist'), set_value=speclist
+
+        tell = (mrdfits('/scr2/nichal/workspace2/telluric/deimos_telluric_1.0.fits', 1, /silent))
+        wtell = n_elements(tell)-1
+        tell = tell[wtell]
+        ptr_free, self.tell
+        self.tell = ptr_new(tell)
+        ptr_free, self.science
+        self.science = ptr_new(scienceall)
+        widget_control, widget_info(self.base, find_by_uname='mode'), set_value=1
+    endelse
+end
+
 
 pro sps_fit::getscience, files=files
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Initializing ...'
@@ -2363,7 +2487,6 @@ end
 
 pro sps_fit::initialize_directory, directory=directory
     common mask_in, mask_in,copynum
-
     newdirectory = '/scr2/nichal/workspace4/sps_fit/data/'+mask_in+'_ms0451/'
     if ~file_test(newdirectory) then file_mkdir, newdirectory
 
@@ -2373,18 +2496,23 @@ pro sps_fit::initialize_directory, directory=directory
     ;countfiles:
     files = file_search(directory, mask_in+'*.{fits,fits.gz}', count=c)
     sciencefits = newdirectory+'sps_fit'+copynum+'.fits.gz'
-
+    wsav = 0
     if c eq 0 then begin
        files = file_search(directory+'*/'+mask_in+'*.{fits,fits.gz}', count=c)
     endif
- 
+    
+    if c eq 0 then begin
+       files = file_search(directory, mask_in+'*.sav', count=c)
+       if c gt 0 then wsav = 1
+    endif
+
     if c eq 0 and ~file_test(sciencefits) then begin
         message, 'Unknown mask.'
     endif
 
     self.directory = newdirectory
-
-    self->getscience, files=files
+    
+    if wsav eq 0 then self->getscience, files=files else self->getstackedscience, files=files
     self.i = 0
     science = (*self.science)[self.i]
     self->statusbox, science=science
@@ -2707,9 +2835,9 @@ pro science__define
 end
 
 
-pro sps_fit_ms0451,copyi=copyi,all=all
+pro sps_fit_ms0451,mask=mask,copyi=copyi,all=all
     common mask_in, mask_in,copynum
-    mask = 'spline'
+    if ~keyword_set(mask) then mask = 'spline'
     mask_in = mask
     if ~keyword_set(copyi) then copyi=1
     copynum = strtrim(string(copyi,format='(I02)'),2)

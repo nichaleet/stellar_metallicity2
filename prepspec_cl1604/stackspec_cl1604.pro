@@ -1,60 +1,127 @@
 pro stackspec::combine,spec,noredraw=noredraw
-   common npixcom, npix,ndup
+   common npixcom, npix,npixcomb,ndup
    common smoothpar, smooth_veldisp
-
+   ndup = spec.indiv_count
    wgood = where(spec.indiv_good eq 1, cgood)
    if cgood eq 1 then begin
-       spec.lambda = spec.indiv_lambda[*,wgood[0]]*(1.+spec.indiv_vhelio[wgood[0]]/3.e5)
-       spec.spec = spec.indiv_spec[*,wgood[0]]
-       spec.ivar = spec.indiv_ivar[*,wgood[0]]
+       npixcomb = spec.indiv_npix[wgood[0]]
+       goodpix = where(spec.indiv_lambda[*,wgood[0]] ne 0.,npixcombcheck)
+       if npixcomb ne npixcombcheck then stop, 'oh ooo'
+       ipix = 0
+       fpix = npixcomb-1
+       struct_replace_field,spec,'lambda',dblarr(npixcomb)
+       struct_replace_field,spec,'dlam',dblarr(npixcomb)
+       struct_replace_field,spec,'spec',dblarr(npixcomb)
+       struct_replace_field,spec,'vivar',dblarr(npixcomb)
+       spec.lambda = spec.indiv_lambda[ipix:fpix,wgood[0]]*(1.+spec.indiv_vhelio[wgood[0]]/3.e5)
+       spec.dlam = spec.indiv_dlam[ipix:fpix,wgood[0]]
+       spec.spec = spec.indiv_spec[ipix:fpix,wgood[0]]
+       spec.ivar = spec.indiv_ivar[ipix:fpix,wgood[0]]
        spec.sn = spec.indiv_sn[wgood[0]]
-       spec.dlam = spec.indiv_dlam[wgood[0]]
+       spec.npix = npixcomb 
    endif
 
    if cgood gt 1 then begin ;stack continuum and make output structure (strout)
-       sn = spec.indiv_sn[wgood]
-       ;shift velocity to heliocentric frame
-       lambdaarr = spec.indiv_lambda[*,wgood] ;[npix,cgood]
+       ;get sn per angstrom
+       sn = dblarr(cgood)
        for k=0,cgood-1 do begin
-           lambda = (1.+spec.indiv_vhelio[wgood[k]]/3e5)*spec.indiv_lambda[*,wgood[k]]
-           lambdaarr[*,k] = lambda  ;ok it's shifted
+          snperpix = spec.indiv_sn[wgood[k]]
+          npixnow = spec.indiv_npix[wgood[k]]
+          angperpix = median(-1.*ts_diff(spec.indiv_lambda[0:npixnow-1,wgood[k]],1))
+          sn[k] = snperpix/sqrt(angperpix)
        endfor
-       ;find the total wl range (lambdafull)
-       maxsn = max(sn,ref)
-       ;use the lambda of the spec with max sn as ref
-       lambdafull = lambdaarr[*,ref]
+
+       ;First, find the total wl range (lambdafull) 
+       ;in the overlapped region use the pixel template of the spectrum with higher signal to noise
+       ;But if it's LRIS old, move it to the end of the orders (bad resolution)
+       snorder = reverse(sort(sn)) ;order by high to low
+       testlris_wl = spec.indiv_lambda[50,wgood[snorder]]-spec.indiv_lambda[49,wgood[snorder]]
+       wlris = where(testlris_wl gt 1.5, cwlris,complement=wnolris)
+       if cwlris gt 0 then snorder = [snorder(wnolris),snorder(wlris)]
+ 
+       wgap=[]
+       for k=0,cgood-1 do begin
+          know = snorder[k] ;k-now
+          lambnow = (1.+spec.indiv_vhelio[wgood[know]]/3e5)*spec.indiv_lambda[*,wgood[know]] ;shifted to helio centric
+          goodpix = where(lambnow ne 0.,cgoodpix)
+          lambnow = lambnow(goodpix)
+          if k eq 0 then lambdafull = lambnow
+          if k ge 1 then begin
+            if lambnow[0] lt min(lambdafull) then begin
+               waddpix = where(lambnow lt min(lambdafull),cwaddpix)
+               lambdafull = [lambnow(waddpix),lambdafull]
+               ;note if there is a gap and edit the existing gaps
+               if n_elements(wgap) gt 0 then wgap = wgap+cwaddpix
+               if cwaddpix eq cgoodpix then wgap = [wgap,cwaddpix-1]
+            endif
+            if lambnow[cgoodpix-1] gt max(lambdafull) then begin
+               waddpix = where(lambnow gt max(lambdafull),cwaddpix)
+               lambdafull = [lambdafull,lambnow(waddpix)]
+               if cwaddpix eq cgoodpix then wgap = [wgap,n_elements(lambdafull)-cwaddpix-1]
+            endif
+            ;check the gap
+            nwgap = n_elements(wgap)
+            if nwgap gt 0 then begin
+               rmgap = []
+               for gg=0,nwgap-1 do begin
+                 waddpix = where(lambnow gt lambdafull[wgap[gg]] and lambnow lt lambdafull[wgap[gg]+1],cwaddpix)
+                 if cwaddpix gt 1 then begin
+                    nlambdafull = n_elements(lambdafull)
+                    lambdafull = [lambdafull[0:wgap[gg]],lambnow(waddpix),lambdafull[wgap[gg]+1:nlambdafull-1]]
+                    if max(waddpix) eq cgoodpix-1 then wgap = [wgap,wgap[gg]+cwaddpix]
+                    if min(waddpix) eq 0 then wgap = [wgap,wgap[gg]]
+                    rmgap = [rmgap,gg]
+                 endif
+               endfor
+               if n_elements(rmgap) gt 0 then begin
+                  if n_Elements(rmgap) eq n_Elements(wgap) then wgap=[] else remove,rmgap,wgap
+               endif
+            endif
+          endif
+       endfor
+       npixcomb = n_elements(lambdafull)
+       ;change the dimension of the output in the spec structure
+       struct_replace_field,spec,'lambda',dblarr(npixcomb)
+       struct_replace_field,spec,'dlam',dblarr(npixcomb)
+       struct_replace_field,spec,'spec',dblarr(npixcomb)
+       struct_replace_field,spec,'ivar',dblarr(npixcomb)
+       struct_replace_field,spec,'indiv_spec_smoothed',dblarr(npixcomb,ndup)
+       struct_replace_field,spec,'indiv_ivar_smoothed',dblarr(npixcomb,ndup)
+
        spec.lambda = lambdafull
-       fdlam = (smooth_veldisp/3.e5)*lambdafull/2.35
-       spec.dlam = 0.
+       fdlam = (smooth_veldisp/3.e5)*lambdafull/2.35 ;size of npixcomb
 
        ;deal with the mask
-       combmaskarr = bytarr(npix,cgood)+1
+       combmaskarr = bytarr(npixcomb,cgood)+1
        for k=0,cgood-1 do begin
           woffmask = where(spec.indiv_combmask[*,wgood[k]] eq 0,coffmask)
           if coffmask gt 0 then begin
-             loc = value_locate(lambdafull,lambdaarr[woffmask,k])
+             loc = value_locate(lambdafull,spec.indiv_lambda[woffmask,k])
              loc = loc(where(loc ge 0))
              combmaskarr[loc,k] = 0
           endif
-          loc = value_locate(lambdafull,lambdaarr[*,k])
+          curnpix = spec.indiv_npix[wgood[k]]-1
+          loc = value_locate(lambdafull,spec.indiv_lambda[0:curnpix,k])
           woffrange = where(loc eq -1 or loc eq npix-1,coffrange)
           if coffrange gt 0 then combmaskarr[woffrange,k] = 0
        endfor
 
        ;get data in and interpolate
-       specarr=fltarr(npix,cgood)+1./0.
-       ivararr = fltarr(npix,cgood)+1./0.
-       framearr = bytarr(npix,cgood)+1
+       specarr=fltarr(npixcomb,cgood)+1./0.
+       ivararr = fltarr(npixcomb,cgood)+1./0.
+       framearr = bytarr(npixcomb,cgood)+1
        for k=0,cgood-1 do begin
-          idlam = interpol(spec.indiv_dlam[*,wgood[k]],lambdaarr[*,k],lambdafull)
-          iivar = spec.indiv_ivar[*,wgood[k]]
+          curnpix = spec.indiv_npix[wgood[k]]-1
+          curlam = spec.indiv_lambda[0:curnpix,wgood[k]]
+          idlam = interpol(spec.indiv_dlam[0:curnpix,wgood[k]],curlam,lambdafull)/2.35
+          iivar = spec.indiv_ivar[0:curnpix,wgood[k]]
           ;deal with mask
           ;mask the mask before smoothing by making ivar = 0
           woffmask = where(spec.indiv_combmask[*,wgood[k]] eq 0,coffmask)
           if coffmask gt 0 then begin
              iivar(woffmask) = 0
           endif
-          specout = smooth_gauss_wrapper(lambdaarr[*,k],spec.indiv_spec[*,wgood[k]],$
+          specout = smooth_gauss_wrapper(curlam,spec.indiv_spec[0:curnpix,wgood[k]],$
                         lambdafull,sqrt(fdlam^2-idlam^2),ivar1=iivar,ivar2=ivarout)
           ;after smooth and interpol, also check the mask
           woffmask = where(combmaskarr[*,k] eq 0, coffmask,complement=winmask,$
@@ -67,6 +134,7 @@ pro stackspec::combine,spec,noredraw=noredraw
           ;save the values
           spec.indiv_spec_smoothed[*,wgood[k]] = specout
           spec.indiv_ivar_smoothed[*,wgood[k]] = ivarout 
+          spec.dlam = fltarr(npixcomb)
           specarr[*,k] = specout
           ivararr[*,k] = ivarout
        endfor
@@ -114,7 +182,7 @@ pro stackspec::combine,spec,noredraw=noredraw
 end
 
 pro stackspec::indivsn,spec
-   common npixcom, npix,ndup
+   common npixcom, npix,npixcomb,ndup
    for i=0, ndup-1 do begin
        contpara = poly_fit(spec.indiv_lambda[*,i],spec.indiv_spec[*,i],6,yfit=cont)
 
@@ -208,7 +276,7 @@ pro stackspec::handle_button, ev
 end
 
 pro stackspec::step, increment
-    common npixcom, npix,ndup
+    common npixcom, npix,npixcomb,ndup
     curi = self.indivi
     curi += increment
     if curi ge ndup then curi=0
@@ -235,7 +303,7 @@ pro stackspec::toggle_good
 end
 
 pro stackspec::newspec, increment=increment, noredraw=noredraw
-   common npixcom, npix,ndup
+   common npixcom, npix,npixcomb,ndup
     if ~keyword_set(increment) then increment=0
     newi= self.i
     newi += increment
@@ -391,7 +459,7 @@ end
 
 ; ============= DRAW KEYS ==============
 pro stackspec::handle_draw_key, ev
-   common npixcom, npix,ndup 
+   common npixcom, npix,npixcomb,ndup 
    if ev.press ne 1 then return
    key = string(ev.ch)
    coords = convert_coord(ev.x, ev.y, /device, /to_data)
@@ -531,26 +599,26 @@ end
 
 ; ============== REDRAW ===============
 pro stackspec::redraw
-   common npixcom, npix,ndup
+   common npixcom, npix,npixcomb,ndup
    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Redrawing ...'
    spec = *self.spec
    indivcolors = *self.indivcolors
    indivbgcolors = *self.indivbgcolors
    wplotcon = self.indivi
-
+   curnpix = spec.indiv_npix(wplotcon)-1
    ;plot zoom
     widget_control, widget_info(self.base, find_by_uname='zoom'), get_value=index
     wset, index
     plot,spec.lambda,spec.spec,xrange=[3700,3760],title='OII',position=[0.05,0.08,0.32,0.9],/normal, background=fsc_color('white'), color=fsc_color('black')
-    oplot,spec.indiv_lambda[*,wplotcon]*(1.+spec.indiv_vhelio[wplotcon]/3e5),spec.indiv_spec[*,wplotcon],color=fsc_color((*self.indivcolors)[0])
+    oplot,spec.indiv_lambda[0:curnpix,wplotcon]*(1.+spec.indiv_vhelio[wplotcon]/3e5),spec.indiv_spec[0:curnpix,wplotcon],color=fsc_color((*self.indivcolors)[0])
     oplot,spec.lambda,spec.spec,color=fsc_color('black'),thick=2
 
     plot,spec.lambda,spec.spec,xrange=[3900,4000],title='CaII',position=[0.37,0.08,0.64,0.9],/noerase,/normal, background=fsc_color('white'), color=fsc_color('black')
-    oplot,spec.indiv_lambda[*,wplotcon]*(1.+spec.indiv_vhelio[wplotcon]/3e5),spec.indiv_spec[*,wplotcon],color=fsc_color((*self.indivcolors)[0])
+    oplot,spec.indiv_lambda[0:curnpix,wplotcon]*(1.+spec.indiv_vhelio[wplotcon]/3e5),spec.indiv_spec[0:curnpix,wplotcon],color=fsc_color((*self.indivcolors)[0])
     oplot,spec.lambda,spec.spec,color=fsc_color('black'),thick=2
 
     plot,spec.lambda,spec.spec,xrange=[4830,4890],title='Hb',position=[0.69,0.08,0.96,0.9],/noerase,/normal, background=fsc_color('white'), color=fsc_color('black')
-    oplot,spec.indiv_lambda[*,wplotcon]*(1.+spec.indiv_vhelio[wplotcon]/3e5),spec.indiv_spec[*,wplotcon],color=fsc_color((*self.indivcolors)[0])
+    oplot,spec.indiv_lambda[0:curnpix,wplotcon]*(1.+spec.indiv_vhelio[wplotcon]/3e5),spec.indiv_spec[0:curnpix,wplotcon],color=fsc_color((*self.indivcolors)[0])
     oplot,spec.lambda,spec.spec,color=fsc_color('black'),thick=2
 
    ;plot main
@@ -561,7 +629,7 @@ pro stackspec::redraw
    plot, spec.lambda, spec.spec, xrange=self.lambdalim, yrange=self.ylim, xstyle=1, ystyle=1, background=fsc_color('white'), color=fsc_color('black'), /nodata
    ;;making the highlight region
    if wplotcon lt spec.indiv_count then begin
-      t = round(-1*ts_diff(spec.indiv_combmask[*,wplotcon], 1))
+      t = round(-1*ts_diff(spec.indiv_combmask[0:curnpix,wplotcon], 1))
       wstart = where(t eq 1, cstart)+1
       wend = where(t eq -1, cend)
       if spec.indiv_combmask[0,wplotcon] eq 1 then begin
@@ -601,12 +669,12 @@ pro stackspec::redraw
    oplot, [-1d6, 1d6], [1.0, 1.0], color=fsc_color('pale green')
 
    ;plot spectrum
-   oplot,spec.indiv_lambda[*,wplotcon]*(1.+spec.indiv_vhelio[wplotcon]/3e5),spec.indiv_spec[*,wplotcon],color=fsc_color(indivcolors[0])
+   oplot,spec.indiv_lambda[0:curnpix,wplotcon]*(1.+spec.indiv_vhelio[wplotcon]/3e5),spec.indiv_spec[0:curnpix,wplotcon],color=fsc_color(indivcolors[0])
    oplot,spec.lambda,spec.indiv_spec_smoothed[*,wplotcon],color=fsc_color(indivcolors[1])
-   
+   oplot,spec.indiv_lambda[0:curnpix,wplotcon],1./sqrt(spec.indiv_ivar[0:curnpix,wplotcon]),color=fsc_color('salmon') 
    if total(spec.indiv_good) gt 1 then thick=2 else thick=1 
    oplot, spec.lambda, spec.spec, color=fsc_color('black'),thick=thick
-
+   oplot, spec.lambda, 1./sqrt(spec.ivar),color=fsc_color('red')
    ;;highlighting the telluric bands and label line names
    n = n_elements(*self.linewaves)
    for i=0,n-1 do begin
@@ -622,7 +690,7 @@ pro stackspec::redraw
 end
 
 pro stackspec::statusbox, spec=spec
-    common npixcom, npix,ndup
+    common npixcom, npix,npixcomb,ndup
     if ~keyword_set(spec) then spec = *self.spec
     unknown = '???'
     curi = self.indivi
@@ -646,14 +714,14 @@ end
 
 pro stackspec::getspec, redo=redo
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Initializing ...'
-    common npixcom, npix,ndup
+    common npixcom, npix,npixcomb,ndup
     common file, inputfile, massrange, outfits
     nspec = n_Elements(outfits)
     checkfile = file_test(outfits)
     self.nspec = nspec
     speclist = file_basename(outfits,'.sav')
     widget_control, widget_info(self.base, find_by_uname='filelist'), set_value=speclist
-    npix = 8192
+    npix = 12619
     if (total(checkfile) ne nspec) or keyword_set(redo) then begin 
        ;read all the spec files
        data = mrdfits(inputfile,1)
@@ -661,12 +729,12 @@ pro stackspec::getspec, redo=redo
        snperpix = data.sn
        snperang = snperpix
        for i=0,n_elements(snperpix)-1 do begin
-          dlam = median(-1.*ts_diff(data[i].lambda,1)/(1.+data[i].z)) ;rest lambda
+          dlam = median(-1.*ts_diff(data[i].lambda,1)/(1.+data[i].zspec)) ;rest lambda
           snperang[i] = snperpix[i]/sqrt(dlam)  
        endfor
        ;get data for each mass range
        for i=0,n_elements(massrange)-2 do begin
-          sel = where(data.logmstar ge massrange[i] and data.logmstar lt massrange[i+1] $
+          sel = where(data.logmstar_sed_bl ge massrange[i] and data.logmstar_sed_bl lt massrange[i+1] $
                       and snperang gt 3 and snperang le 15 and data.oiiew gt -5.,ndup)
           if ndup lt 3 then stop,'Warning: there are less than 3 galaxies in this mass range'
           print, outfits[i],ndup
@@ -680,6 +748,7 @@ pro stackspec::getspec, redo=redo
            spec:dblarr(npix), $
            ivar:dblarr(npix), $
            dlam:dblarr(npix), $
+           npix:-999, $
            indiv_spec:dblarr(npix,ndup), $
            indiv_lambda:dblarr(npix,ndup), $
            indiv_ivar:dblarr(npix,ndup), $
@@ -687,6 +756,7 @@ pro stackspec::getspec, redo=redo
            indiv_ivar_smoothed:dblarr(npix,ndup), $
            indiv_combmask:bytarr(npix,ndup), $
            indiv_dlam:dblarr(npix,ndup), $
+           indiv_npix:lonarr(ndup), $
            indiv_sn:fltarr(ndup),$
            indiv_objname:strarr(ndup),$
            indiv_filename:strarr(ndup),$
@@ -704,18 +774,19 @@ pro stackspec::getspec, redo=redo
           for iobs =0, ndup-1 do begin
              datanow = data[sel[iobs]]
              znow = datanow.zspec 
-             if znow le 0. then znow = datanow.z
+             if znow le 0. then znow = datanow.zcat
              spec.indiv_z[iobs] = znow
              spec.indiv_spec[*,iobs] = datanow.contdiv
              spec.indiv_lambda[*,iobs] = datanow.lambda/(1.+znow)
              spec.indiv_ivar[*,iobs] = datanow.contdivivar
              spec.indiv_dlam[*,iobs] = datanow.dlam/(1.+znow)
+             spec.indiv_npix[iobs] = datanow.npix
              spec.indiv_combmask[*,iobs]=1
              spec.indiv_objname[iobs] = datanow.objname
              spec.indiv_sn[iobs] = snperang[sel[iobs]]
              spec.indiv_vhelio[iobs] = 0. 
              spec.indiv_good[iobs] = 1
-             spec.indiv_mass[iobs] = datanow.logmstar
+             spec.indiv_mass[iobs] = datanow.logmstar_sed_bl
              spec.indiv_pos[iobs] = sel[iobs]
            endfor
          self.i = i
@@ -752,14 +823,14 @@ end
 pro stackspec::initialize_directory,directory=directory, redo=redo
    common file, inputfile, massrange, outfits
 
-   newdirectory = '/scr2/nichal/workspace4/prepspec_ms0451/data/stacked/'
+   newdirectory = '/scr2/nichal/workspace4/prepspec_cl1604/data/stacked/'
    if ~file_test(newdirectory) then file_mkdir, newdirectory
 
    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Reading directory ...'
    
    nfiles = n_elements(massrange)-1
    outfits = strarr(nfiles)
-   for i=0,nfiles-1 do outfits[i] = newdirectory+'stackedms0451_mass'+$
+   for i=0,nfiles-1 do outfits[i] = newdirectory+'stackedcl1604_mass'+$
                                      strtrim(string(massrange[i],format='(f5.2)'),2)+'_'+$
                                      strtrim(string(massrange[i+1],format='(f5.2)'),2)+'.sav'
    self.directory = newdirectory
@@ -778,9 +849,9 @@ end
 ; =============== INIT ================
 function stackspec::INIT,directory=directory
     common file, inputfile, massrange, outfits
-    common npixcom, npix,ndup
+    common npixcom, npix,npixcomb,ndup
     ndup = 15
-    base = widget_base(/row, title='stack_spec_ms0451', uvalue=self, mbar=menu, tab_mode=0, units=1)
+    base = widget_base(/row, title='stack_spec_cl1604', uvalue=self, mbar=menu, tab_mode=0, units=1)
     file_menu = widget_button(menu, value='File', /menu)
     wexit = widget_button(file_menu, value='Save', uvalue='save', uname='save')
     wexit = widget_button(file_menu, value='Exit', uvalue='exit', uname='exit')
@@ -904,14 +975,14 @@ pro stackspec__define
 
 end
 
-pro stackspec_ms0451
+pro stackspec_cl1604
    common file, inputfile, massrange, outfits
-   common npixcom, npix,ndup
+   common npixcom, npix,npixcomb,ndup
    common smoothpar, smooth_veldisp
-   inputfile = '/scr2/nichal/workspace4/sps_fit/data/spline_ms0451/sps_fit01.fits.gz'
+   inputfile = '/scr2/nichal/workspace4/sps_fit/data/spline_cl1604/sps_fit01.fits.gz'
    smooth_veldisp = 350 ;km/s
    if file_test(inputfile) eq 0 then stop,'Stopped: cannot find input file'
-   massrange=[9.,10.,10.5,10.7,10.82,11.0,11.5]
+   massrange=[10.,10.4,10.6,10.75,11.05,11.5] 
    n = obj_new('stackspec',directory=directory)
 
 end
