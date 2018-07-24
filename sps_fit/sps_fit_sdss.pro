@@ -26,38 +26,6 @@ pro sps_iterproc_alpha, funcname, p, iter, fnorm, functargs=functargs, $
     endif
 end
 
-pro sps_fit::indices, science, noredraw=noredraw, nostatusbar=nostatusbar
-    nmc = 1000
-    cah = 3933.663
-    cahindex = dblarr(nmc+1) - 1d9
-    gbandindex = dblarr(nmc+1) - 1d9
-
-    restlambda = science.lambda / (1d + science.zspec)
-    flux = science.contdiv
-    ivar = science.contdivivar
-    w = where(finite(flux) and finite(ivar) and ivar gt 0, n)
-    if n lt 10 then return
-    restlambda = restlambda[w]
-    flux = flux[w]
-    ivar = ivar[w]
-    wcah = where(restlambda gt cah-9 and restlambda lt cah+9, ccah)
-    wcahside = where((restlambda gt 3900 and restlambda lt 3916) or (restlambda gt 4015 and restlambda lt 4029), ccahside)
-    wgband = where(restlambda gt 4285 and restlambda lt 4318, cgband)
-    wgbandside = where(restlambda gt 4228 and restlambda lt 4273, cgbandside)
-    for i=0,nmc do begin
-        if i eq 0 then fluxi = flux else fluxi = flux + (ivar)^(-0.5)*randomn(seed, n)
-        if ccah gt 10 and ccahside gt 10 then cahindex[i] = weightedmean(1.0 - fluxi[wcah], (ivar[wcah])^(-0.5)) - weightedmean(1.0 - fluxi[wcahside], (ivar[wcahside])^(-0.5))
-        if cgband gt 10 and cgbandside gt 10 then gbandindex[i] = weightedmean(1.0 - fluxi[wgband], (ivar[wgband])^(-0.5)) - weightedmean(1.0 - fluxi[wgbandside], (ivar[wgbandside])^(-0.5))
-    endfor
-    science.cah = cahindex[0]
-    w = where(cahindex[1:nmc] gt -1d8)
-    science.caherr = stddev(cahindex[w+1])
-    science.gband = gbandindex[0]
-    w = where(gbandindex[1:nmc] gt -1d8)
-    science.gbanderr = stddev(gbandindex[w+1])
-end
-
-
 pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
     common sps_spec, sps, spsz, spsage
     common sps_iterproc, contiter
@@ -69,51 +37,52 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
     savedata = 0 ;1
 
     znow = science.zspec
-    if znow lt 0 then znow = science.z
-    if znow lt 0 then stop
     reallambda = science.lambda
     nlambda = n_elements(reallambda)
-    
-    ;check if the blue chip was failed
-    neg = where(reallambda lt 0., cneg)
-    if cneg gt 0 then reallambda(neg) = reallambda(neg)+10000.
+
     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-    dlam_all = science.dlam  ;this is already sigma, not fwhm
-    baddlam = where(~finite(dlam_all),cbaddlam,complement=gooddlam)
-    if cbaddlam gt 0 then begin
-       dlam_all(baddlam) = interpol(dlam_all(gooddlam),reallambda(gooddlam),reallambda(baddlam))
-    endif
-
+    if min(science.dlam) gt 0.2 and max(science.dlam,/nan) lt 10.0 then begin
+        dlam_all = science.dlam
+    endif else begin
+        specresfile = self.directory+'specres_poly.sav'
+        if file_test(specresfile) then begin
+            restore, specresfile
+            dlam_all = poly(science.lambda/1800 - 7.8, specres_poly) / 2.35
+        endif else dlam_all = replicate(3.9/2.35, nlambda)
+    endelse
+    
     pi = replicate({value:0d, fixed:0, limited:[1,1], limits:[0.D,0.D], parname:'', mpprint:0, mpformat:'', step:0d, tied:''}, 4)
-   
-    pi[0].limits = [-0.5,0.1] ;this is just for initial parameters
-    pi[1].limits = [min(spsage),(galage(znow,1000)/1.e9)<max(spsage)]
-    pi[3].limits = [-0.3,0.3]+znow
+    pi[0].limits = [-0.2,0.1]
+    pi[3].limits = [-0.05,0.05]+znow
+
     ;set the prior to velocity dispersion according to Faber-Jackson relation (Dutton2011)
-;    if science.logmstar gt 5. then begin
-;	logvdisp = 2.23+0.37*(science.logmstar-10.9)-0.19*alog10(0.5+0.5*(10.^science.logmstar/10.^10.9))
-;	pi[2].limits = [10.^(logvdisp-0.4),10.^(logvdisp+0.4)]
-;	print, 'velocity dispersion prior = ',pi[2].limits,' km/s'	
-;    endif else pi[2].limits = [40.,400.]; [30.,200.]
-    pi[2].limits = [0.,600.]
+    if science.logmstar gt 5. then begin
+        logvdisp = 2.23+0.37*(science.logmstar-10.9)-0.19*alog10(0.5+0.5*(10.^science.logmstar/10.^10.9))
+        pi[2].limits = [10.^(logvdisp-0.5),10.^(logvdisp+0.5)]
+        print, 'velocity dispersion prior = ',pi[2].limits,' km/s'
+    endif else pi[2].limits = [20.,200.]; [30.,200.]
+    pi[2].limits[0]=0
+
    ;;make the initial guesses unfix but within limits except redshift
     pi.value = randomu(seed,4)*(pi.limits[1,*]-pi.limits[0,*])+pi.limits[0,*]
     pi[3].value = znow
-    firstguess = pi.value    
-    pi[0].limits = minmax(spsz) ;fix the limit of [Fe/H] back
+    firstguess = pi.value
+
+    ;fix the prior range back to normal    
+    pi[0].limits = minmax(spsz)
+    ;if science.haveemlines eq 0 then
     pi[1].limits = [min(spsage),(galage(znow,1000)/1.e9)<max(spsage)]
-    pi.step = double([0.1, 0.5, 25.0,0.002])
+
+    pi.step = double([0.1, 0.5, 25.0,0.0002])
     pi.parname = ['    Z', '  age', 'vdisp','redshift']
     pi.mpformat = ['(D6.3)', '(D5.2)', '(D6.1)','(D6.3)']
     print, 'prior range:',pi.limits
 
-    won = where(science.fitmask eq 1 and finite(science.contdiv) and finite(science.dlam) and $
-                finite(science.contdivivar) and science.contdivivar gt 0 and $
-                reallambda/(1.+znow) gt 3500. and reallambda/(1.+znow) lt 7400., con)
+    won = where(science.fitmask eq 1 and finite(science.contdiv) and finite(science.contdivivar) and science.contdivivar gt 0 and reallambda/(1.+znow) gt 3500. and reallambda/(1.+znow) lt 7400., con)
+
     if con lt 10 then begin
-        pi.value = [-999d, -999d, -999d,-999d]
-        perror = [-999d, -999d, -999d, -999d]
+        pi.value = [-999d, -999d, -999d]
+        perror = [-999d, -999d, -999d]
         science.spsspec = -999d
         goto, done
     endif
@@ -135,18 +104,18 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
     print, '* * * * * * * * * * * * * * * * * * * *'
     print, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
     print, '* * * * * * * * * * * * * * * * * * * *'
-    print, '  i Z/Z_sun   age sigma_v  redhift    chi^2  DOF   ZDIFF  AGEDIFF'
-    print, '--- ------- ----- ------- ---------  -------- ---- -----  ------'
+    print, '  i Z/Z_sun   age sigma_v  redhift    chi^2  DOF'
+    print, '--- ------- ----- ------- ---------  -------- ----'
 
-    openw,copynum,'/scr2/nichal/workspace4/sps_fit/logsps/sps_fit_ms0451'+copynum+'.log',/append
+    openw,copynum,'/scr2/nichal/workspace4/sps_fit/logsps/sps_fit_sdss'+copynum+'.log',/append
     printf,copynum, '* * * * * * * * * * * * * * * * * * * *'
     printf,copynum,systime()
     printf,copynum, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
     printf,copynum, '* * * * * * * * * * * * * * * * * * * *'
     printf,copynum, '  i Z/Z_sun   age sigma_v  redhift    chi^2  DOF   ZDIFF  AGEDIFF'
     printf,copynum, '--- ------- ----- ------- ---------  -------- ---- -----  ------'
-
-;;things to keep during the while loop
+    
+    ;;things to keep during the while loop
     bestchisq = 9999.
     bestvalue = [99.,99.,99.,99.]
     besterror = [99.,99.,99.,99.]
@@ -163,22 +132,22 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
         contmask = science.contmask
         rest =0
         if nloop eq 0 then normalize =1 else normalize = 0
-        pars = mpfitfun('get_sps_obs', xmp, ymp, dymp, parinfo=pi, /nocatch, bestnorm=bestnorm, dof=dof, perror=perror, ftol=1d-10, gtol=1d-10, xtol=1d-10, covar=covar, nprint=500, status=status, yfit=ympfit, iterproc='sps_iterproc')
-
+        pars = mpfitfun('get_sps_obs', xmp, ymp, dymp, parinfo=pi, /nocatch, bestnorm=bestnorm, dof=dof, perror=perror, ftol=1d-10, gtol=1d-10, xtol=1d-10, covar=covar, nprint=1000, status=status, yfit=ympfit, iterproc='sps_iterproc')
+        
         zdiff = (pi[0].value-pars[0])/pi[0].value
         agediff = (pi[1].value-pars[1])/pi[1].value
         vdispdiff = (pi[2].value-pars[2])/pi[2].value
-        redshfdiff = (pi[3].value-pars[3])/pi[2].value
+        redshfdiff = (pi[3].value-pars[3])/pi[3].value
         pi.value = pars
         restlambda = reallambda / (1d + pi[3].value)
 
         ;;get the model
         rest = 1 ;make the return values an array of model contdiv, full spec, cont
-        spsbestfitarr = get_sps_obs(reallambda, pars)                                
+        spsbestfitarr = get_sps_obs(reallambda, pars) 
         rest = 0 ;make the return values back to only y values     
         spsbestfit=spsbestfitarr[*,1] ;not normallized
 
-       ;;save previous continuum before the new iteration. 
+        ;;save previous continuum before the new iteration. 
         ;;so the cont is the one that data was fitted 
         if nloop eq 0 then science.spscont = 1
         if nloop ge 1 then science.spscont = cont  
@@ -194,8 +163,8 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
        
         bkpt = slatec_splinefit(restlambda[won], science.contdiv[won]/spsbestfit[won], coeff, invvar=science.contdivivar[won]*(spsbestfit[won])^2, bkspace=150, upper=3, lower=3, /silent)
         if bkpt[0] eq -1 then begin
-            pi.value = [-999d, -999d, -999d, science.z]
-            perror = [-999d, -999d, -999d, science.z]
+            pi.value = [-999d, -999d, -999d,science.z]
+            perror = [-999d, -999d, -999d,science.z]
             science.spsspec = 1
             science.spscont = 1
             !p.multi=[0,1,1]
@@ -214,7 +183,7 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
         ;if nloop eq maxnloop then print,'WARNING: MAX NLOOP REACHED!'
         curchisq = bestnorm/dof
 
-        ;;keeping the values
+       ;;keeping the values
         if savedata eq 1 and nloop mod 10 eq 0 then begin
            if nloop eq 0 then $
               str={won:won,lambda:science.lambda,contdiv:science.contdiv,contdivivar:science.contdivivar,fakecont:science.spscont,spsbestfit:spsbestfitarr[*,0],chisq:curchisq,param:pars,perror:perror,loop:nloop} else $
@@ -234,39 +203,29 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
         errorarr[*,nloop] = perror
         nloop +=1
      endwhile
-    close,copynum
+    close, copynum 
     if savedata eq 1 then begin
        str = {chisq:chisqarr,param:valuearr,perror:errorarr,paraname:['Z','age','sigmav','redshift'],objname:strtrim(science.objname, 2),dof:dof}
        save,str,filename=self.directory+'/sps_fit_data_'+strtrim(string(self.i+1, format='(I3)'), 2)+'.sav'
     endif
-    print,agediff,zdiff,format='("--- ------- ----- ------- ---------  -------- ----",D9.6,2X,D9.6)'                            
-    ;;check if the last chisq is the best chisq
-    ;if abs((pi[0].value-bestvalue[0])/bestvalue[0]) gt 0.01 or abs((pi[1].value-bestvalue[1])/bestvalue[1]) gt 0.01 or (curchisq-bestchisq)/bestchisq gt 0.001 then begin
-    ;   print,'THE WHILE LOOP HAS WALKED AWAY FROM THE BEST VALUES. BETTER CHECK YOUR PLOT'
-    ;   print,'The values used are:'
-    ;   print, bestvalue[0], bestvalue[1], bestvalue[2],bestvalue[3],bestchisq,format='(6X,D6.3,1X,D5.2,2X,D6.1,2x,D6.3,1X,D8.3)'
-    ;   science.goodfit = 1.
-    ;   spsbestfitarr = bestspsbestfitarr
-    ;   pi.value = bestvalue
-    ;   perror   = besterror
-    ;   science.spscont = bestcont
-    ;endif
+    print,agediff,zdiff,format='("--- ------- ----- ------- ---------  -------- ----",D9.6,2X,D9.6)'
 
     science.nloop = nloop
     science.spsspec = spsbestfitarr[*,0] 
     science.spsspecfull = spsbestfitarr[*,1]
     science.spscontfull = spsbestfitarr[*,2]
     print, ' '
-    
+     
     done:
+    science.nloop = nloop
     science.feh = pi[0].value
     science.feherr = perror[0]
     science.age = pi[1].value
     science.ageerr = perror[1]
     science.zfit = pi[3].value
-    science.zspec = pi[3].value
     science.vdisp = pi[2].value
     science.vdisperr = perror[2]
+
     ;calculate chisq
     if science.feh ne -999 then begin
        science.chisq = total((spsbestfit[won]-science.contdiv[won]/science.spscont[won])^2*science.contdivivar[won]*(science.spscont[won])^2)/float(n_elements(won))
@@ -274,6 +233,7 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
        contmask = science.contmask
        n = n_elements(science.lambda)
        wcont = where(contmask[3:n-4] eq 1)+3
+       wcont = wcont[where(finite(science.spec[wcont]) and finite(science.continuum[wcont]) and science.continuum[wcont] ne 0)]
        dev = abs((science.contdiv[wcont] - science.spsspec[wcont]) / science.spsspec[wcont])
        avgdev = mean(dev)
        w = where(dev lt 3.0*avgdev, c)
@@ -282,6 +242,7 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
        contmask = science.fitmask
        n = n_elements(science.lambda)
        wcont = where(contmask[3:n-4] eq 1)+3
+       wcont = wcont[where(finite(science.spec[wcont]) and finite(science.continuum[wcont]) and science.continuum[wcont] ne 0)]
        dev = abs((science.contdiv[wcont] - science.spsspec[wcont]) / science.spsspec[wcont])
        avgdev = mean(dev)
        w = where(dev lt 3.0*avgdev, c)
@@ -477,7 +438,7 @@ pro sps_fit::fitalpha, science, noredraw=noredraw, nostatusbar=nostatusbar
        str = {chisq:chisqarr,param:valuearr,perror:errorarr,paraname:['Z','age','sigmav','redshift'],objname:strtrim(science.objname, 2),dof:dof}
        save,str,filename=self.directory+'/sps_fit_data_'+strtrim(string(self.i+1, format='(I3)'), 2)+'.sav'
     endif
-    print,agediff,zdiff,format='("--- ------- ----- ------- ---------  -------- ----",D9.6,2X,D9.6)'     
+    print,agediff,zdiff,format='("--- ------- ----- ------- ---------  -------- ----",D9.6,2X,D9.6)'
     ;;check if the last chisq is the best chisq
     ;if abs((pi[0].value-bestvalue[0])/bestvalue[0]) gt 0.01 or abs((pi[1].value-bestvalue[1])/bestvalue[1]) gt 0.01 or (curchisq-bestchisq)/bestchisq gt 0.001 then begin
     ;   print,'THE WHILE LOOP HAS WALKED AWAY FROM THE BEST VALUES. BETTER CHECK YOUR PLOT'
@@ -535,208 +496,11 @@ pro sps_fit::fitalpha, science, noredraw=noredraw, nostatusbar=nostatusbar
     endif
 end
 
-
-pro sps_fit::fitz, science, noredraw=noredraw, nostatusbar=nostatusbar
-    common sps_spec, sps, spsz, spsage
-    common sps_iterproc, contiter
-    common get_sps, dlam, dataivar, datalam, wonfit, contmask, normalize, rest
-    common toprint, agediff, zdiff
-
-    if ~keyword_set(nostatusbar) then widget_control, widget_info(self.base, find_by_uname='status'), set_value='Fitting ...'
-
-    znow = science.z
-    reallambda = science.lambda
-    nlambda = n_elements(reallambda)
-    
-
-    if min(science.dlam) gt 0.2 and max(science.dlam) lt 10.0 then begin
-        dlam_all = science.dlam
-    endif else begin
-        specresfile = self.directory+'specres_poly.sav'
-        if file_test(specresfile) then begin
-            restore, specresfile
-            dlam_all = poly(science.lambda/1000 - 7.8, specres_poly) / 2.35
-        endif else dlam_all = replicate(3.9/2.35, nlambda)
-    endelse
-
-    pi = replicate({value:0d, fixed:0, limited:[1,1], limits:[0.D,0.D], parname:'', mpprint:0, mpformat:'', step:0d, tied:''}, 4)
-    ;set the prior to velocity dispersion according to Faber-Jackson relation (Dutton2011)
-;    if science.logmstar gt 5. then begin
-;	logvdisp = 2.23+0.37*(science.logmstar-10.9)-0.19*alog10(0.5+0.5*(10.^science.logmstar/10.^10.9))
-;	pi[2].limits = [10.^(logvdisp-0.4),10.^(logvdisp+0.4)]
-;	print, 'velocity dispersion prior = ',pi[2].limits,' km/s'	
-;    endif else pi[2].limits = [40.,400.]; [30.,200.]
-    pi[0].value = -0.2
-    pi[1].value = 3.
-    pi[2].value = 250. 
-    pi[3].value = znow
-    firstguess = pi.value    
-    pi[3].limits = [0.3,0.7] ;redshift 
-    pi[0].limits = [pi[0].value,pi[0].value]
-    pi[1].limits = [pi[1].value,pi[1].value]
-    pi[2].limits = [pi[2].value,pi[2].value]
-    pi.step = double([0,0,0,0.01])
-    pi.fixed = [1,1,1,0]
-    pi.parname = ['    Z', '  age', 'vdisp','redshift']
-    pi.mpformat = ['(D6.3)', '(D5.2)', '(D6.1)','(D6.3)']
-    print, 'prior range:',pi.limits
-
-    won = where(science.fitmask eq 1 and finite(science.contdiv) and finite(science.contdivivar) and science.contdivivar gt 0 and reallambda/(1.+znow) gt 3500. and reallambda/(1.+znow) lt 7400., con)
-
-    if con lt 10 then begin
-        pi.value = [-999d, -999d, -999d,-999d]
-        perror = [-999d, -999d, -999d, -999d]
-        science.spsspec = -999d
-        goto, done
-    endif
-    
-    xmp = reallambda[won]
-    ymp = science.contdiv[won]
-    dymp = (science.contdivivar[won])^(-0.5)
-    wontofit = won
-    zdiff = 1.0
-    agediff = 1.0
-    vdispdiff = 1.0
-    redshfdiff = 1.0
-    contiter = 0
-    nloop=0
-    maxnloop = 10
-    print, '* * * * * * * * * * * * * * * * * * * *'
-    print, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
-    print, '* * * * * * * * * * * * * * * * * * * *'
-    print, '  i Z/Z_sun   age sigma_v  redhift    chi^2  DOF   ZDIFF  AGEDIFF'
-    print, '--- ------- ----- ------- ---------  -------- ---- -----  ------'
-
-;;things to keep during the while loop
-    bestchisq = 9999.
-    bestvalue = [99.,99.,99.,99.]
-    besterror = [99.,99.,99.,99.]
-    chisqarr = fltarr(maxnloop)
-    valuearr = fltarr(4,maxnloop)
-    errorarr = fltarr(4,maxnloop)
-    
-    ;;while abs(zdiff) gt 0.001 or abs(agediff) gt 0.001 or abs(vdispdiff) gt 0.001 or abs(redshfdiff) gt 0.001 and nloop le maxnloop do begin
-    while nloop lt maxnloop do begin
-        contiter++
-        dlam = dlam_all
-        dataivar = science.contdivivar
-        datalam = science.lambda
-        wonfit = wontofit
-        contmask = science.contmask
-        rest =0
-        if nloop eq 0 then normalize =1 else normalize = 0
-        pars = mpfitfun('get_sps_obs', xmp, ymp, dymp, parinfo=pi, /nocatch, bestnorm=bestnorm, dof=dof, perror=perror, ftol=1d-10, gtol=1d-10, xtol=1d-10, covar=covar, nprint=500, status=status, yfit=ympfit, iterproc='sps_iterproc')
-
-        zdiff = (pi[0].value-pars[0])/pi[0].value
-        agediff = (pi[1].value-pars[1])/pi[1].value
-        vdispdiff = (pi[2].value-pars[2])/pi[2].value
-        redshfdiff = (pi[3].value-pars[3])/pi[2].value
-        ;print,'z,age,vdisp diff:',zdiff,agediff,vdispdiff,nloop
-        pi.value = pars
-        restlambda = reallambda / (1d + pi[3].value)
-
-        ;;get the model
-        rest = 1 ;make the return values an array of model contdiv, full spec, cont
-        spsbestfitarr = get_sps_obs(reallambda, pars)                                
-        rest = 0 ;make the return values back to only y values     
-        spsbestfit=spsbestfitarr[*,1] ;not normallized
-
-       ;;save previous continuum before the new iteration. 
-        ;;so the cont is the one that data was fitted 
-        if nloop eq 0 then science.spscont = 1
-        if nloop ge 1 then science.spscont = cont  
-        ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-        widget_control, widget_info(self.base, find_by_uname='2d'), get_value=index
-        wset, index
-        spectoplot = science.contdiv/science.spscont
-        !p.multi=[0,1,2]
-        plot,restlambda,spsbestfitarr[*,1],/nodata,yrange=[0.1,max(spsbestfitarr[*,1])*1.2],xrange=[3500,6000]
-        oplot,restlambda,spectoplot
-        oplot,restlambda,spsbestfitarr[*,1],color=fsc_color('red')
-       
-        bkpt = slatec_splinefit(restlambda[won], science.contdiv[won]/spsbestfit[won], coeff, invvar=science.contdivivar[won]*(spsbestfit[won])^2, bkspace=150, upper=3, lower=3, /silent)
-        if bkpt[0] eq -1 then begin
-            pi.value = [-999d, -999d, -999d, -999d]
-            perror = [-999d, -999d, -999d, -999d]
-            science.spsspec = -999d
-            science.spscont = -999d 
-            break
-        endif
-        cont = slatec_bvalu(restlambda, bkpt, coeff)
-        ympold = ymp
-        ymp = science.contdiv[won] / cont[won]
-        dymp = (science.contdivivar[won])^(-0.5) / cont[won]
-
-        plot,xmp/(1.+pi[3].value),ympold
-        oplot,xmp/(1.+pi[3].value),ymp,color=fsc_Color('green')
-        oplot,restlambda[won],spsbestfit[won],color=fsc_color('red')
-        !p.multi=[0,1,1]
-
-        ;if nloop eq maxnloop then print,'WARNING: MAX NLOOP REACHED!'
-        curchisq = bestnorm/dof
-
-        if curchisq lt bestchisq then begin
-           bestchisq = curchisq
-           bestvalue = pars
-           besterror = perror
-           bestspsbestfitarr = spsbestfitarr
-           bestcont = cont
-        endif
-        chisqarr[nloop] = curchisq
-        valuearr[*,nloop] = pars
-        errorarr[*,nloop] = perror
-        nloop +=1
-
-     endwhile
-
-    print,agediff,zdiff,format='("--- ------- ----- ------- ---------  -------- ----",D9.6,2X,D9.6)'                            
-
-    science.spsspec = spsbestfitarr[*,0] 
-    science.spsspecfull = spsbestfitarr[*,1]
-    science.spscontfull = spsbestfitarr[*,2]
-    print, ' '
-    
-    done:
-    science.feh = -999
-    science.feherr= -999
-    science.age = -999
-    science.ageerr = -999
-    science.zfit = pi[3].value
-    science.zspec = pi[3].value
-    science.vdisp = -999 
-    science.vdisperr = -999
-    ;calculate chisq
-    science.chisq = total((spsbestfit[won]-science.contdiv[won]/science.spscont[won])^2*science.contdivivar[won]*(science.spscont[won])^2)/float(n_elements(won))
-    ;calculate new signal to noise
-       contmask = science.contmask
-       n = n_elements(science.lambda)
-       wcont = where(contmask[3:n-4] eq 1)+3
-       dev = abs((science.contdiv[wcont] - science.spsspec[wcont]) / science.spsspec[wcont])
-       avgdev = mean(dev)
-       w = where(dev lt 3.0*avgdev, c)
-       if c gt 0 then science.sn = 1.0/mean(dev[w])
-
-       contmask = science.fitmask
-       n = n_elements(science.lambda)
-       wcont = where(contmask[3:n-4] eq 1)+3
-       dev = abs((science.contdiv[wcont] - science.spsspec[wcont]) / science.spsspec[wcont])
-       avgdev = mean(dev)
-       w = where(dev lt 3.0*avgdev, c)
-       if c gt 0 then science.snfit = 1.0/mean(dev[w])
-    ;;;;;;;;;;;;;;;;;;;
-
-    self->statusbox, science=science
-    if ~keyword_set(noredraw) then begin
-        self->redraw
-    endif
-end
-
 pro sps_fit::cal_uncertainties, science
    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Calculatign uncertainties ...'
    grid_file = *self.degen_file   ;nage
    grid_feh = *self.degen_fehgrid
-   grid_age = *self.degen_agegrid 
+   grid_age = *self.degen_agegrid
    grid_alpha = *self.degen_alphagrid ;nfeh x nage x nalpha
    loc_alpha = where(grid_alpha[0,0,*] eq 0.,cloc_alpha)
    loc_ext = loc_alpha+1
@@ -893,7 +657,6 @@ pro sps_fit::cal_uncertainties_alpha, science
    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Ready ...'
 end
 
-
 pro sps_fit::fit_all,alpha=alpha
 
     widget_control, widget_info(self.base, find_by_uname='keepoldfit'), get_value=keepoldfit
@@ -905,7 +668,6 @@ pro sps_fit::fit_all,alpha=alpha
         self->default_range
         science = scienceall[self.i]
         if science.good eq 0 then continue
-	;if science.good eq 0 and science.goodfit eq 0 then continue
         if ~keyword_set(alpha) then self->fit, science else begin
            ;self->mask, science ,/includemg
            self->fitalpha, science
@@ -922,6 +684,12 @@ pro sps_fit::fit_all,alpha=alpha
             endif
         endelse
         self->statusbox
+        if i mod 30 eq 0 then begin
+            ptr_free, self.science
+            self.science = ptr_new(scienceall)
+            self->writescience
+            scienceall = *self.science
+        endif
     endfor
     print,'total replace ', nreplace,' fits'
     ptr_free, self.science
@@ -930,7 +698,7 @@ pro sps_fit::fit_all,alpha=alpha
     self.i = curi
     science = scienceall[self.i]
     self->statusbox, science=science
-    self->redraw
+    self->redraw    
 end
 
 pro sps_fit::cal_uncertainties_all,alpha=alpha
@@ -953,7 +721,6 @@ pro sps_fit::cal_uncertainties_all,alpha=alpha
     science = scienceall[self.i]
     self->statusbox, science=science
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Ready'
-
 end
 
 ; =================
@@ -966,11 +733,10 @@ pro sps_fit_event, ev
     case (name) of
         'BUTT': obj->handle_button, ev
         'TEXT': obj->handle_text, ev
-        'TRAC': obj->handle_tracking, ev
+        ;'TRAC': obj->handle_tracking, ev
         'COMB': obj->handle_combobox, ev
         'DRAW': begin
             if ev.type eq 0 then obj->handle_draw_click, ev
-            if ev.type eq 2 then obj->handle_motion, ev
             if ev.type eq 5 then obj->handle_draw_key, ev
         end
         'DONE': widget_control, ev.top, /destroy
@@ -1002,53 +768,33 @@ pro sps_fit::handle_button, ev
             self->default_range
             self->redraw
         end
-        'indices': begin
+        'reprepare': self->reprepare
+        'fit': begin
             scienceall = *self.science
             science = scienceall[self.i]
-            self->indices, science
-            scienceall[self.i] = science
+            self->fit, science, /noredraw
+            widget_control, widget_info(self.base, find_by_uname='keepoldfit'), $
+               get_value=keepoldfit
+           if (keepoldfit eq 0 and science.chisq lt scienceall[self.i].chisq) or $
+               (keepoldfit eq 1) then scienceall[self.i] = science
             ptr_free, self.science
             self.science = ptr_new(scienceall)
-            self->statusbox
-            ;self->redraw
+            self->redraw
          end
-        'fit': begin
-           scienceall = *self.science
-           science = scienceall[self.i]
-           self->fit, science, /noredraw
-           widget_control, widget_info(self.base, find_by_uname='keepoldfit'), get_value=keepoldfit
-           if (keepoldfit eq 0 and science.chisq lt scienceall[self.i].chisq) or (keepoldfit eq 1) then $
-               scienceall[self.i] = science
-           ptr_free, self.science
-           self.science = ptr_new(scienceall)
-           self->redraw
-           self->statusbox
-        end
        'fitalpha':begin
            scienceall = *self.science
            science = scienceall[self.i]
            self->mask, science ,/includemg
            self->fitalpha, science, /noredraw
-           widget_control, widget_info(self.base, find_by_uname='keepoldfit'), get_value=keepoldfit
-           if (keepoldfit eq 0 and science.chisq lt scienceall[self.i].chisq) or (keepoldfit eq 1) then $
-               scienceall[self.i] = science
+           widget_control, widget_info(self.base, find_by_uname='keepoldfit'), $
+               get_value=keepoldfit
+           if (keepoldfit eq 0 and science.chisq lt scienceall[self.i].chisq) or $
+               (keepoldfit eq 1) then scienceall[self.i] = science
            ptr_free, self.science
            self.science = ptr_new(scienceall)
            self->redraw
            self->statusbox
        end
-
-        'fitz': begin
-           scienceall = *self.science
-           science = scienceall[self.i]
-           self->fitz, science, /noredraw
-           self->mask, science, nmc=0
-           self->oiiew, science
-           scienceall[self.i] = science
-           ptr_free, self.science
-           self.science = ptr_new(scienceall)
-           self->redraw
-        end
         'cal_uncertainties': begin
            scienceall = *self.science
            science = scienceall[self.i]
@@ -1067,11 +813,8 @@ pro sps_fit::handle_button, ev
            self.science = ptr_new(scienceall)
            self->statusbox, science=science
         end
-
+        'reprepare_all': self->reprepare_all
         'fit_all': self->fit_all
-        'fit_alpha_all':self->fit_all,/alpha
-        'cal_uncertainties_all':self->cal_uncertainties_all
-        'cal_uncertainties_alpha_all':self->cal_uncertainties_all,/alpha
         'default_cont': self->default_cont
         'default_mask': self->default_mask
         'default_maskall': self->default_maskall
@@ -1093,11 +836,11 @@ end
 
 
 pro sps_fit::step, increment
-    nmodes = 2
+    nmodes = 4
     widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
     case 1 of
-        mode eq nmodes-1 and increment gt 0: mode = 0
-        mode eq 0 and increment lt 0: mode = nmodes-1
+        mode eq 3 and increment gt 0: mode = 0
+        mode eq 0 and increment lt 0: mode = 3
         else: mode += increment
     endcase
     curi = self.i
@@ -1123,8 +866,9 @@ pro sps_fit::toggle_good
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Updating database ...'
     scienceall = *self.science
     widget_control, widget_info(self.base, find_by_uname='good'), get_value=good
-    scienceall[self.i].good = good[0]
-    scienceall[self.i].goodfit = good[1]
+    scienceall[self.i].haveemlines = good[0]
+    scienceall[self.i].good = good[1]
+    scienceall[self.i].goodfit = good[2]
     ptr_free, self.science
     self.science = ptr_new(scienceall)
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Ready.'
@@ -1149,38 +893,59 @@ pro sps_fit::newspec, increment=increment, noredraw=noredraw
     newi = self.i
     newi += increment
     if newi lt 0 then begin
-        widget_control, widget_info(self.base, find_by_uname='status'), set_value='This is the first spectrum.'
-        return
+       widget_control, widget_info(self.base, find_by_uname='status'), set_value='This is the first spectrum.'
+       return
     endif
     if newi gt self.nspec-1 then begin
-        widget_control, widget_info(self.base, find_by_uname='status'), set_value='This is the last spectrum.'
-        return
+       widget_control, widget_info(self.base, find_by_uname='status'), set_value='This is the last spectrum.'
+       return
     endif
 
     widget_control, widget_info(self.base, find_by_uname='filelist'), set_combobox_select=newi
     self.i = newi
     self->statusbox
-    self.ylim = minmax((*self.science)[self.i].contdiv,/nan)/median((*self.science)[self.i].contdiv)
+    self.ylim = minmax((*self.science)[self.i].spec,/nan)/median((*self.science)[self.i].contdiv)
+    self->skyylim
+    ;self->default_range
     
     self.keystate = 0
     if ~keyword_set(noredraw) then self->redraw
+
+end
+
+
+pro sps_fit::skyylim
+    wsky = where((*self.science)[self.i].skylinemask ne -1, csky)
+    if csky gt 0 then begin
+        skyfit = (*self.science)[self.i].skyfit[wsky,*]
+        yminmax = (*self.science)[self.i].dlam
+        if skyfit[0,0] ne -1 then yminmax = [yminmax, skyfit[wsky,1]+skyfit[wsky,2], skyfit[wsky,1]-skyfit[wsky,2]]    
+        self.skyylim = minmax(yminmax*2.35)    
+    endif else begin
+        self.skyylim = [0.9, 1.7]
+    endelse
 end
 
 
 pro sps_fit::default_range, update=update
     if ~keyword_set(update) then begin
-        self.ylim = minmax(((*self.science)[self.i].contdiv)*((*self.science)[self.i].spscontfull),/nan)
+        self.ylim = minmax((*self.science)[self.i].spec,/nan)
         self.ylim[1] *= 1.1
         self.divylim = [-1.0, 2.5]
-        self.lambdalim = (minmax((*self.science)[self.i].lambda / (1d + (*self.science)[self.i].zspec)) < 9100) > 2000
+        self->skyylim
+        self.lambdalim = (minmax((*self.science)[self.i].lambda / (1d + (*self.science)[self.i].zspec),/nan) < 9100) > 2000
         self.lambdalim[0] >= 2000.
-        self.lambdalim[1] <= 8938. / (1d + (*self.science)[self.i].z)
-    endif
+        self.lambdalim[1] <= 8938. / (1d + (*self.science)[self.i].zspec)
+     endif
     widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
     case 1 of
-        mode eq 0: begin
+        mode le 0: begin
             widget_control, widget_info(self.base, find_by_uname='ylow'), set_value=strcompress(string(self.ylim[0], format='(g8.2)'), /rem)
             widget_control, widget_info(self.base, find_by_uname='yhigh'), set_value=strcompress(string(self.ylim[1], format='(g8.2)'), /rem)
+        end
+        mode eq 2: begin
+            widget_control, widget_info(self.base, find_by_uname='ylow'), set_value=strcompress(string(self.skyylim[0], format='(D5.2)'), /rem)
+            widget_control, widget_info(self.base, find_by_uname='yhigh'), set_value=strcompress(string(self.skyylim[1], format='(D5.2)'), /rem)
         end
         else: begin
             widget_control, widget_info(self.base, find_by_uname='ylow'), set_value=strcompress(string(self.divylim[0], format='(D5.2)'), /rem)
@@ -1188,7 +953,7 @@ pro sps_fit::default_range, update=update
         end
     endcase
     widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
-    zl = mode lt 1 ? (*self.science)[self.i].z : 0.0
+    zl = mode lt 3 ? (*self.science)[self.i].zspec : 0.0
     widget_control, widget_info(self.base, find_by_uname='lambdalow'), set_value=strcompress(string(self.lambdalim[0]*(1d + zl), format='(D7.1)'), /rem)
     widget_control, widget_info(self.base, find_by_uname='lambdahigh'), set_value=strcompress(string(self.lambdalim[1]*(1d + zl), format='(D7.1)'), /rem)
 end
@@ -1214,7 +979,7 @@ pro sps_fit::lambdarange, red=red, blue=blue
         lhighnew = self.lambdalim[1] + 0.6*lrange
     endif
     widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
-    zl = mode lt 5 ? (*self.science)[self.i].z : 0.0
+    zl = mode lt 4 ? (*self.science)[self.i].zspec : 0.0
     widget_control, widget_info(self.base, find_by_uname='lambdalow'), set_value=strcompress(string(self.lambdalim[0]*(1d + zl), format='(D7.1)'), /rem)
     widget_control, widget_info(self.base, find_by_uname='lambdahigh'), set_value=strcompress(string(self.lambdalim[1]*(1d + zl), format='(D7.1)'), /rem)
     self->lambdalow, llownew, /noredraw
@@ -1265,7 +1030,8 @@ end
 pro sps_fit::ylow, ylow, noredraw=noredraw
     widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
     case 1 of
-        mode eq 0: self.ylim[0] = ylow
+        mode le 0: self.ylim[0] = ylow
+        mode eq 2: self.skyylim[0] = ylow
         else: self.divylim[0] = ylow
     endcase
     if ~keyword_set(noredraw) then self->redraw
@@ -1275,7 +1041,8 @@ end
 pro sps_fit::yhigh, yhigh
     widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
     case 1 of
-        mode eq 0: self.ylim[1] = yhigh
+        mode le 0: self.ylim[1] = yhigh
+        mode eq 2: self.skyylim[1] = yhigh
         else: self.divylim[1] = yhigh
     endcase
     self->redraw
@@ -1293,88 +1060,14 @@ pro sps_fit::smooth, smooth
 end
 
 
-; =============== TRACKING ==============
-pro sps_fit::handle_tracking, ev
-    uname = widget_info(ev.id, /uname)
-
-    case (uname) of
-        '2d': begin
-            if ev.enter eq 0 then begin
-                widget_control, widget_info(self.base, find_by_uname='obswave'), set_value='     '
-                widget_control, widget_info(self.base, find_by_uname='restwave'), set_value='     '
-                widget_control, widget_info(self.base, find_by_uname='yslit'), set_value='     '
-            endif
-        end
-        else: 
-    end
-end
-
-
-; ================ MOTION ===============
-pro sps_fit::handle_motion, ev
-    uname = widget_info(ev.id, /uname)
-
-    case (uname) of
-        '2d': begin
-            common slit, bgood, rgood, bslit, rslit, bwidth, rwidth, bheight, rheight
-            rgood = 0 
-            bgood = 0
-            if bgood eq 0 or rgood eq 0 then return
-            valid = 1
-            case 1 of
-                ev.y ge 225 and ev.y lt 225+bheight and ev.x lt bwidth: begin
-                    slit = bslit
-                    bheightorig = (size(bslit.dlambda, /dimensions))[1]
-                    y = double(ev.y)-225.
-                    if bheightorig gt 74 then y *= double(bheightorig) / 74.
-                    x = double(ev.x) * 2047. / double(bwidth)
-                end
-                ev.y ge 150 and ev.y lt 150+bheight and ev.x lt bwidth: begin
-                    slit = bslit
-                    bheightorig = (size(bslit.dlambda, /dimensions))[1]
-                    y = double(ev.y)-150.
-                    if bheightorig gt 74 then y *= double(bheightorig) / 74.
-                    x = (double(ev.x) * 2047. / double(bwidth)) + 2047.
-                end
-                ev.y ge 75 and ev.y lt 75+rheight and ev.x lt rwidth: begin
-                    slit = rslit
-                    rheightorig = (size(rslit.dlambda, /dimensions))[1]
-                    y = double(ev.y)-75.
-                    if rheightorig gt 74 then y *= double(rheightorig) / 74.
-                    x = double(ev.x) * 2047. / double(rwidth)
-                end
-                ev.y ge 0 and ev.y lt rheight and ev.x lt rwidth: begin
-                    slit = rslit
-                    rheightorig = (size(rslit.dlambda, /dimensions))[1]
-                    y = double(ev.y)
-                    if rheightorig gt 74 then y *= double(rheightorig) / 74.
-                    x = (double(ev.x) * 2047. / double(rwidth)) + 2047.
-                end
-                else: valid = 0
-            endcase
-            if ~valid then begin
-                widget_control, widget_info(self.base, find_by_uname='obswave'), set_value='     '
-                widget_control, widget_info(self.base, find_by_uname='restwave'), set_value='     '
-                widget_control, widget_info(self.base, find_by_uname='yslit'), set_value='     '
-            endif else begin
-                lambda = slit.lambda0[x] + slit.dlambda[x, y]
-                widget_control, widget_info(self.base, find_by_uname='obswave'), set_value='obs = '+string(lambda, format='(D7.1)')
-                widget_control, widget_info(self.base, find_by_uname='restwave'), set_value='rest = '+string(lambda / (1.0 + (*self.science)[self.i].z), format='(D7.1)')
-                widget_control, widget_info(self.base, find_by_uname='yslit'), set_value='y = '+string(y, format='(I3)')
-            endelse
-        end
-        else: 
-    end
-end
-
-
 ; ============== COMBOBOX  =============
 pro sps_fit::handle_combobox, ev
     ;widget_control, ev.id, get_uvalue=uvalue
     ;widget_control, ev.top, get_uvalue=obj
     self.i = ev.index
     self->statusbox
-    self.ylim = minmax(((*self.science)[self.i].contdiv)*((*self.science)[self.i].spscontfull),/nan)
+    self.ylim = minmax((*self.science)[self.i].spec,/nan)
+    self->skyylim
     self.keystate = 0
     self->redraw
     widget_control, widget_info(self.base, find_by_uname='spec'), /input_focus
@@ -1385,7 +1078,7 @@ end
 pro sps_fit::handle_draw_click, ev
     click_coords = convert_coord(ev.x, ev.y, /device, /to_data)
     widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
-    if mode lt 1 then click_coords /= 1d + (*self.science)[self.i].z
+    if mode lt 3 then click_coords /= 1d + (*self.science)[self.i].zspec
     case ev.modifiers of
         0: begin
             case ev.press of
@@ -1398,13 +1091,13 @@ pro sps_fit::handle_draw_click, ev
             endcase
             llownew = click_coords[0] - lrange/2.
             lhighnew = click_coords[0] + lrange/2.
-            zl = mode lt 2 ? (*self.science)[self.i].z : 0.0
+            zl = mode lt 3 ? (*self.science)[self.i].zspec : 0.0
             widget_control, widget_info(self.base, find_by_uname='lambdalow'), set_value=strcompress(string(self.lambdalim[0]*(1d + zl), format='(D7.1)'), /rem)
             widget_control, widget_info(self.base, find_by_uname='lambdahigh'), set_value=strcompress(string(self.lambdalim[1]*(1d + zl), format='(D7.1)'), /rem)
             self->lambdalow, llownew, /noredraw
             self->lambdahigh, lhighnew
         end
-        1: begin  ;shift and click
+        1: begin
             if ev.press ne 1 then begin
                 widget_control, widget_info(self.base, find_by_uname='status'), set_value='Mouse click not recognized.'
                 return
@@ -1412,17 +1105,18 @@ pro sps_fit::handle_draw_click, ev
             lrange = self.lambdalim[1] - self.lambdalim[0]
             llownew = click_coords[0] - lrange/2.
             lhighnew = click_coords[0] + lrange/2.        
-            zl = mode lt 1 ? (*self.science)[self.i].z : 0.0
+            zl = mode lt 3 ? (*self.science)[self.i].zspec : 0.0
             widget_control, widget_info(self.base, find_by_uname='lambdalow'), set_value=strcompress(string(self.lambdalim[0]*(1d + zl), format='(D7.1)'), /rem)
             widget_control, widget_info(self.base, find_by_uname='lambdahigh'), set_value=strcompress(string(self.lambdalim[1]*(1d + zl), format='(D7.1)'), /rem)
             self->lambdalow, llownew, /noredraw
             self->lambdahigh, lhighnew
         end
-        2: begin  ;control and click
+        2: begin
             widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
             case mode of
                 mode le 0: ylim = self.ylim
-                mode eq 1: ylim = self.divylim
+                mode eq 2: ylim = self.skyylim
+                else: ylim = self.divylim
             endcase
             case ev.press of
                 1: yrange = (ylim[1] - ylim[0]) / 2.
@@ -1463,13 +1157,29 @@ pro sps_fit::handle_draw_key, ev
     widget_control, widget_info(self.base, find_by_uname='mode'), get_value=mode
     science = (*self.science)[self.i]
     case mode of
+        -1: begin        ;smoothed
+            case key of
+                'b': self->newspec, increment=-1
+                'n': self->newspec, increment=1
+                'g': begin
+                    widget_control, widget_info(self.base, find_by_uname='good'), set_value=[science.goodsky, ~science.good]
+                    self->toggle_good
+                end
+                'f': begin
+                    self->default_range
+                    self->redraw
+                end
+                'o': self->output_objname
+                else: widget_control, widget_info(self.base, find_by_uname='status'), set_value='Key not recognized.'
+            endcase
+        end
 
         0: begin        ;continuum fit
             case key of
                 'g': begin
                     case self.keystate of
                         0: begin
-                            widget_control, widget_info(self.base, find_by_uname='good'), set_value=[~science.good, science.goodfit]
+                            widget_control, widget_info(self.base, find_by_uname='good'), set_value=[science.goodsky, ~science.good]
                             self->toggle_good
                         end
                         else: widget_control, widget_info(self.base, find_by_uname='status'), set_value='Key not recognized.'
@@ -1567,12 +1277,52 @@ pro sps_fit::handle_draw_key, ev
             endcase
         end
 
-        1: begin        ;pixel mask
+        1: begin        ;continuum division
+            case key of
+                'g': begin
+                    widget_control, widget_info(self.base, find_by_uname='good'), set_value=[science.goodsky, ~science.good]
+                    self->toggle_good
+                end
+                'b': self->newspec, increment=-1
+                'n': self->newspec, increment=1
+                'f': begin
+                    self->default_range
+                    self->redraw
+                end
+                'o': self->output_objname
+                else: widget_control, widget_info(self.base, find_by_uname='status'), set_value='Key not recognized.'
+            endcase
+        end
+
+        2: begin        ;sky line fit
+            case key of
+                's': begin
+                    widget_control, widget_info(self.base, find_by_uname='good'), set_value=[~science.goodsky, science.good]
+                    self->toggle_good
+                end
+                'g': begin
+                    widget_control, widget_info(self.base, find_by_uname='good'), set_value=[science.goodsky, ~science.good]
+                    self->toggle_good
+                end
+                'b': self->newspec, increment=-1
+                'n': self->newspec, increment=1
+                'a': self->add_skyline, coords[0]
+                'd': self->delete_skyline, coords[0]
+                'f': begin
+                    self->default_range
+                    self->redraw
+                end
+                'o': self->output_objname
+                else: widget_control, widget_info(self.base, find_by_uname='status'), set_value='Key not recognized.'
+            endcase
+        end
+
+        3: begin        ;pixel mask
             case key of
                 'g': begin
                     case self.keystate of
                         0: begin
-                            widget_control, widget_info(self.base, find_by_uname='good'), set_value=[science.good, ~science.goodfit]
+                            widget_control, widget_info(self.base, find_by_uname='good'), set_value=[science.goodsky, ~science.good]
                             self->toggle_good
                         end
                         else: widget_control, widget_info(self.base, find_by_uname='status'), set_value='Key not recognized.'
@@ -1689,11 +1439,32 @@ pro sps_fit::cleanup
 end
 
 
+pro sps_fit::reprepare_all
+    update_phot = 1
+
+    curi = self.i
+    for i=0,self.nspec-1 do begin
+        self.i = i
+        if ~update_phot and (*self.science)[self.i].good eq 0 then continue
+        self->reprepare, /nostatusbar
+    endfor
+    scienceall = *self.science
+    ptr_free, self.science
+    self.science = ptr_new(scienceall)
+    self->writescience
+    self->specres_mask, self.directory
+    self.i = curi
+    science = (*self.science)[self.i]
+    self->statusbox, science=science
+    self->redraw
+end
+
+
 pro sps_fit::default_cont
     scienceall = *self.science
     science = scienceall[self.i]
     science.contmask = 0
-    self->contmask, science
+    self->continuum, science
     scienceall[self.i] = science
     ptr_free, self.science
     self.science = ptr_new(scienceall)
@@ -1709,7 +1480,8 @@ pro sps_fit::default_mask
     ptr_free, self.science
     self.science = ptr_new(scienceall)
     self->redraw
-end
+ end
+
 
 pro sps_fit::default_maskall
   curi = self.i
@@ -1733,7 +1505,8 @@ pro sps_fit::default_goodspec
        self.i=i
        science = scienceall[self.i]
        sn = science.sn
-       if sn gt 3. and z gt 0.05 then science.good = 1 else science.good = 0
+       z  = science.zspec
+       if sn gt 6. and z gt 0.0 then science.good = 1 else science.good = 0
        scienceall[self.i] = science
     endfor
     ptr_free, self.science
@@ -1755,7 +1528,7 @@ pro sps_fit::sn, science
     if c gt 0 then science.sn = 1.0/mean(dev[w])
 end
 
-pro sps_fit::oiiew, science        
+pro sps_fit::oiiew, science
       lamrange=[3720.,3735.]
       midlam = mean(lamrange)
       lambda  = science.lambda/(science.zspec+1.)
@@ -1770,80 +1543,457 @@ pro sps_fit::oiiew, science
       science.oiiewerr = widtherr
 end
 
-; =============== MASK ================
-pro sps_fit::contmask, science
-    lambda = science.lambda / (1d + science.zspec)
-    n = n_elements(lambda)
-    nhalf = round(double(n) / 2.)
-    linestart = *self.linestart
-    lineend = *self.lineend
-    contmask = bytarr(n_elements(lambda))+1
-    for i=0,n_elements(linestart)-1 do begin
-        w = where(lambda ge linestart[i] and lambda le lineend[i], c)
-        if c gt 0 then contmask[w] = 0
-    endfor
-    tellstart = [6864., 7591., 8938.]
-    tellend = [6935., 7694., 100000.]
-    for i=0,n_elements(tellstart)-1 do begin
-        w = where(science.lambda ge tellstart[i] and science.lambda le tellend[i], c)
-        if c gt 0 then begin
-            contmask[w] = 0
-        endif
-    endfor
-    contmask[0:2] = 0
-    contmask[nhalf-3:nhalf+2] = 0
-    contmask[n-3:n-1] = 0
-    science.contmask = contmask
+pro sps_fit::reprepare, nostatusbar=nostatusbar
+    update_else = 1
+
+    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Repreparing ...'
+    scienceall = *self.science
+    science = scienceall[self.i]
+    contmask = science.contmask
+
+    n = n_elements(science.lambda)
+    wcont = where(contmask[3:n-4] eq 1)+3
+    wcont = wcont[where(finite(science.spec[wcont]) and finite(science.continuum[wcont]) and science.continuum[wcont] ne 0)]
+    dev = abs((science.spec[wcont] - science.continuum[wcont]) / science.continuum[wcont])
+    avgdev = mean(dev)
+    w = where(dev lt 3.0*avgdev, c)
+    if c gt 0 then science.sn = 1.0/mean(dev[w])
+
+    if update_else eq 1 then begin
+        ;self->skytweak, science
+        ;science.skylinemask = -1
+        ;science.contmask = 0
+        self->specres, science, /goodoverride
+        self->continuum, science
+        self->mask, science, /nomask
+        science.spscont = 1.0
+        ;self->fit, science, /noredraw, nostatusbar=nostatusbar
+    endif
+
+    self->statusbox, science=science
+    scienceall[self.i] = science
+    ptr_free, self.science
+    self.science = ptr_new(scienceall)
+    self->redraw
 end
 
+
+; ============== SPECRES ==============
+pro fitskyspec_gauss, x, a, f, pder
+    u = (x - a[0])/a[1]
+    f = a[2]*exp(-0.5*u^2)
+    pder = [[(a[0]-x)/a[1]*f], [(x-a[0])^2./a[1]^3.*f], [f/a[2]]]
+    return
+end
+
+
+pro sps_fit::skytweak, science
+    blue = mrdfits(strtrim(science.spec1dfile, 2), 1, headblue, /silent)
+    red = mrdfits(strtrim(science.spec1dfile, 2), 2, headred, /silent)
+    lambdablue = blue.lambda
+    lambdared = red.lambda
+    path = file_dirname(science.spec1dfile)
+    lambdabluenew = applytweaks(lambdablue, headblue, path)
+    lambdarednew = applytweaks(lambdared, headred, path)
+    lambdanew = [lambdabluenew, lambdarednew]
+    science.lambda = lambdanew
+end
+
+
+function sps_fit::fitskylines, science
+    lambda = science.lambda
+    skyspec = science.skyspec
+    w = where(~finite(skyspec), c)
+    if c gt 0 then skyspec[w] = 0
+    skyspec = skyspec/max(skyspec)
+    medskyspec = median(skyspec)
+
+    deriv1skyspec = deriv(lambda, skyspec)
+    deriv2skyspec = deriv(lambda, deriv1skyspec)
+
+    thresh = 1.
+    nlines = 1000
+    while nlines gt 200 do begin
+        w = where(abs(deriv1skyspec) lt 0.2 and deriv2skyspec lt -0.005 and skyspec gt thresh*medskyspec)
+        w = [w, n_elements(lambda)+1]
+        wstep = round(-1*ts_diff(w, 1))
+        linestart = where(wstep gt 1, nlines)
+        if nlines lt 5 then begin
+            message, 'Fewer than 5 sky lines in this spectrum.', /info
+            return, [[-1], [-1], [-1]]
+        endif
+        linepix = round(-1*ts_diff(linestart, 1))
+        nlines -= 1
+        thresh *= 2
+     endwhile
+    linepix = linepix[0:nlines-1]
+    wlocmax = lindgen(nlines)
+    sigma = dblarr(nlines)
+    sigmaerr = dblarr(nlines)
+    linelambda = dblarr(nlines)
+    nskyspec = n_elements(skyspec)
+    wgoodline = bytarr(nlines)+1
+    for i=0,nlines-1 do begin        
+        if linepix[i] eq 1 then wlocmax[i] = w[linestart[i]] else begin
+            junk = min(abs(deriv1skyspec[w[linestart[i]]:w[linestart[i]]+linepix[i]-1]), wmin)
+            wlocmax[i] = w[linestart[i]]+wmin
+        endelse
+        if wlocmax[i]-10 lt 0 or wlocmax[i]+10 ge nskyspec then begin
+            wgoodline[i] = 0
+            continue
+        endif
+        skyspecmax = max(skyspec[wlocmax[i]-10:wlocmax[i]+10], wlocmaxtemp)
+        wlocmax[i] += wlocmaxtemp-10
+        wfit = lindgen(20)+wlocmax[i]-10
+        wfit = wfit[where(wfit ge 0 and wfit lt n_elements(lambda), nfit)]
+        lambdafit = lambda[wfit]
+        skyspecfit = skyspec[wfit]
+
+        ;lambdarange = max(lambda[wfit])-min(lambda[wfit])
+        ;lambdastep = 0.03
+        ;lambdafit = dindgen(round(lambdarange/lambdastep))*lambdastep+min(lambda[wfit])
+        ;skyspecfit = interpol(skyspec[wfit], lambda[wfit], lambdafit, /quadratic)
+
+        skyspecmax = max(skyspecfit, wmax)
+
+        ;a = [lambdafit[wmax], 1.3/2.35, skyspecmax]
+        ;yfit = curvefit(lambdafit, skyspecfit, lindgen(n_elements(lambdafit))+1.0, a, aerr, function_name='fitskyspec_gauss', chisq=chisq, status=status, /double, tol=1d-12)
+        ;a = [skyspecmax, lambdafit[wmax], 1.3/2.35]
+
+        guess = [skyspecmax, lambdafit[wmax], 0, medskyspec]
+        yfit = gaussfit(lambdafit, skyspecfit, a, estimates=guess, sigma=aerr, nterms=4, chisq=chisq)
+        sigma[i] = abs(a[2])
+        sigmaerr[i] = aerr[2]
+        linelambda[i] = a[1]
+
+        ;print, sigma[i], sigmaerr[i]/sigma[i], chisq
+        ;plot, lambdafit, skyspecfit
+        ;oplot, lambdafit, yfit, color=fsc_color('red')
+        ;wait, 0.5
+
+        if chisq gt 1d-3 or sigmaerr[i] gt 0.8 then wgoodline[i] = 0
+    endfor
+    wgood = where(sigma gt 0 and wgoodline eq 1, c)
+    if c gt 0 then begin
+        linelambda = linelambda[wgood]
+        sigma = sigma[wgood]
+        sigmaerr = sigmaerr[wgood]
+        ;ploterr, linelambda, sigma, sigmaerr, psym=1
+        
+        ;plot, lambda, skyspec
+        ;oplot, lambda[wlocmax], skyspec[wlocmax], psym=1, color=fsc_color('red')
+
+        return, [[linelambda], [sigma], [sigmaerr]]
+    endif else return, [[-1], [-1], [-1]]
+end
+
+
+pro sps_fit::specres, science, qf=qf, goodoverride=goodoverride
+    lambda = science.lambda
+    wsky = where(science.skylinemask ne -1, cw)
+    if cw eq 0 then begin
+        fit = self->fitskylines(science)
+        n = (size(fit))[1]
+        if n gt 200 then message, 'Too many sky lines!'
+        if n gt 0 then science.skyfit[0:n-1,*] = fit
+        if n le 3 then begin
+            science.dlam = replicate(1.37/2.35, n_elements(lambda))
+            science.skylinemask = lonarr(n_elements(science.skylinemask))-1
+            science.goodsky = 0
+            message, 'Unstable sky line fit.  Using FWHM = 1.37 A', /info
+            return
+        endif
+
+        w = where(2.35*fit[*,1] gt 0.8 and 2.35*fit[*,1] lt 7.0, cwprev)
+        if cwprev lt 3 then begin
+            science.dlam = replicate(1.37/2.35, n_elements(lambda))
+            science.skylinemask = lonarr(n_elements(science.skylinemask))-1
+            science.goodsky = 0
+            message, 'Unusuable arc lines.  Using FWHM = 1.37 A', /info
+            return
+        endif
+
+        ;quadratic fit
+        qf = poly_fit(fit[w,0]/1800.0 - 7.8, 2.35*fit[w,1], 2, measure_errors=2.35*fit[w,2], chisq=chisq, /double, yfit=yfit)
+
+        for j=0,4 do begin
+            wnow = where(abs(2.35*fit[w,1] - yfit) lt 2.*2.35*fit[w,2], cw)
+            if cw eq cwprev then break
+            cwprev = cw
+            if cw lt 3 then begin
+                science.goodsky = 0
+                message, 'The spectral resolution fit is very poor.', /info
+                break
+            endif
+            w = w[wnow]
+            qf = poly_fit(fit[w,0]/1800.0 - 7.8, 2.35*fit[w,1], 2, measure_errors=2.35*fit[w,2], chisq=chisq, /double, yfit=yfit)
+        endfor
+        n = (size(fit))[1]
+        science.skylinemask = 0
+        science.skylinemask[w] = 1
+        if n lt 200 then science.skylinemask[n:n_elements(science.skylinemask)-1] = -1
+    endif else begin
+        wsky = where(science.skylinemask eq 1, csky)
+        if csky lt 3 then begin
+            science.dlam = replicate(1.37/2.35, n_elements(lambda))
+            science.goodsky = 0
+            message, 'Too few arc lines for new fit.', /info
+            return
+        endif
+        fit = science.skyfit[wsky,*]
+        qf = poly_fit(fit[wsky,0]/1800.0 - 7.8, 2.35*fit[wsky,1], 2, measure_errors=2.35*fit[wsky,2], chisq=chisq, /double, yfit=yfit)        
+    endelse
+
+    l = lambda / 1800. - 7.8
+    dlam = poly(l, qf)
+    dlam /= 2.35
+    science.dlam = dlam
+    if ~keyword_set(goodoverride) then science.goodsky = 1
+end
+
+
+pro sps_fit::add_skyline, lambda
+    science = (*self.science)[self.i]
+    wsky = where(science.skylinemask ne -1)
+    fit = science.skyfit[wsky,*]
+    if fit[0,0] eq -1 then begin
+        widget_control, widget_info(self.base, find_by_uname='status'), set_value='There are no available sky lines.'
+        return
+    endif
+    w = where(fit[*,0] ge self.lambdalim[0] * (1d + science.zspec) and fit[*,0] le self.lambdalim[1] * (1d + science.zspec), c)
+    if c eq 0 then begin
+        widget_control, widget_info(self.base, find_by_uname='status'), set_value='There are no available sky lines in this range of wavelengths.'
+        return
+    endif
+    junk = min(abs(fit[w,0] - lambda), wmin)
+    i = w[wmin]
+    skylinemask = where(science.skylinemask[wsky] eq 1)
+    if contains(skylinemask, i) then begin
+        widget_control, widget_info(self.base, find_by_uname='status'), set_value='This sky line at '+string(round(fit[i,0]), format='(I4)')+' A is already included in the fit.'
+        return
+    endif else begin
+        science.skylinemask[i] = 1
+        self->specres, science
+        scienceall = *self.science
+        ptr_free, self.science
+        scienceall[self.i] = science
+        self.science = ptr_new(scienceall)
+        self->redraw
+    endelse
+end
+
+
+pro sps_fit::delete_skyline, lambda
+    science = (*self.science)[self.i]
+    wsky = where(science.skylinemask ne -1)
+    fit = science.skyfit
+    if fit[0,0] eq -1 then begin
+        widget_control, widget_info(self.base, find_by_uname='status'), set_value='There are no available sky lines.'
+        return
+    endif
+    w = where(fit[*,0] ge self.lambdalim[0] * (1d + science.zspec) and fit[*,0] le self.lambdalim[1] * (1d + science.zspec), c)
+    if c eq 0 then begin
+        widget_control, widget_info(self.base, find_by_uname='status'), set_value='There are no available sky lines in this range of wavelengths.'
+        return
+    endif
+    junk = min(abs(fit[w,0] - lambda), wmin)
+    i = w[wmin]
+    skylinemask = where(science.skylinemask[wsky] eq 1)
+    if contains(skylinemask, i) then begin
+        w = where(skylinemask ne i, c)
+        if c gt 0 then begin
+            science.skylinemask[i] = 0
+            self->specres, science
+            scienceall = *self.science
+            ptr_free, self.science
+            scienceall[self.i] = science
+            self.science = ptr_new(scienceall)
+            self->redraw
+        endif else begin
+            widget_control, widget_info(self.base, find_by_uname='status'), set_value='This sky line at '+string(round(fit[i,0]), format='(I4)')+' A is the only line in the fit.'
+            return
+        endelse
+    endif else begin
+        widget_control, widget_info(self.base, find_by_uname='status'), set_value='This sky line at '+string(round(fit[i,0]), format='(I4)')+' A is already excluded from the fit.'
+        return
+    endelse
+end
+
+
+pro sps_fit::specres_mask, directory
+    sps_fit = mrdfits(directory+'/sps_fit.fits.gz', 1, /silent)
+    nspec = n_elements(sps_fit)
+    wuse = lonarr(nspec)
+    d = 0
+    for i=0,nspec-1 do begin
+        w = where(sps_fit[i].skylinemask eq 1, nsky)
+        if nsky gt 20 then begin
+            lambda = d eq 0 ? reform(sps_fit[i].skyfit[w,0]) : [lambda, reform(sps_fit[i].skyfit[w,0])]
+            res = d eq 0 ? reform(sps_fit[i].skyfit[w,1]) : [res, reform(sps_fit[i].skyfit[w,1])]
+            err = d eq 0 ? reform(sps_fit[i].skyfit[w,1]) : [err, reform(sps_fit[i].skyfit[w,2])]
+            d = 1
+        endif
+    endfor
+    if (size(res))[0] gt 0 then begin
+        w = where(2.35*res gt 0.8 and 2.35*res lt 7.0 and 2.35*err lt 1.0)
+        specres_poly = poly_fit(lambda[w]/1800 - 7.8, 2.35*res[w], 2, measure_errors=2.35*err[w], /double)
+        specres_lambda = dindgen(8192)*(9100-6300)/8191 + 6300
+        ;ploterror, lambda[w], 2.35*res[w], 2.35*err[w], /nohat, psym=1
+        ;oplot, specres_lambda, poly(specres_lambda/1800 - 7.8, specres_poly), color=fsc_color('red')
+    endif else specres_poly = [2.35, 0.0]
+    save, specres_poly, filename=directory+'/specres_poly.sav'
+end
+
+
+; ============= CONTINUUM =============
+pro sps_fit::continuum, science
+    fft = 0
+    spline = 1
+    poly = 0
+    usesmooth = 0
+
+    contmask = science.contmask
+    w = where(contmask ne 0, c)
+    lambda = science.lambda / (1d + science.zspec)
+    n = n_elements(lambda)
+    if c eq 0 then begin
+        linestart = *self.linestart
+        lineend = *self.lineend
+        contmask = bytarr(n_elements(lambda))+1
+        for i=0,n_elements(linestart)-1 do begin
+            w = where(lambda ge linestart[i] and lambda le lineend[i], c)
+            if c gt 0 then contmask[w] = 0
+        endfor
+        tellmask = bytarr(n_elements(lambda))
+        tellstart = [6864., 7591., 8938.]
+        tellend = [6935., 7694., 100000.]
+        for i=0,n_elements(tellstart)-1 do begin
+            w = where(science.lambda ge tellstart[i] and science.lambda le tellend[i], c)
+            if c gt 0 then begin
+                contmask[w] = 0
+                tellmask[w] = 1
+            endif
+        endfor
+        contmask[0:2] = 0
+        contmask[n-3:n-1] = 0
+    endif
+
+    satbands = [6870, 7650]
+    niter = 5
+
+    wwhole = lindgen(n)
+    spec = science.spec
+    contmask(where(finite(spec) eq 0)) = 0
+    contmask[wwhole[0:3]] = 0
+    won = where(contmask[wwhole] eq 1, complement=woff, con) + wwhole[0]
+    woff += wwhole[0]
+    case 1 of
+       spline: begin
+          bkpt = slatec_splinefit(lambda[won], spec[won], coeff, invvar=science.ivar[won], bkspace=150, upper=5, lower=1.5,mask=mask, /silent,/everyn)
+          if bkpt[0] eq -1 then return
+          cont = slatec_bvalu(lambda[wwhole], bkpt, coeff)
+       end
+       poly: begin
+          degree = 12
+          norm = median(spec[won])
+          a = [norm, replicate(0.0, degree-1)]
+          p = lmfit(lambda[won], spec[won], a, measure_errors=(science.ivar[won])^(-0.5), /double, function_name='legendre_poly')
+          cont = legendre_poly(lambda[wwhole], a, /noderiv)
+       end
+       fft: begin
+          wfft = wwhole[10:nhalf-11]
+          nfft = n_elements(wfft)
+          nkeep = 10
+          ft = fft(spec[wfft], -1, /double)
+          
+          ft[nkeep:nfft-1] = 0
+          cont = real_part(fft(ft, 1, /double))
+          plot, cont
+          stop
+       end
+       usesmooth: begin
+          ww = wwhole[3:nhalf-4]
+          wcont = where(contmask[ww] eq 1, ccont) + ww[0]
+          for i=1,5 do begin
+             wcontold = wcont
+             if ccont lt 50 then begin
+                science.continuum = replicate(-999, n_elements(science.continuum))
+                return
+             endif
+             cont = smooth_gauss_wrapper(lambda[wcont], spec[wcont], lambda[wwhole], 30.0, ivar1=science.ivar[wcont])
+             wcont = where(abs(spec[ww]-cont[ww-wwhole[0]]) lt (science.ivar[ww])^(-0.5) and contmask[ww] eq 1, ccont) + ww[0]
+             
+             if array_equal(wcont, wcontold) then break
+          endfor
+       end
+    endcase
+    
+    science.contmask = contmask
+    science.continuum = cont
+    science.contdiv = science.spec/cont
+    science.contdivivar = science.ivar*cont^2.
+
+    wcont = where(contmask[3:n-4] eq 1)+3
+    wcont = wcont[where(finite(science.spec[wcont]) and finite(science.continuum[wcont]) and science.continuum[wcont] ne 0)]
+    dev = abs((science.spec[wcont] - science.continuum[wcont]) / science.continuum[wcont])
+    avgdev = mean(dev)
+    w = where(dev lt 3.0*avgdev, c)
+    if c gt 0 then science.sn = 1.0/mean(dev[w])
+end
+
+
+; =============== MASK ================
 pro sps_fit::mask, science, nomask=nomask, zfind=zfind, nozfind=nozfind, nmc=nmc,includemg=includemg
     specresfile = self.directory+'specres_poly.sav'
-
+    globalres = 0
     if file_test(specresfile) then begin
         restore, specresfile
-        dlam = poly(science.lambda/1000 - 7.8, specres_poly) / 2.35
+        dlam = poly(science.lambda/1800 - 7.8, specres_poly) / 2.35
         globalres = 1
     endif
 
     if ~keyword_set(nomask) then begin
-
        ;1) remove emission lines
-        linestart = *self.linestart
-        lineend = *self.lineend
-        linetype = *self.linetype
-        wem = where(linetype eq 'e', cemlines)
-        mask = bytarr(n_elements(science.lambda))+1
-        w = where(science.contdivivar le 0 or ~finite(science.contdivivar), cw)
-        if cw gt 0 then mask[w] = 0
-
-        for i=0,cemlines-1 do begin
-            w = where(science.lambda/(1d + science.zspec) ge linestart[wem[i]] and science.lambda/(1d + science.zspec) le lineend[wem[i]], c)
+       linestart = *self.linestart
+       lineend = *self.lineend
+       linetype = *self.linetype
+	   linestart -= 3.
+	   lineend += 3.
+       wem = where(linetype eq 'e', cemlines)
+       mask = bytarr(n_elements(science.lambda))+1
+       w = where(science.ivar le 0 or ~finite(science.ivar) or science.lambda/(1d + science.zspec) lt 3650, cw)
+       if cw gt 0 then mask[w] = 0
+       for i=0,cemlines-1 do begin
+          w = where(science.lambda/(1d + science.zspec) ge linestart[wem[i]] and science.lambda/(1d + science.zspec) le lineend[wem[i]], c)
+          if c gt 0 then mask[w] = 0
+       endfor
+       
+       ;lines to mask for sf gals
+       Hlines = [4863,4342,4103,3933,3950] ;Hb, Hg, Hd,CAH,CAK,CH
+       Hwidth = [7,6.,5.,10,30.]
+	   if science.haveemlines eq 1 then begin
+		for i=0,n_elements(hlines)-1 do begin
+            w = where(science.lambda/(1d + science.zspec) ge hlines[i]-Hwidth[i] and science.lambda/(1d + science.zspec) lt  hlines[i]+Hwidth[i], c)
             if c gt 0 then mask[w] = 0
-         endfor
-       ;emission lines in Hb, Hg, Hd
-       Hlines = [4863,4342,4103]
-       Hwidth = [4,3,2]
-       if science.oiiew gt 0. then begin
-          for i=0,n_elements(hlines)-1 do begin
-             w = where(science.lambda/(1d + science.zspec) ge hlines[i]-Hwidth[i] and science.lambda/(1d + science.zspec) lt  hlines[i]+Hwidth[i], c)
-             if c gt 0 then mask[w] = 0
-          endfor
-       endif 
+      	 endfor
+       endif
 
+       
         ;2) telluric region
-        tellstart = [6864., 7591., 8938.]
-        tellend = [6935., 7694., 9500.]
-       ; tellstart = *self.tellstart
-       ; tellend = *self.tellend
-       ; tellend[4] = 9500. 
-        for i=1,1 do begin
-            w = where(science.lambda ge tellstart[i] and science.lambda le tellend[i], c)
-            if c gt 0 then mask[w] = 0
-         endfor
-        ;3) where it peaks greater than 3 sigmas
-        ;w = where((science.contdiv-science.continuum) gt 3.*science.contdivivar^(-0.5), cw)
-        ;if cw gt 0 then mask[w] = 0
-
+       ;tellstart = [6864., 7591., 8938.]
+       ;tellend = [6935., 7694., 9500.]
+       tellstart = *self.tellstart
+       tellend = *self.tellend
+       tellend[4] = 9500. 
+       for i=0,n_elements(tellstart)-1 do begin
+          w = where(science.lambda ge tellstart[i] and science.lambda le tellend[i], c)
+          if c gt 0 then mask[w] = 0
+       endfor
+        
+       ;;3) where it peaks greater than 3 sigmas
+       ;w = where((science.contdiv-science.continuum) gt 3.*science.contdivivar^(-0.5), cw)
+       ;if cw gt 0 then mask[w] = 0
+        
         ;4) sky residuals
         ;first = deriv(science.lambda,science.contdiv)
         ;second = deriv(science.lambda,first)
@@ -1858,24 +2008,24 @@ pro sps_fit::mask, science, nomask=nomask, zfind=zfind, nozfind=nozfind, nmc=nmc
         ;   if cw gt 0 then mask[w]=0
         ;endfor
         ; 5) extreme noises
-   ;     w = where(science.contdiv gt 2. or science.contdiv lt -0.5, cw)
-   ;     nlambda = n_elements(science.lambda)
-   ;     if cw gt 0 then for i=0,cw-1 do mask[w[i]-2>0:w[i]+2<nlambda-1]=0
-
+       w = where(science.contdiv gt 2. or science.contdiv lt -0.5, cw)
+       nlambda = n_elements(science.lambda)
+       if cw gt 0 then for i=0,cw-1 do mask[w[i]-2>0:w[i]+2<nlambda-1]=0
+    
         ;6) where it's not finite
-        w = where(~finite(science.contdiv) or ~finite(science.lambda),c)
-        if c gt 0 then mask[w]=0
-        ;;
+       w = where(finite(science.spec) eq 0 or finite(science.lambda) eq 0,c)
+       if c gt 0 then mask[w]=0
+       ;;
 
         ;7)where is is Mg region
         if ~keyword_set(includemg) then begin
            linestart = *self.linestart
            lineend  = *self.lineend
            linetype = *self.linetype
-           indstart = *self.indstart
-           indend   = *self.indend
-           indname  = *self.indname
-
+           indstart = *self.indstart 
+           indend   = *self.indend   
+           indname  = *self.indname 
+   
            use_indices = ['Mg_b','Mg_2','Mg_1']
            for i=0,n_elements(use_indices)-1 do begin
               indnow = where(indname eq use_indices(i),cindnow)
@@ -1886,7 +2036,7 @@ pro sps_fit::mask, science, nomask=nomask, zfind=zfind, nozfind=nozfind, nmc=nmc
         endif
         ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
         ;8)wavelength range
-        w = where(science.lambda/(1.+science.zspec) lt 3650. or science.lambda/(1.+science.zspec) gt 6000.,c)
+        w = where(science.lambda/(1.+science.zspec) lt 3650. or science.lambda/(1.+science.zspec) gt 5430.,c)
         if c gt 0 then mask[w]=0
         ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
         n = n_elements(science.lambda)
@@ -1894,12 +2044,12 @@ pro sps_fit::mask, science, nomask=nomask, zfind=zfind, nozfind=nozfind, nmc=nmc
         mask[0:4] = 0
         mask[nhalf-4:nhalf+4] = 0
         mask[n-5:n-1] = 0
-    endif else begin
+ 
+     endif else begin
         mask = science.fitmask
-    endelse
-    science.fitmask = mask
-end
-
+     endelse
+     science.fitmask = mask
+ end
 
 ; ============== REDRAW ===============
 pro sps_fit::redraw
@@ -1911,110 +2061,144 @@ pro sps_fit::redraw
     science = (*self.science)[self.i]
 
     case mode of
-        ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-        0: begin                ;continuum fit
-           ;;making the highlight region
-           t = round(-1*ts_diff(science.contmask, 1))
-           wstart = where(t eq 1, cstart)+1
-           wend = where(t eq -1, cend)
-           if science.contmask[0] eq 1 then begin
-              if cstart eq 0 then begin
-                 wstart = 0
-              endif else begin
-                 wstart = [0, wstart]
-                endelse
-              cstart += 1
-           endif
-           if science.contmask[n_elements(t)-1] eq 1 then begin
-              if cend eq 0 then begin
-                 wend = n_elements(t)-1
-              endif else begin
-                 wend = [wend, n_elements(t)-1]
-              endelse
-              cend += 1
-           endif
-           if cstart ne cend then message, 'There are a different number of starting and ending continuum wavelengths.'
-           ;; if cstart eq 0 or cend eq 0 then message, 'There are no continuum regions.'
-
-           plot, science.lambda, science.contdiv*science.spscontfull, xrange=self.lambdalim*(1d + science.zspec), yrange=self.ylim, xstyle=5, ystyle=5, background=fsc_color('white'), color=fsc_color('black'), /nodata
-           for i=0,cstart-1 do begin
-              x = ([science.lambda[wstart[i]], science.lambda[wstart[i]], science.lambda[wend[i]], science.lambda[wend[i]]] > (self.lambdalim[0] * (1d + science.zspec))) < (self.lambdalim[1] * (1d + science.zspec))
-              y = [self.ylim[0], self.ylim[1], self.ylim[1], self.ylim[0]]
-              polyfill, x, y, color=fsc_color('light cyan')
-           endfor
-           ;;finish highlighting masked regions
-           ;;start ploting
-           ;;plot the data(*spscontfull) and full model
-           oplot, science.lambda, science.contdiv*science.spscontfull, color=fsc_color('black')
-           if science.feh ne -999. then begin
-              oplot, science.lambda,science.spsspecfull,color=fsc_color('red')            
-              oplot, science.lambda,science.spscontfull,color=fsc_color('orange')            
-           endif
-           ;;make the axes labels
-           plot, science.lambda, science.contdiv*science.spscontfull, xrange=self.lambdalim * (1d + science.zspec), yrange=self.ylim, xstyle=1, ystyle=1, background=fsc_color('white'), color=fsc_color('black'), xtitle='!6observed wavelength (!sA!r!u!9 %!6!n)!3', ytitle='!6flux (e!E-!N/hr)!3', /nodata, /noerase
-           ;;highlight the telluric region and write line names
-           n = n_elements(*self.tellstart)
-           for i=0,n-1 do begin
-              oplot, [(*self.tellstart)[i], (*self.tellend)[i]], 0.04*!Y.CRANGE[0]+0.96*!Y.CRANGE[1]+[0, 0], color=fsc_color('green'), thick=(*self.tellthick)[i]
-           endfor
-           n = n_elements(*self.linewaves)
-           for i=0,n-1 do begin
-              if (*self.linewaves)[i] * (1d + science.zspec) le !X.CRANGE[0] or (*self.linewaves)[i] * (1d + science.zspec) ge !X.CRANGE[1] then continue
-              oplot, [(*self.linewaves)[i], (*self.linewaves)[i]] * (1d + science.zspec), [0.06*!Y.CRANGE[0]+0.94*!Y.CRANGE[1], 0.02*!Y.CRANGE[0]+0.98*!Y.CRANGE[1]], color=fsc_color((*self.linecolors)[i])
-              xyouts, ((*self.linewaves)[i] * (1d + science.zspec))+0.002*(!X.CRANGE[1]-!X.CRANGE[0]), 0.07*!Y.CRANGE[0]+0.93*!Y.CRANGE[1], (*self.linenames)[i], orientation=90, alignment=1, color=fsc_color((*self.linecolors)[i])
-           endfor
+        -1: begin                ;smoothed
+            specsmooth = smooth(science.spec, 100)
+            plot, science.lambda, specsmooth, xrange=self.lambdalim * (1d + science.zspec), yrange=self.ylim, xstyle=1, ystyle=1, background=fsc_color('white'), color=fsc_color('black'), xtitle='!6observed wavelength (!sA!r!u!9 %!6!n)!3', ytitle='!6100-pixel boxcar smoothed flux (e!E-!N/hr)!3'
+            yoff1 = 0.01*(self.ylim[1] - self.ylim[0])
+            yoff2 = 0.05*(self.ylim[1] - self.ylim[0])
+            n = n_elements(*self.tellstart)
+            for i=0,n-1 do begin
+                oplot, [(*self.tellstart)[i], (*self.tellend)[i]], 0.04*!Y.CRANGE[0]+0.96*!Y.CRANGE[1]+[0, 0], color=fsc_color('green'), thick=(*self.tellthick)[i]
+            endfor
+            n = n_elements(*self.linewaves)
+            for i=0,n-1 do begin
+                if (*self.linewaves)[i] * (1d + science.zspec) le !X.CRANGE[0] or (*self.linewaves)[i] * (1d + science.zspec) ge !X.CRANGE[1] then continue
+                oplot, [(*self.linewaves)[i], (*self.linewaves)[i]] * (1d + science.zspec), [0.06*!Y.CRANGE[0]+0.94*!Y.CRANGE[1], 0.02*!Y.CRANGE[0]+0.98*!Y.CRANGE[1]], color=fsc_color((*self.linecolors)[i])
+                xyouts, ((*self.linewaves)[i] * (1d + science.zspec))+0.002*(!X.CRANGE[1]-!X.CRANGE[0]), 0.07*!Y.CRANGE[0]+0.93*!Y.CRANGE[1], (*self.linenames)[i], orientation=90, alignment=1, color=fsc_color((*self.linecolors)[i])
+            endfor
         end
-        ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-        1: begin                ;rest frame
+        0: begin                ;continuum fit
+            t = round(-1*ts_diff(science.contmask, 1))
+            wstart = where(t eq 1, cstart)+1
+            wend = where(t eq -1, cend)
+            if science.contmask[0] eq 1 then begin
+                if cstart eq 0 then begin
+                    wstart = 0
+                endif else begin
+                    wstart = [0, wstart]
+                endelse
+                cstart += 1
+            endif
+            if science.contmask[n_elements(t)-1] eq 1 then begin
+                if cend eq 0 then begin
+                    wend = n_elements(t)-1
+                endif else begin
+                    wend = [wend, n_elements(t)-1]
+                endelse
+                cend += 1
+            endif
+            if cstart ne cend then message, 'There are a different number of starting and ending continuum wavelengths.'
+            if cstart eq 0 or cend eq 0 then message, 'There are no continuum regions.'
+
+            plot, science.lambda, science.spec, xrange=self.lambdalim * (1d + science.zspec), yrange=self.ylim, xstyle=5, ystyle=5, background=fsc_color('white'), color=fsc_color('black'), /nodata
+            for i=0,cstart-1 do begin
+                x = ([science.lambda[wstart[i]], science.lambda[wstart[i]], science.lambda[wend[i]], science.lambda[wend[i]]] > (self.lambdalim[0] * (1d + science.zspec))) < (self.lambdalim[1] * (1d + science.zspec))
+                y = [self.ylim[0], self.ylim[1], self.ylim[1], self.ylim[0]]
+                polyfill, x, y, color=fsc_color('light cyan')
+            endfor
+            oplot, science.lambda, science.spec, color=fsc_color('black')
+            oplot, science.lambda, science.continuum, color=fsc_color('green')
+            if science.feh lt 3. then begin
+               normfactor = median(science.spec)/median(science.spsspecfull)
+               oplot, science.lambda,science.spsspecfull*normfactor,color=fsc_color('red')            
+               oplot, science.lambda,science.spscontfull*normfactor,color=fsc_color('orange')            
+
+            endif
+            plot, science.lambda, science.spec, xrange=self.lambdalim * (1d + science.zspec), yrange=self.ylim, xstyle=1, ystyle=1, background=fsc_color('white'), color=fsc_color('black'), xtitle='!6observed wavelength (!sA!r!u!9 %!6!n)!3', ytitle='!6flux (e!E-!N/hr)!3', /nodata, /noerase
+            n = n_elements(*self.tellstart)
+            for i=0,n-1 do begin
+                oplot, [(*self.tellstart)[i], (*self.tellend)[i]], 0.04*!Y.CRANGE[0]+0.96*!Y.CRANGE[1]+[0, 0], color=fsc_color('green'), thick=(*self.tellthick)[i]
+            endfor
+            n = n_elements(*self.linewaves)
+            for i=0,n-1 do begin
+                if (*self.linewaves)[i] * (1d + science.zspec) le !X.CRANGE[0] or (*self.linewaves)[i] * (1d + science.zspec) ge !X.CRANGE[1] then continue
+                oplot, [(*self.linewaves)[i], (*self.linewaves)[i]] * (1d + science.zspec), [0.06*!Y.CRANGE[0]+0.94*!Y.CRANGE[1], 0.02*!Y.CRANGE[0]+0.98*!Y.CRANGE[1]], color=fsc_color((*self.linecolors)[i])
+                xyouts, ((*self.linewaves)[i] * (1d + science.zspec))+0.002*(!X.CRANGE[1]-!X.CRANGE[0]), 0.07*!Y.CRANGE[0]+0.93*!Y.CRANGE[1], (*self.linenames)[i], orientation=90, alignment=1, color=fsc_color((*self.linecolors)[i])
+            endfor
+        end
+
+        1: begin                ;continuum division
+            plot, science.lambda, science.contdiv, xrange=self.lambdalim * (1d + science.zspec), yrange=self.divylim, xstyle=1, ystyle=1, background=fsc_color('white'), color=fsc_color('black'), xtitle='!6observed wavelength (!sA!r!u!9 %!6!n)!3', ytitle='!6flux (normalized)!3', /nodata
+            oplot, self.lambdalim, [1.0, 1.0], color=fsc_color('orange')
+            oplot, science.lambda, science.contdiv, color=fsc_color('black')
+            n = n_elements(*self.tellstart)
+            for i=0,n-1 do begin
+                oplot, [(*self.tellstart)[i], (*self.tellend)[i]], 0.04*!Y.CRANGE[0]+0.96*!Y.CRANGE[1]+[0, 0], color=fsc_color('green'), thick=(*self.tellthick)[i]
+            endfor
+        end
+
+        2: begin        ;sky line fit
+            wsky = where((*self.science)[self.i].skylinemask ne -1, csky)
+            plot, science.lambda, 2.35*science.dlam, xtitle='!6observed wavelength (!sA!r!u!9 %!6!n)!3', ytitle='!6sky line FWHM (!sA!r!u!9 %!6!n)!3', xstyle=1, ystyle=1, background=fsc_color('white'), color=fsc_color('black'), xrange=self.lambdalim * (1d + science.zspec), yrange=self.skyylim
+            if csky gt 0 then begin
+                fit = science.skyfit[wsky,*]
+                if fit[0,0] ne -1 then begin
+                    oploterror, fit[wsky,0], 2.35*fit[wsky,1], 2.35*fit[wsky,2], psym=1, color=fsc_color('black'), errcolor=fsc_color('black'), /nohat
+                    wdel = where(science.skylinemask[wsky] eq 0, cdel)
+                    if cdel gt 0 then plots, fit[wdel,0], 2.35*fit[wdel,1], color=fsc_color('red'), psym=7
+                endif
+            endif
+            specresfile = self.directory+'specres_poly.sav'
+            if file_test(specresfile) then begin
+                restore, specresfile
+                oplot, science.lambda, poly(science.lambda/1800 - 7.8, specres_poly), color=fsc_color('green')
+            endif
+        end
+
+        3: begin        ;rest frame
            ;;Highlight the fit mask regions
-           t = round(-1*ts_diff(science.fitmask, 1))
-           wstart = where(t eq 1, cstart)+1
-           wend = where(t eq -1, cend)
-           if science.fitmask[0] eq 1 then begin
-              if cstart eq 0 then begin
-                 wstart = 0
-              endif else begin
-                 wstart = [0, wstart]
-              endelse
-              cstart += 1
-           endif
-           if science.fitmask[n_elements(t)-1] eq 1 then begin
-              if cend eq 0 then begin
-                 wend = n_elements(t)-1
-              endif else begin
-                 wend = [wend, n_elements(t)-1]
-              endelse
-              cend += 1
-           endif
-           if cstart ne cend then message, 'There are a different number of starting and ending fitmask wavelengths.'
-           ;;make reference axis of contdiv with applied fake continuum
-           plot, science.lambda/(1d + science.zspec), science.contdiv/science.spscont, xrange=self.lambdalim, yrange=self.divylim, xstyle=5, ystyle=5, background=fsc_color('white'), color=fsc_color('black'), /nodata
+            t = round(-1*ts_diff(science.fitmask, 1))
+            wstart = where(t eq 1, cstart)+1
+            wend = where(t eq -1, cend)
+            if science.fitmask[0] eq 1 then begin
+                if cstart eq 0 then begin
+                    wstart = 0
+                endif else begin
+                    wstart = [0, wstart]
+                endelse
+                cstart += 1
+            endif
+            if science.fitmask[n_elements(t)-1] eq 1 then begin
+                if cend eq 0 then begin
+                    wend = n_elements(t)-1
+                endif else begin
+                    wend = [wend, n_elements(t)-1]
+                endelse
+                cend += 1
+            endif
+            if cstart ne cend then message, 'There are a different number of starting and ending fitmask wavelengths.'
+            ;;make reference axis of contdiv with applied fake continuum
+            plot, science.lambda/(1d + science.zspec), science.contdiv/science.spscont, xrange=self.lambdalim, yrange=self.divylim, xstyle=5, ystyle=5, background=fsc_color('white'), color=fsc_color('black'), /nodata
            
-           if cstart eq 0 or cend eq 0 then message, 'There are no fitmask regions.', /info else begin
-              for i=0,cstart-1 do begin
-                 x = ([science.lambda[wstart[i]], science.lambda[wstart[i]], science.lambda[wend[i]], science.lambda[wend[i]]]/(1d + science.zspec) > self.lambdalim[0]) < self.lambdalim[1]
-                 y = [self.divylim[0], self.divylim[1], self.divylim[1], self.divylim[0]]
-                 polyfill, x, y, color=fsc_color('light cyan')
-              endfor
+            if cstart eq 0 or cend eq 0 then message, 'There are no fitmask regions.', /info else begin
+                for i=0,cstart-1 do begin
+                    x = ([science.lambda[wstart[i]], science.lambda[wstart[i]], science.lambda[wend[i]], science.lambda[wend[i]]]/(1d + science.zspec) > self.lambdalim[0]) < self.lambdalim[1]
+                    y = [self.divylim[0], self.divylim[1], self.divylim[1], self.divylim[0]]
+                    polyfill, x, y, color=fsc_color('light cyan')
+                endfor
              endelse
            ;;finish highligting fit mask
-           oplot, [-1d6, 1d6], [0.0, 0.0], color=fsc_color('pink')
-           oplot, [-1d6, 1d6], [1.0, 1.0], color=fsc_color('pale green')
+            oplot, [-1d6, 1d6], [0.0, 0.0], color=fsc_color('pink')
+            oplot, [-1d6, 1d6], [1.0, 1.0], color=fsc_color('pale green')
             if science.zfit ne 0 and finite(science.zfit) then znow=science.zfit else znow = science.zspec
             ;;plot the contdiv with applied fake continuum
-            oplot, science.lambda/(1d +znow), science.contdiv/science.spscont, color=fsc_color('black') 
-            good = where(science.contdivivar ne 0, cgood)
-            oplot, science.lambda(good)/(1d +znow), 1./sqrt(science.contdivivar(good))/science.spscont(good),color=fsc_color('blue') ;sigma
-            nfull = n_elements(science.lambda)
-            nhalf = fix(nfull/2)-1
-            if science.wlfail_blue eq 1 then oplot, science.lambda[0:nhalf]/(1d +znow), science.contdiv[0:nhalf]/science.spscont[0:nhalf], color=fsc_color('darkgray') 
-            if science.wlfail_red eq 1 then oplot, science.lambda[nhalf:nfull-1]/(1d +znow), science.contdiv[nhalf:nfull-1]/science.spscont[nhalf:nfull-1], color=fsc_color('darkgray') 
-
+            oplot, science.lambda/(1.+znow), science.contdiv/science.spscont, color=fsc_color('black') 
+	    oplot, science.lambda/(1.+znow),(science.contdivivar)^(-0.5)/science.spscont,color=fsc_color('salmon')
             ;;highlighting the telluric bands and label line names
             n = n_elements(*self.tellstart)
             for i=0,n-1 do begin
-               oplot, [(*self.tellstart)[i], (*self.tellend)[i]] / (1d + science.zspec), 0.04*!Y.CRANGE[0]+0.96*!Y.CRANGE[1]+[0, 0], color=fsc_color('green'), thick=(*self.tellthick)[i]
+                oplot, [(*self.tellstart)[i], (*self.tellend)[i]] / (1d + science.zspec), 0.04*!Y.CRANGE[0]+0.96*!Y.CRANGE[1]+[0, 0], color=fsc_color('green'), thick=(*self.tellthick)[i]
             endfor
             n = n_elements(*self.linewaves)
             for i=0,n-1 do begin
@@ -2022,15 +2206,14 @@ pro sps_fit::redraw
                oplot, [(*self.linewaves)[i], (*self.linewaves)[i]], [0.06*!Y.CRANGE[0]+0.94*!Y.CRANGE[1], 0.02*!Y.CRANGE[0]+0.98*!Y.CRANGE[1]], color=fsc_color((*self.linecolors)[i])
                xyouts, (*self.linewaves)[i]+0.002*(!X.CRANGE[1]-!X.CRANGE[0]), 0.07*!Y.CRANGE[0]+0.93*!Y.CRANGE[1], (*self.linenames)[i], orientation=90, alignment=1, color=fsc_color((*self.linecolors)[i])
             endfor
-
             ;;plot the models
             plot, science.lambda/(1d + science.zspec), science.contdiv/science.spscont, xrange=self.lambdalim, yrange=self.divylim, xstyle=1, ystyle=1, background=fsc_color('white'), color=fsc_color('black'), xtitle='!6rest wavelength (!sA!r!u!9 %!6!n)!3', ytitle='!6flux (normalized)!3', /nodata, /noerase
-            if (science.feh gt -10 and science.age gt 0.0) or total(science.spsspec gt 0.0) then begin
+            if science.feh gt -10 and science.age gt 0.0 and total(science.spsspec gt 0.0) then begin
                oplot, science.lambda/(1d + science.zspec), science.spsspecfull, color=fsc_color('red')
             endif
          end
      endcase        
-    zl = mode lt 2 ? (*self.science)[self.i].z : 0.0
+    zl = mode lt 3 ? (*self.science)[self.i].zspec : 0.0
     widget_control, widget_info(self.base, find_by_uname='lambdalow'), set_value=strcompress(string(self.lambdalim[0]*(1d + zl), format='(D7.1)'), /rem)
     widget_control, widget_info(self.base, find_by_uname='lambdahigh'), set_value=strcompress(string(self.lambdalim[1]*(1d + zl), format='(D7.1)'), /rem)
 
@@ -2041,249 +2224,24 @@ end
 pro sps_fit::statusbox, science=science
     if ~keyword_set(science) then science = (*self.science)[self.i]
     
-    phot_color = science.phot_color
-    case phot_color of
-        'VK': begin
-            color = science.v-science.k
-            mag = science.k
-            colorerr = sqrt((science.verr)^2. + (science.kerr)^2.)
-            magerr = science.kerr
-            noerror = science.verr le 0 or science.verr ge 10 or science.kerr le 0 or science.kerr ge 10
-            clrlbl = 'V-K = '
-            maglbl = 'K = '
-        end
-        'VJ': begin
-            color = science.v-science.j
-            mag = science.j
-            colorerr = sqrt((science.verr)^2. + (science.jerr)^2.)
-            magerr = science.jerr
-            noerror = science.verr le 0 or science.verr ge 10 or science.jerr le 0 or science.jerr ge 10
-            clrlbl = 'V-J = '
-            maglbl = 'J = '
-        end
-        'VI': begin
-            color = science.v-science.i
-            mag = science.i
-            colorerr = sqrt((science.verr)^2. + (science.ierr)^2.)
-            magerr = science.ierr
-            noerror = science.verr le 0 or science.verr ge 10 or science.ierr le 0 or science.ierr ge 10
-            clrlbl = 'V-I = '
-            maglbl = 'I = '
-        end
-        'VR': begin
-            color = science.v-science.r
-            mag = science.r
-            colorerr = sqrt((science.verr)^2. + (science.rerr)^2.)
-            magerr = science.rerr
-            noerror = science.verr le 0 or science.verr ge 10 or science.rerr le 0 or science.rerr ge 10
-            clrlbl = 'V-R = '
-            maglbl = 'R = '
-        end
-        'BV': begin
-            color = science.b-science.v
-            mag = science.v
-            colorerr = sqrt((science.berr)^2. + (science.verr)^2.)
-            magerr = science.verr
-            noerror = science.berr le 0 or science.berr ge 10 or science.verr le 0 or science.verr ge 10
-            clrlbl = 'B-V = '
-            maglbl = 'V = '
-        end
-        'BR': begin
-            color = science.b-science.r
-            mag = science.r
-            colorerr = sqrt((science.berr)^2. + (science.rerr)^2.)
-            magerr = science.rerr
-            noerror = science.berr le 0 or science.berr ge 10 or science.rerr le 0 or science.rerr ge 10
-            clrlbl = 'B-R = '
-            maglbl = 'R = '
-        end
-        'RI': begin
-            color = science.r-science.i
-            mag = science.i
-            colorerr = sqrt((science.rerr)^2. + (science.ierr)^2.)
-            magerr = science.ierr
-            noerror = science.rerr le 0 or science.rerr ge 10 or science.ierr le 0 or science.ierr ge 10
-            clrlbl = 'R-I = '
-            maglbl = 'I = '
-        end
-        'JK': begin
-            color = science.j-science.k
-            mag = science.k
-            colorerr = sqrt((science.jerr)^2. + (science.kerr)^2.)
-            magerr = science.kerr
-            noerror = science.jerr le 0 or science.jerr ge 10 or science.kerr le 0 or science.kerr ge 10
-            clrlbl = 'J-K = '
-            maglbl = 'K = '
-        end
-        'F606WF814W': begin
-            color = science.f606w-science.f814w
-            mag = science.f814w
-            colorerr = sqrt((science.f606werr)^2. + (science.f814werr)^2.)
-            magerr = science.f814werr
-            noerror = science.f606werr le 0 or science.f606werr ge 10 or science.f814werr le 0 or science.f814werr ge 10
-            clrlbl = 'F606W-F814W = '
-            maglbl = 'F814W = '
-        end
-        else: begin
-            color = -999.0
-            mag = -999.0
-            colorerr = 0.0
-            magerr = 0.0
-            noerror = 1
-            clrlbl = 'V-I = '
-            maglbl = 'I = '
-        end
-    endcase
-
     unknown = '???'
-    widget_control, widget_info(self.base, find_by_uname='good'), set_value=[science.good, science.goodfit]
-    widget_control, widget_info(self.base, find_by_uname='curid'), set_value=strtrim(science.objname, 2)+' ('+strcompress(self.i+1, /rem)+' / '+strcompress(self.nspec, /rem)+')'
-    widget_control, widget_info(self.base, find_by_uname='maglabel'), set_value=maglbl
-    widget_control, widget_info(self.base, find_by_uname='collabel'), set_value=clrlbl
-    widget_control, widget_info(self.base, find_by_uname='curmag'), set_value=mag gt 0 ? strcompress(string(mag, format='(D10.2)'), /rem)+(noerror ? '' : ' +/- '+strcompress(string(magerr, format='(D10.2)'), /rem)) : unknown
-    widget_control, widget_info(self.base, find_by_uname='curcol'), set_value=color gt -10 ? strcompress(string(color, format='(D10.2)'), /rem)+(noerror ? '' : ' +/- '+strcompress(string(colorerr, format='(D10.2)'), /rem)) : unknown
-    widget_control, widget_info(self.base, find_by_uname='curz'), set_value=strcompress(string(science.z, format='(D5.3)'), /rem)
+    widget_control, widget_info(self.base, find_by_uname='good'), set_value=[science.haveemlines, science.good, science.goodfit]
+    widget_control, widget_info(self.base, find_by_uname='curid'), set_value=strtrim(string(fix(science.plate)), 2)+'/'+strtrim(string(fix(science.mjd)), 2)+'/'+strtrim(string(fix(science.fiber)), 2)+'/'+' ('+strcompress(self.i+1, /rem)+' / '+strcompress(self.nspec, /rem)+')'
+    widget_control, widget_info(self.base, find_by_uname='curz'), set_value=strcompress(string(science.zspec, format='(D5.3)'), /rem)
     widget_control, widget_info(self.base, find_by_uname='curzfit'), set_value=strcompress(string(science.zfit, format='(D5.3)'), /rem)
-    widget_control, widget_info(self.base, find_by_uname='cursn'), set_value=science.sn gt 0 ? strcompress(string(science.sn, format='(D10.1)'),/rem)+' ; '+strcompress(string(science.snfit, format='(D10.1)'), /rem) : unknown
-    widget_control, widget_info(self.base, find_by_uname='curnloop'), set_value=science.nloop gt 0 ? strcompress(string(science.nloop, format='(D10.1)'), /rem) : unknown
+    widget_control, widget_info(self.base, find_by_uname='curchisq'), set_value=strcompress(string(science.chisq, format='(D5.2)'), /rem)
+    widget_control, widget_info(self.base, find_by_uname='curnloop'), set_value=strcompress(string(science.nloop, format='(D5.1)'), /rem)
+    widget_control, widget_info(self.base, find_by_uname='cursn'), set_value=science.sn gt 0 ? strcompress(string(science.sn, format='(D10.1)'), /rem) : unknown
     widget_control, widget_info(self.base, find_by_uname='curage'), set_value=science.age gt -100 ? strcompress(string(science.age, format='(D10.2)'), /rem)+(science.ageerr le 0 ? '' : ' +/- '+strcompress(string(science.ageerr, format='(D10.2)'), /rem))+' Gyr' : unknown
     widget_control, widget_info(self.base, find_by_uname='curageuncert'), set_value=science.agelower gt -100 ? strcompress(string(science.agelower, format='(D10.2)'), /rem)+(science.ageupper gt -100 ? ' : '+strcompress(string(science.ageupper, format='(D10.2)'), /rem):'') : unknown
     widget_control, widget_info(self.base, find_by_uname='curmstar'), set_value=science.logmstar gt 0 ? strcompress(string(science.logmstar, format='(D10.2)'), /rem) : unknown
     widget_control, widget_info(self.base, find_by_uname='curfeh'), set_value=science.feh gt -100 ? strcompress(string(science.feh, format='(D10.2)'), /rem)+(science.feherr le 0 ? '' : ' +/- '+strcompress(string(science.feherr, format='(D10.2)'), /rem)) : unknown
     widget_control, widget_info(self.base, find_by_uname='curfehuncert'), set_value=science.fehlower gt -100 ? strcompress(string(science.fehlower, format='(D10.2)'), /rem)+(science.fehupper ge -100 ? ' : '+strcompress(string(science.fehupper, format='(D10.2)'), /rem):'') : unknown
     widget_control, widget_info(self.base, find_by_uname='curoii'), set_value=science.oiiew ne -999 ? strcompress(string(science.oiiew, format='(D10.2)'), /rem)+(science.oiiewerr le 0 ? '' : ' +/- '+strcompress(string(science.oiiewerr, format='(D10.2)'), /rem))+' A' : unknown
-    widget_control, widget_info(self.base, find_by_uname='curalpha'), set_value=science.alphafe gt -100 ? strcompress(string(science.alphafe, format='(D10.2)'), /rem)+(science.alphafeerr le 0 ? '' : ' +/- '+strcompress(string(science.alphafeerr, format='(D10.2)'), /rem)) : unknown    
-    widget_control, widget_info(self.base, find_by_uname='curgband'), set_value=science.gbanderr gt 0 ? strcompress(string(science.gband, format='(D10.2)'), /rem)+(science.gbanderr le 0 ? '' : ' +/- '+strcompress(string(science.gbanderr, format='(D10.2)'), /rem)) : unknown
-    widget_control, widget_info(self.base, find_by_uname='curchisq'), set_value=science.chisq gt 0 ? strcompress(string(science.chisq, format='(D10.2)'), /rem) : unknown
+    widget_control, widget_info(self.base, find_by_uname='curalpha'), set_value=science.alphafe gt -100 ? strcompress(string(science.alphafe, format='(D10.2)'), /rem)+(science.alphafeerr le 0 ? '' : ' +/- '+strcompress(string(science.alphafeerr, format='(D10.2)'), /rem)) : unknown  
+    widget_control, widget_info(self.base, find_by_uname='curvdisp'), set_value=strcompress(string(science.vdisp, format='(D10.1)'), /rem)+(science.vdisperr le 0 ? '' : ' +/- '+strcompress(string(science.vdisperr, format='(D10.1)'), /rem))+' km/s'
     widget_control, widget_info(self.base, find_by_uname='maxnloop'), set_value=science.nloop gt 0 ? strcompress(string(science.nloop, format='(I4)'), /rem) : unknown
-    
-    if science.vdisp gt 0 then widget_control, widget_info(self.base, find_by_uname='curvdisp'), set_value=strcompress(string(science.vdisp, format='(D10.1)'), /rem)+(science.vdisperr le 0 ? '' : ' +/- '+strcompress(string(science.vdisperr, format='(D10.1)'), /rem))+' km/s' else widget_control, widget_info(self.base, find_by_uname='curvdisp'), set_value=unknown
 
-    if science.vdisp_smm gt 0 then widget_control, widget_info(self.base, find_by_uname='curvdispsmm'), set_value=strcompress(string(science.vdisp_smm, format='(D10.1)'), /rem)+(science.vdisperr_smm le 0 ? '' : ' +/- '+strcompress(string(science.vdisperr_smm, format='(D10.1)'), /rem))+' km/s (SMM)' else widget_control, widget_info(self.base, find_by_uname='curvdispsmm'), set_value=unknown
-end
-
-pro sps_fit::getstackedscience, files=files
-    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Initializing ...'
-    common mask_in, mask_in, copynum
-    common npixcom, npix
-    npix = 8192
-
-    observatory, 'keck', obs
-    sciencefits = self.directory+'sps_fit'+copynum+'.fits.gz'
-    if ~file_test(sciencefits) then begin
-        if ~keyword_set(files) then message, 'You must specify the FILES keyword if a sps_fit.fits.gz file does not exist.'
-        redshift = 0.55
-        c = n_elements(files)
-        masks = strarr(c)
-        slits = strarr(c)
-        objnames = strarr(c)
-      
-        for i=0,c-1 do begin
-            basefile = file_basename(files[i])
-            extensions = strsplit(basefile, '_.', /extract)
-            masks[i] = mask_in
-            slits[i] = extensions[0]
-            objnames[i] = extensions[1]
-        endfor
-
-        nspec = n_elements(objnames)
-        self.nspec = nspec
-        speclist = strtrim(string(slits), 2)+' '+objnames
-        widget_control, widget_info(self.base, find_by_uname='filelist'), set_value=speclist
-
-        scienceall = replicate({science}, nspec)
-        wgood = bytarr(nspec)+1
-
-        for i=0,nspec-1 do begin
-            science = {science}
-            restore, files[i]
-            data = spec
-
-            science.objname = data.objname
-            science.mask = slits[i]
-            science.slit = i
-
-            science.lambda = data.lambda*(1.+redshift)
-            science.contdiv = data.spec
-            science.contdivivar = data.ivar
-            science.dlam = data.dlam*(1.+redshift)
-            science.z = redshift
-            science.zspec = redshift
-            science.zcat = redshift
-            ;calculate mass (s/n weighted mass)
-            meanerr,data.indiv_mass,data.indiv_mass/data.indiv_sn,massmean,sigmam,sigmad,sigmas
-            science.nuverr = sigmad   ;i use this to keep the sigmad of mass, sorry for confusion!
-            science.logmstar = massmean
-
-            science.phot_color = 'BV'
-
-            science.spec1dfile = files[i]
-            science.age = -999d
-            science.ageerr = -999d
-            science.feh = -999d
-            science.feherr = -999d
-            science.vdisp = -999d
-            science.vdisperr = -999d
-
-            self.i = i
-
-            n = n_elements(science.lambda)
-
-            tell = mrdfits('/scr2/nichal/workspace2/telluric/deimos_telluric_1.0.fits', 1, /silent)
-            wtell = n_elements(tell)-1
-            tell = tell[wtell]
-            ptr_free, self.tell
-            self.tell = ptr_new(tell)
-
-            t = (-1*ts_diff(science.lambda, 1))[0:n-2]
-            wt = where(t le 0, ct)
-            if ct gt 0 then begin
-                message, 'Wavelength array for '+strtrim(objnames[i], 2)+' is not monotonic.  Omitting.', /info
-                wgood[i] = 0
-                continue
-            endif
-
-            self->contmask, science
-            self->oiiew, science
-            self->sn, science
-            if science.sn gt 3. then science.good = 1
-
-            self->mask, science
-            science.spscont = 1.0
-            self->indices, science, /noredraw
-
-            self->statusbox, science=science
-            scienceall[i] = science
-        endfor
-
-        self.i = 0
-        wgood = where(wgood eq 1, cgood)
-        scienceall = scienceall[wgood]
-        ptr_free, self.science
-        self.science = ptr_new(scienceall)
-        self.nspec = cgood
-        ;self->specres_mask, self.directory
-        speclist = masks[wgood]+' '+strtrim(string(slits[wgood]), 2)+' '+objnames[wgood]
-        widget_control, widget_info(self.base, find_by_uname='filelist'), set_value=speclist
-        widget_control, widget_info(self.base, find_by_uname='mode'), set_value=1
-        ;self->fit_all
-        self->writescience
-    endif else begin ;if sps_fit.fits.gz exists or not
-        scienceall = mrdfits(sciencefits, 1, /silent)
-
-        self.nspec = n_elements(scienceall)
-        speclist = scienceall.mask+' '+strtrim(string(scienceall.slit), 2)+' '+scienceall.objname
-        widget_control, widget_info(self.base, find_by_uname='filelist'), set_value=speclist
-
-        tell = (mrdfits('/scr2/nichal/workspace2/telluric/deimos_telluric_1.0.fits', 1, /silent))
-        wtell = n_elements(tell)-1
-        tell = tell[wtell]
-        ptr_free, self.tell
-        self.tell = ptr_new(tell)
-        ptr_free, self.science
-        self.science = ptr_new(scienceall)
-        widget_control, widget_info(self.base, find_by_uname='mode'), set_value=1
-    endelse
 end
 
 
@@ -2291,110 +2249,64 @@ pro sps_fit::getscience, files=files
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Initializing ...'
     common mask_in, mask_in, copynum
     common npixcom, npix
-
-    vdispfile = '/scr2/nichal/keck/deimos/Cl0024MS0451/MS0451_sigmas.txt'
-    readcol, vdispfile, vd_objname, vd_vdisp, vd_vdisperr, format='A,D,D', comment='#', /silent
-
-    npix = 8192
-
-    observatory, 'keck', obs
+    npix = 3700
+    observatory, 'apo', obs
     sciencefits = self.directory+'sps_fit'+copynum+'.fits.gz'
     if ~file_test(sciencefits) then begin
         if ~keyword_set(files) then message, 'You must specify the FILES keyword if a sps_fit.fits.gz file does not exist.'
         c = n_elements(files)
-        masks = strarr(c)
-        slits = strarr(c)
-        objnames = strarr(c)
-
+        plates = strarr(c)
+        MJDs = strarr(c)
+        fibers = strarr(c)
         for i=0,c-1 do begin
             basefile = file_basename(files[i])
-            extensions = strsplit(basefile, '_.', /extract)
-            masks[i] = extensions[0]
-            slits[i] = extensions[1]
-            objnames[i] = extensions[2]
+            extensions = strsplit(basefile, '-.', /extract)
+            plates[i] = extensions[1]
+            MJDs[i] = extensions[2]
+            fibers[i] = extensions[3]
         endfor
-        w = where(strmatch(objnames, '*serendip*') eq 0 and strmatch(objnames, '*ACSstar*') eq 0, cw)
-        if cw gt 0 then begin
-            masks = masks[w]
-            slits = slits[w]
-            objnames = objnames[w]
-            files = files[w]
-        endif else begin
-            message, 'No spectra found.'
-        endelse
-
-        nspec = n_elements(objnames)
+        nspec = n_elements(fibers)
         self.nspec = nspec
-        speclist = masks+' '+strtrim(string(slits), 2)+' '+objnames
+        speclist = plates+' '+MJDs+' '+fibers
         widget_control, widget_info(self.base, find_by_uname='filelist'), set_value=speclist
 
         scienceall = replicate({science}, nspec)
         wgood = bytarr(nspec)+1
-
         for i=0,nspec-1 do begin
             science = {science}
-            data = mrdfits(files[i], 1, hdr, /silent) ;box car extraction
-            science.objname = data.objname
-            science.mask = data.mask
-            science.slit = data.slit
+            science.skyfit = -1
+            science.skylinemask = -1
+            science.mask = mask_in
+            science.fiber = fibers[i]
+            science.plate = plates[i]
+            science.MJD = MJDs[i]
 
-            science.ra = data.ra
-            science.dec = data.dec
-            
-            science.lambda = data.lambda
-            science.contdiv = data.contdiv
-            science.contdivivar = data.contdivivar
-            science.dlam = data.dlam
-
-            ;photometric stuff
-            science.z = data.z
-            science.zquality = data.zquality
-            science.zspec = data.z
-            science.zcat = data.z
-            science.b = data.b_auto
-            science.v = data.v_auto
-            science.r = data.r_auto
-            science.i = data.i_auto
-            science.j = data.j_auto
-            science.k = data.k_auto
-            science.f814w = data.f814w_auto
-            science.fuv = data.fuv_auto
-            science.nuv = data.nuv_auto
-            science.berr = data.b_auto_err
-            science.verr = data.v_auto_err
-            science.rerr = data.r_auto_err
-            science.ierr = data.i_auto_err
-            science.jerr = data.j_auto_err
-            science.kerr = data.k_auto_err
-            science.f814werr = data.f814w_auto_err
-            science.fuverr = data.fuv_auto_err
-            science.nuverr = data.nuv_auto_err
-            science.logmstar = data.mass_kcorrect
-            science.vdisp_smm = -999d
-            science.vdisperr_smm = -999d
-            if (size(vd_objname))[0] gt 0 then begin
-                match, strtrim(vd_objname, 2), strtrim(science.objname, 2), w1, w2, count=cmatch
-                if cmatch gt 0 then begin
-                    science[w2].vdisp_smm = vd_vdisp[w1]
-                    if strmid(mask_in, 0, 4) eq '0451' then begin
-                        science[w2].vdisperr_smm = vd_vdisperr[w1]
-                    endif else begin
-                        science[w2].vdisperr_smm = -999d
-                    endelse
-                endif
+            data1 = mrdfits(files[i], 1,/silent)
+            hdr   = mrdfits(files[i], 2,/silent)
+               
+            science.objname = hdr.specobjid
+            science.zspec = hdr.z
+           ;fix number of elements to match npix
+            nlamb = n_elements(data1.loglam)
+            if nlamb gt npix then data1=data1[0:npix-1]
+            if nlamb lt npix then begin
+               sdss_nan = data1[0]
+               for ntag=0,n_elements(tag_names(data1))-1 do sdss_nan.(ntag) = 1./0.
+               nanarr   = replicate(sdss_nan,npix-nlamb)
+               nanarr.ivar = 0
+               data1 = [data1,nanarr]
             endif
-
-            case 1 of
-                science.b gt 10.0 and science.b lt 50.0 and science.v gt 10.0 and science.v lt 50.0: science.phot_color = 'BV'
-                science.b gt 10.0 and science.b lt 50.0 and science.r gt 10.0 and science.r lt 50.0: science.phot_color = 'BR'
-                science.v gt 10.0 and science.v lt 50.0 and science.i gt 10.0 and science.i lt 50.0: science.phot_color = 'VI'
-                science.v gt 10.0 and science.v lt 50.0 and science.k gt 10.0 and science.k lt 50.0: science.phot_color = 'VK'
-                science.v gt 10.0 and science.v lt 50.0 and science.j gt 10.0 and science.j lt 50.0: science.phot_color = 'VJ'
-                science.j gt 10.0 and science.j lt 50.0 and science.k gt 10.0 and science.k lt 50.0: science.phot_color = 'JK'
-                else: science.phot_color = 'BV'
-            endcase
-
+            lambda    = 10.^data1.loglam
+            spec      = data1.flux
+            ivar      = data1.ivar
+            
             science.spec1dfile = files[i]
+            science.good = 1
+            science.goodsky = 1
+            goodspec_tag = where(data1.AND_Mask eq 0,cgoodspec)
+            if cgoodspec ne 0 then science.fitmask(goodspec_tag) = 1
+            science.fitmask(where(~finite(science.spec))) = 0
+
             w = where(science.age le 0, c)
             if c gt 0 then begin
                 science[w].age = -999d
@@ -2404,21 +2316,16 @@ pro sps_fit::getscience, files=files
             science.feherr = -999d
             science.vdisp = -999d
             science.vdisperr = -999d
+            science.alphafe = 0.0
 
             self.i = i
 
-            w = where(science.contdivivar gt 0 and finite(science.contdivivar), civar)
-            if civar gt 10 then if w[civar-1] ne n_elements(science.contdivivar)-1 then science.contdivivar[w[civar-11:civar-1]] = 0
+            w = where(ivar gt 0 and finite(ivar), civar)
+            if civar gt 10 then if w[civar-1] ne n_elements(ivar)-1 then ivar[w[civar-11:civar-1]] = 0
+      
+            n = n_elements(lambda)
 
-            n = n_elements(science.lambda)
-
-            tell = mrdfits('/scr2/nichal/workspace2/telluric/deimos_telluric_1.0.fits', 1, /silent)
-            wtell = n_elements(tell)-1
-            tell = tell[wtell]
-            ptr_free, self.tell
-            self.tell = ptr_new(tell)
-
-            t = (-1*ts_diff(science.lambda, 1))[0:n-2]
+            t = (-1*ts_diff(lambda, 1))[0:n-2]
             wt = where(t le 0, ct)
             if ct gt 0 then begin
                 message, 'Wavelength array for '+strtrim(objnames[i], 2)+' is not monotonic.  Omitting.', /info
@@ -2426,19 +2333,27 @@ pro sps_fit::getscience, files=files
                 continue
             endif
 
-            self->contmask, science
+            science.lambda = lambda
+            science.spec = spec
+            science.ivar = ivar
+            science.skyspec = data1.sky
+            science.sdssmodel = data1.model
+
+            self->specres, science
+            self->continuum, science
+            if array_equal(science.continuum, replicate(-999, n_elements(science.continuum))) then begin
+                message, 'Failed at finding continuum for '+strtrim(objnames[i], 2)+'.  Omitting.', /info
+                wgood[i] = 0
+                continue
+            endif
             self->oiiew, science
             self->sn, science
-            if science.sn gt 3. then science.good = 1
-
             self->mask, science
             science.spscont = 1.0
-            self->indices, science, /noredraw
 
             self->statusbox, science=science
             scienceall[i] = science
         endfor
-
         self.i = 0
         wgood = where(wgood eq 1, cgood)
         scienceall = scienceall[wgood]
@@ -2446,27 +2361,22 @@ pro sps_fit::getscience, files=files
         self.science = ptr_new(scienceall)
         self.nspec = cgood
         self->writescience
-        ;self->specres_mask, self.directory
-        speclist = masks[wgood]+' '+strtrim(string(slits[wgood]), 2)+' '+objnames[wgood]
+        self->specres_mask, self.directory
+        objlist = scienceall.objname
+        speclist = mask_in+' '+strtrim(string(objlist[wgood]), 2)
         widget_control, widget_info(self.base, find_by_uname='filelist'), set_value=speclist
-        widget_control, widget_info(self.base, find_by_uname='mode'), set_value=1
-        ;self->fit_all
+        widget_control, widget_info(self.base, find_by_uname='mode'), set_value=3
         self->writescience
-     endif else begin ;if sps_fit.fits.gz exists or not
+     endif else begin
         scienceall = mrdfits(sciencefits, 1, /silent)
 
         self.nspec = n_elements(scienceall)
-        speclist = scienceall.mask+' '+strtrim(string(scienceall.slit), 2)+' '+scienceall.objname
+        speclist = mask_in+' '+strtrim(string(scienceall.objname), 2)
         widget_control, widget_info(self.base, find_by_uname='filelist'), set_value=speclist
 
-        tell = (mrdfits('/scr2/nichal/workspace2/telluric/deimos_telluric_1.0.fits', 1, /silent))
-        wtell = n_elements(tell)-1
-        tell = tell[wtell]
-        ptr_free, self.tell
-        self.tell = ptr_new(tell)
         ptr_free, self.science
         self.science = ptr_new(scienceall)
-        widget_control, widget_info(self.base, find_by_uname='mode'), set_value=1
+        widget_control, widget_info(self.base, find_by_uname='mode'), set_value=3
     endelse
 end
 
@@ -2475,7 +2385,7 @@ pro sps_fit::writescience
     common mask_in, mask_in, copynum
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Writing to database ...'
     scienceall = *self.science
-    sciencefits = self.directory+'sps_fit'+copynum+'.fits'
+    sciencefits = self.directory+'sps_fit'+copynum+'.fits')
     mwrfits, scienceall, sciencefits, /create, /silent
     spawn, 'gzip -f '+sciencefits
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Ready.'
@@ -2484,51 +2394,45 @@ end
 
 
 pro sps_fit::initialize_directory, directory=directory
-    common mask_in, mask_in,copynum
-    newdirectory = '/scr2/nichal/workspace4/sps_fit/data/'+mask_in+'_ms0451/'
+    common mask_in, mask_in
+    newdirectory = '/scr2/nichal/workspace4/sps_fit/data/'+mask_in+'/'
     if ~file_test(newdirectory) then file_mkdir, newdirectory
 
     if strmid(directory, 0, 1, /reverse_offset) ne '/' then directory = directory + '/'
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Reading directory ...'
 
-    ;countfiles:
-    files = file_search(directory, mask_in+'*.{fits,fits.gz}', count=c)
-    sciencefits = newdirectory+'sps_fit'+copynum+'.fits.gz'
-    wsav = 0
+    countfiles:
+    files = file_search(directory, 'spec-*.{fits,fits.gz}', count=c)
+    sciencefits = newdirectory+'sps_fit'+copynum+'.fits.gz')
     if c eq 0 then begin
-       files = file_search(directory+'*/'+mask_in+'*.{fits,fits.gz}', count=c)
+        files = file_search(directory+'*/spec-*.{fits,fits.gz}', count=c)
     endif
-    
-    if c eq 0 then begin
-       files = file_search(directory, mask_in+'*.sav', count=c)
-       if c gt 0 then wsav = 1
-    endif
-
     if c eq 0 and ~file_test(sciencefits) then begin
         message, 'Unknown mask.'
     endif
 
     self.directory = newdirectory
-    
-    if wsav eq 0 then self->getscience, files=files else self->getstackedscience, files=files
+
+    self->getscience, files=files
     self.i = 0
     science = (*self.science)[self.i]
     self->statusbox, science=science
     self->default_range
     self.lambdalim = [3300, 7000]
-    self->newspec, increment=0
+    self->newspec, increment=0    
     widget_control, widget_info(self.base, find_by_uname='spec'), /input_focus
+    
 end
 
 
 ; =============== INIT ================
 function sps_fit::INIT, directory=directory, lowsn=lowsn
-    common sps_spec, sps, spsz, spsage
     common mask_in, mask_in,copynum
-
+    common sps_spec, sps, spsz, spsage
     if (size(sps))[1] eq 0 then spsspec = sps_interp(0.0, 5.0)
 
-    base = widget_base(/row, title='sps_fit_mpfit'+copynum, uvalue=self, mbar=menu, tab_mode=0, units=1)
+    base = widget_base(/row, title='sps_fit_sdss'+copynum, uvalue=self, mbar=menu, tab_mode=0, units=1)
+    ;------Top menu--------
     file_menu = widget_button(menu, value='File', /menu)
     wexit = widget_button(file_menu, value='Save', uvalue='save', uname='save')
     wexit = widget_button(file_menu, value='Exit', uvalue='exit', uname='exit')
@@ -2537,7 +2441,8 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     wdefault_cont = widget_button(tools_menu, value='Default Continuum Regions', uname='default_cont', uvalue='default_cont')
     wdefault_maskall = widget_button(tools_menu, value='Default Pixel Mask All', uname='default_maskall', uvalue='default_maskall')
     wdefault_goodspec = widget_button(tools_menu, value='Default Good Spectrum', uname='default_goodspec', uvalue='default_goodspec')
-    wfit_all = widget_button(tools_menu, value='Fit All', uname='fit_all', uvalue='fit_all')
+    wreprepare_all = widget_button(tools_menu, value='Reprepare All', uname='reprepare_all', uvalue='reprepare_all')
+    wreprepare_all = widget_button(tools_menu, value='Fit All', uname='fit_all', uvalue='fit_all')
     wfitalpha_all = widget_button(tools_menu, value='Fit Alpha All', uname='fit_alpha_all', uvalue='fit_alpha_all')
     wcal_uncertainties_all = widget_button(tools_menu, value='Cal uncertainties All',uname='cal_uncertainties_all',uvalue='cal_uncertainties_all')
     wcal_uncertainties_alpha_all = widget_button(tools_menu, value='Cal uncertainties alpha All',uname='cal_uncertainties_alpha_all',uvalue='cal_uncertainties_alpha_all')
@@ -2547,40 +2452,32 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
 
     ; ------ LEFT -------
     wplotmode = widget_base(wleft, /column, /align_center, /frame)
-    wplotradio = cw_bgroup(wplotmode, ['continuum fit', 'rest frame'], /column, /exclusive, set_value=1, uname='mode', uvalue='mode', /no_release)
+    wplotradio = cw_bgroup(wplotmode, ['continuum fit', 'continuum division', 'sky line fit', 'rest frame'], /column, /exclusive, set_value=3, uname='mode', uvalue='mode', /no_release)
     wstep = widget_base(wleft, /row, /align_center)
     wbackward = widget_button(wstep, value='<---', uvalue='backward', uname='backward', tab_mode=1, xsize=75)
     wforward = widget_button(wstep, value='--->', uvalue='forward', uname='forward', tab_mode=1, xsize=75)
     wprepbase = widget_base(wleft, /row, /align_center)
-    wfit = widget_button(wprepbase, value='Fit', uvalue='fit', uname='fit', tab_mode=1, xsize=85)
-;    wfitz = widget_button(wprepbase, value='Fit redshift', uvalue='fitz', uname='fitz', tab_mode=1, xsize=85)
+    wreprepare = widget_button(wprepbase, value='Reprepare', uvalue='reprepare', uname='reprepare', tab_mode=1, xsize=75)
+    wfit = widget_button(wprepbase, value='Fit', uvalue='fit', uname='fit', tab_mode=1, xsize=75)
     wfitalpha = widget_button(wprepbase, value='Fit alpha', uvalue='fitalpha', uname='fitalpha', tab_mode=1, xsize=85)
     windicesbase = widget_base(wleft, /row, /align_center)
-    windices = widget_button(windicesbase, value='Compute Indices', uvalue='indices', uname='indices', tab_mode=1, xsize=100)
     wdefault_mask = widget_button(windicesbase,value='Default Mask',uvalue='default_mask',uname='default_mask',tab_mode=1,xsize=100)
     wuncertbase = widget_base(wleft,/row,/align_center)
     wuncertainties = widget_button(wuncertbase,value='cal_uncertainties',uvalue='cal_uncertainties',uname='cal_uncertainties')
+
     wgoodbase = widget_base(wleft, /column, /align_center)
-    wgood = cw_bgroup(wgoodbase, ['good spectrum','good fit'], /nonexclusive, set_value=[0, 0], uname='good', uvalue='good')
+    wgood = cw_bgroup(wgoodbase, ['have em lines', 'good spectrum','good fit'], /nonexclusive, set_value=[0, 0, 0], uname='good', uvalue='good')
 
     wcurobj = widget_base(wleft, /column, /align_center, tab_mode=0, /frame)
     widbase = widget_base(wcurobj, /align_left, /row, xsize=235)
     widlabel = widget_label(widbase, value='object ID:', /align_right, uname='idlabel', xsize=65)
     wcurid = widget_label(widbase, value='     ', /align_left, uname='curid', uvalue='curid', xsize=180)
-    wvbase = widget_base(wcurobj, /align_center, /row)
-    wvlabel = widget_label(wvbase, value='B = ', /align_right, uname='maglabel', xsize=95)
-    wcurmag = widget_label(wvbase, value='     ', /align_left, uname='curmag', uvalue='curmag', xsize=150)
-    wbvbase = widget_base(wcurobj, /align_center, /row)
-    wbvlabel = widget_label(wbvbase, value='B-V = ', /align_right, uname='collabel', xsize=95)
-    wcurcol = widget_label(wbvbase, value='     ', /align_left, uname='curcol', uvalue='curcol', xsize=150)
-
     wmstarbase = widget_base(wcurobj, /align_center, /row)
     wmstarlabel = widget_label(wmstarbase, value='log M* = ', /align_right, uname='mstarlabel', xsize=95)
     wcurmstar = widget_label(wmstarbase, value='     ', /align_left, uname='curmstar', uvalue='curmstar', xsize=150)
-    woiibase = widget_base(wcurobj, /align_center, /row)
+   woiibase = widget_base(wcurobj, /align_center, /row)
     woiilabel = widget_label(woiibase, value='OII EW = ', /align_right, uname='oiilabel', xsize=95)
     wcuroii = widget_label(woiibase, value='     ', /align_left, uname='curoii', uvalue='curoii', xsize=150)
-
     wagebase = widget_base(wcurobj, /align_center, /row)
     wagelabel = widget_label(wagebase, value='age = ', /align_right, uname='agelabel', xsize=95)
     wcurage = widget_label(wagebase, value='     ', /align_left, uname='curage', uvalue='curage', xsize=150)
@@ -2598,23 +2495,14 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     walphabase = widget_base(wcurobj, /align_center, /row)
     walphalabel = widget_label(walphabase, value='[Mg/Fe] = ', /align_right, uname='alphalabel', xsize=95)
     wcuralha = widget_label(walphabase, value='     ', /align_left, uname='curalpha', uvalue='curalpha', xsize=150)
-
-    wgbandbase = widget_base(wcurobj, /align_center, /row)
-    wgbandlabel = widget_label(wgbandbase, value='Gband = ', /align_right, uname='gbandlabel', xsize=95)
-    wcurgband = widget_label(wgbandbase, value='     ', /align_left, uname='curgband', uvalue='curgband', xsize=150)
     wvdispbase = widget_base(wcurobj, /align_center, /row)
     wvdisplabel = widget_label(wvdispbase, value='sigma_v = ', /align_right, uname='vdisplabel', xsize=95)
     wcurvdisp = widget_label(wvdispbase, value='     ', /align_left, uname='curvdisp', uvalue='curvdisp', xsize=150)
-
-    wvdispsmmbase = widget_base(wcurobj, /align_center, /row)
-    wvdispsmmlabel = widget_label(wvdispsmmbase, value='sigma_vsmm = ', /align_right, uname='vdispsmmlabel', xsize=95)
-    wcurvdispsmm = widget_label(wvdispsmmbase, value='     ', /align_left, uname='curvdispsmm', uvalue='curvdispsmm', xsize=150)
-
     wsnbase = widget_base(wcurobj, /align_center, /row)
     wsnlabel = widget_label(wsnbase, value='SNR = ', /align_right, uname='snlabel', xsize=95)
     wcursn = widget_label(wsnbase, value='     ', /align_left, uname='cursn', uvalue='cursn', xsize=150)
     wzbase = widget_base(wcurobj, /align_center, /row)
-    wzlabel = widget_label(wzbase, value='zcat = ', /align_right, uname='zlabel', xsize=95)
+    wzlabel = widget_label(wzbase, value='z = ', /align_right, uname='zlabel', xsize=95)
     wcurz = widget_label(wzbase, value='     ', /align_left, uname='curz', uvalue='curz', xsize=150)
     wzfitbase = widget_base(wcurobj, /align_center, /row)
     wzfitlabel = widget_label(wzfitbase, value='zfit = ', /align_right, uname='zfitlabel', xsize=95)
@@ -2625,11 +2513,6 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     wnloopbase = widget_base(wcurobj, /align_center, /row)
     wnlooplabel = widget_label(wnloopbase, value='nloop = ', /align_right, uname='nlooplabel', xsize=95)
     wcurnloop = widget_label(wnloopbase, value='     ', /align_left, uname='curnloop', uvalue='curnloop', xsize=150)
-
-    wcursor = widget_base(wleft, /column, /align_right, tab_mode=0, /frame)
-    wobswave = widget_label(wcursor, value='     ', /align_right, uname='obswave', uvalue='obswave', xsize=150)
-    wrestwave = widget_label(wcursor, value='     ', /align_right, uname='restwave', uvalue='restwave', xsize=150)
-    wyslit = widget_label(wcursor, value='     ', /align_right, uname='yslit', uvalue='yslit', xsize=150)
 
     ; ------ RIGHT -------
     wfile = widget_base(wright, /frame, /row, /align_left, tab_mode=1)
@@ -2667,9 +2550,9 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     tellstart = tellstart[wbands]
     tellend = tellend[wbands]
     ptr_free, self.linewaves, self.linewaves, self.linecolors, self.tellstart, self.tellend, self.tellthick
-    self.linewaves = ptr_new([2798.0, 3646.00, 3727.425, 3750.15, 3770.63, 3797.90, 3835.39, 3868.71, 3888.65, 3889.05, 3933.663, 3967.41, 3968.468, 3970.07, 4101.76, 4305.05, 4340.47, 4861.33, 4958.92, 5006.84, 5167.321, 5172.684, 5183.604, 5875.67, 5889.951, 5895.924, 6300.30, 6548.03, 6562.80, 6583.41, 6678.152, 6716.47, 6730.85,4384,4455,4531,5015,5270,5335,5406,5709,5782])
-    self.linenames = ptr_new(['MgII', 'Hbreak', '[OII]', 'H12', 'H11', 'H10', 'H9', '[NeIII]', 'HeI', 'H8', 'CaH', '[NeIII]', 'CaK', 'He', 'Hd', 'CH', 'Hg', 'Hb', '[OIII]', '[OIII]', 'Mgb', 'Mgb', 'Mgb', 'HeI', 'NaD', 'NaD', '[OI]', '[NII]', 'Ha', '[NII]', 'HeI', '[SII]', '[SII]','Fe4384','Fe4455','Fe4531','Fe5015','Fe5270','Fe5335','Fe5406','Fe5709','Fe5782'])
-    self.linecolors = ptr_new(['blue', 'black', 'blue', 'black', 'black', 'black', 'black', 'blue', 'blue', 'black', 'red', 'blue', 'red', 'black', 'black', 'red', 'black', 'black', 'blue', 'blue', 'red', 'red', 'red', 'blue', 'red', 'red', 'blue', 'blue', 'black', 'blue', 'blue', 'blue', 'blue','red','red','red','red','red','red','red','red','red'])
+    self.linewaves = ptr_new([2798.0, 3646.00, 3727.425, 3750.15, 3770.63, 3797.90, 3835.39, 3868.71, 3888.65, 3889.05, 3933.663, 3967.41, 3968.468, 3970.07, 4101.76, 4305.05, 4340.47, 4861.33, 4958.92, 5006.84, 5167.321, 5172.684, 5183.604, 5875.67, 5889.951, 5895.924, 6300.30, 6548.03, 6562.80, 6583.41, 6678.152, 6716.47, 6730.85])
+    self.linenames = ptr_new(['MgII', 'Hbreak', '[OII]', 'H12', 'H11', 'H10', 'H9', '[NeIII]', 'HeI', 'H8', 'CaH', '[NeIII]', 'CaK', 'He', 'Hd', 'CH', 'Hg', 'Hb', '[OIII]', '[OIII]', 'Mgb', 'Mgb', 'Mgb', 'HeI', 'NaD', 'NaD', '[OI]', '[NII]', 'Ha', '[NII]', 'HeI', '[SII]', '[SII]'])
+    self.linecolors = ptr_new(['blue', 'black', 'blue', 'black', 'black', 'black', 'black', 'blue', 'blue', 'black', 'red', 'blue', 'red', 'black', 'black', 'red', 'black', 'black', 'blue', 'blue', 'red', 'red', 'red', 'blue', 'red', 'red', 'blue', 'blue', 'black', 'blue', 'blue', 'blue', 'blue'])
     self.tellstart = ptr_new(tellstart)
     self.tellend = ptr_new(tellend)
     self.tellthick = ptr_new([5, 2, 5, 2, 2])
@@ -2717,7 +2600,6 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     seed = systime(1)
     
     self.i = -1
-    self.lowsn = keyword_set(lowsn) ? 1 : 0
     self->initialize_directory, directory=directory
     return, 1
 end
@@ -2731,6 +2613,7 @@ pro sps_fit__define
              lambdalim:[-100d, 100d], $
              ylim:[-100d, 100d], $
              divylim:[-100d, 100d], $
+             skyylim:[-100d, 100d], $
              linewaves:ptr_new(), $
              linenames:ptr_new(), $
              linecolors:ptr_new(), $
@@ -2750,8 +2633,7 @@ pro sps_fit__define
              nspec:0L, $
              i:0L, $
              keystate:0, $
-             lambda1:0d, $
-             lowsn:0b}
+             lambda1:0d}
 end
 
 
@@ -2761,43 +2643,31 @@ pro science__define
     science = {science, $
                objname:'', $
                mask:'', $
-               slit:0L, $
-               ra:-999d, $
-               dec:-999d, $
+               MJD:-999d, $
+               plate:-999d, $
+               fiber:-999d, $
                lambda:dblarr(npix), $
+               spec:dblarr(npix), $
+               ivar:dblarr(npix), $
+               skyspec:dblarr(npix), $
                contmask:bytarr(npix), $
+               continuum:dblarr(npix), $
                spscont:dblarr(npix), $
                contdiv:dblarr(npix), $
                contdivivar:dblarr(npix), $
                spsspec:dblarr(npix), $
                spsspecfull:dblarr(npix), $
                spscontfull:dblarr(npix), $
+               sdssmodel:dblarr(npix), $
                fitmask:bytarr(npix), $
                dlam:dblarr(npix), $
+               skyfit:[[dblarr(nsky)], [dblarr(nsky)], [dblarr(nsky)]], $
+               skylinemask:lonarr(nsky), $
+               goodsky:1B, $
+               nloop:-999d, $
                zspec:-999d, $
                zfit:-999d, $
-               z:-999d, $
-               zquality:-999d, $
-               zcat:0, $
-               phot_color:'', $
-               b:-999d, $
-               v:-999d, $
-               r:-999d, $
-               i:-999d, $
-               j:-999d, $
-               k:-999d, $
-               f814w:-999d, $
-               fuv:-999d, $
-               nuv:-999d, $
-               berr:-999d, $
-               verr:-999d, $
-               rerr:-999d, $
-               ierr:-999d, $
-               jerr:-999d, $
-               kerr:-999d, $
-               f814werr:-999d, $
-               fuverr:-999d, $
-               nuverr:-999d, $ 
+               zsource:0, $
                age:-999d, $
                ageerr:-999d, $
                ageupper:-999d, $
@@ -2807,40 +2677,30 @@ pro science__define
                fehupper:-999d, $
                fehlower:-999d,$
                alphafe:-999d, $
-	       alphafeerr:-999d, $
+               alphafeerr:-999d, $
                alphafeupper:-999d, $
-	       alphafelower:-999d, $
+               alphafelower:-999d, $
                logmstar:-999d, $
                oiiew:-999d, $
                oiiewerr:-999d, $
                vdisp:-999d, $
                vdisperr:-999d, $
-               vdisp_smm:-999d, $
-               vdisperr_smm:-999d, $
-               cah:-999d, $
-               caherr:-999d, $
-               gband:-999d, $
-               gbanderr:-999d, $
                chisq:-999d, $
                sn:-999d, $
                snfit:-999d, $
                spec1dfile:'', $
-               good:0B,$
-               goodfit:0B, $
-               wlfail_blue:0B,$
-               wlfail_red:0B,$
-               nloop:0} 
+               good:1B,$
+               goodfit:1B}
 end
 
 
-pro sps_fit_ms0451,mask=mask,copyi=copyi,all=all
-    common mask_in, mask_in,copynum
-    if ~keyword_set(mask) then mask = 'spline'
+pro sps_fit_sdss,mask=mask,copyi=copyi
+    common mask_in, mask_in, copynum
+    if ~keyword_set(mask) then mask = 'sdss'
     mask_in = mask
     if ~keyword_set(copyi) then copyi=1
     copynum = strtrim(string(copyi,format='(I02)'),2)
-    if keyword_set(all) then copynum='all'
-    directory = '/scr2/nichal/workspace4/prepspec_ms0451/data/'+mask
+    directory = '/scr2/nichal/workspace2/SDSSdata/'+mask
     if ~file_test(directory) then message, 'Mask not found.'
     n = obj_new('sps_fit', directory=directory)
 end

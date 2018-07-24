@@ -1,16 +1,19 @@
-pro ms0451alphaana
+pro cl1604alphaana
    ;GETTING SCI DATA
-   sci = mrdfits('/scr2/nichal/workspace4/sps_fit/data/spline_ms0451/sps_fit01.fits.gz',1)
-   stack = mrdfits('/scr2/nichal/workspace4/sps_fit/data/stacked_ms0451/sps_fit01.fits.gz',1)
+   scims = mrdfits('/scr2/nichal/workspace4/sps_fit/data/spline_ms0451/sps_fit01.fits.gz',1)
+   scicl = mrdfits('/scr2/nichal/workspace4/sps_fit/data/spline_cl1604/sps_fit01.fits.gz',1)
+   stack = mrdfits('/scr2/nichal/workspace4/sps_fit/data/stacked_cl1604/sps_fit01.fits.gz',1)
    ;sample selection
-   good = where(sci.oiiew gt -5.,cgood)
-   sci = sci(good)
-   ageform = (galage(sci.zfit,1000.)/1.e9-sci.age)>0. ;age of universe when it was formed
+   good = where(scims.oiiew gt -5.,cgood)
+   scims = scims(good)
+
+   good = where(scicl.oiiew gt -5. and scicl.good eq 1,cgood)
+   scicl = scicl(good)   
 
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    ;REFERENCE VALUES
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   restore,'leetho18a_avevals.sav'
+   restore,'/scr2/nichal/workspace4/ana/ms0451/leetho18a_avevals.sav'
    hifeh_cl0024 = hifeh
    lofeh_cl0024 = lofeh
    bndry_mass_cl0024 = bndry_mass
@@ -62,18 +65,45 @@ pro ms0451alphaana
    !p.multi = [0,1,1]
    !p.font = 0
    sunsym = sunsymbol()
-   Delta = '!9'+string("104B)+'!x'
    alpha = '!9'+string("141B)+'!x'
+   Delta = '!9'+string("104B)+'!x'
 
-   goodfit = where(sci.goodfit eq 1 and sci.snfit gt 10., cgoodfit, complement=badfit,ncomplement=cbadfit)
+   ngals = n_elements(scicl)
+   flagmosfire = bytarr(ngals) 
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+   sn = scicl.snfit
+   dispersion = fltarr(ngals)
+   for i=0,ngals-1 do begin
+      lamnow = scicl[i].lambda
+      goodlam = where(lamnow ne 0. and scicl[i].contdivivar ne 0.)
+      lamnow = lamnow(goodlam)
+      lamdiff = -1.*ts_diff(lamnow(goodlam),1)
+      dispersion[i] = median(lamdiff)
+      if max(lamnow)/(1.+scicl[i].zspec) gt 5300. then flagmosfire[i]=1
+   endfor
+   wmosfire = where(flagmosfire eq 1,cmosfire,complement=wnomosfire,ncomplement=cnomosfire)
+    
+   wnofit = where(scicl.snfit eq 0,cnofit)
+   if cnofit gt 0 then sn(wnofit) = scicl(wnofit).sn
+   ;This sn is per pixel. With 600 grating, the resolution is 0.65 A per pixel.
+   ;To convert to per angstrom divide by sqrt(0.65) = x1.24
+   sn = sn/sqrt(dispersion)
 
-   psname='ms0451alpha_feh_mass.eps'
+   goodmsfit = where(scims.goodfit eq 1 and scims.snfit gt 10, cgoodmsfit, complement=badmsfit,ncomplement=cbadmsfit)
+   goodsymsize = 1.5/(max(scims(goodmsfit).snfit)-min(scims(goodmsfit).snfit))*scims(goodmsfit).snfit+0.7
+
+   goodclfit = where(scicl.good eq 1, cgoodclfit)
+   goodwmosfire = where(scicl.good eq 1 and flagmosfire eq 1,cgoodwmosfire)
+   goodwnomosfire = where(scicl.good eq 1 and flagmosfire eq 0, cgoodwnomosfire)
+   goodwmosfiresymsize = 1.5/(max(scims(goodmsfit).snfit)-min(scims(goodmsfit).snfit))*scicl(goodwmosfire).snfit+0.7
+   goodwnomosfiresymsize = 1.5/(max(scims(goodmsfit).snfit)-min(scims(goodmsfit).snfit))*scicl(goodwnomosfire).snfit+0.7
+
+   psname='cl1604alpha_feh_mass.eps'
    device, filename = psname,xsize = 15,ysize = 10, $
                 xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
       xrange=[9.5,12]
       yrange=[-1.,0.3]
-      plot,sci.logmstar,sci.feh,/nodata,xrange=xrange,xstyle=5,yrange=yrange,ystyle=5
+      plot,scims.logmstar,scims.feh,/nodata,xrange=xrange,xstyle=5,yrange=yrange,ystyle=5
       ;colorarr=[10,50,203,230,254]
       colorarr= fsc_color(['royalblue','darkorchid','deeppink','maroon','red8'])
       x=[bndry_mass_cl0024,reverse(bndry_mass_cl0024)]
@@ -94,45 +124,49 @@ pro ms0451alphaana
 
       ;draw axis
       axis,xaxis=0,xrange=xrange,xstyle=1,xtitle='Log(M/M'+sunsym+')'
-      axis,yaxis=0,yrange=yrange,ystyle=1,ytitle='[Zmet/H]'
+      axis,yaxis=0,yrange=yrange,ystyle=1,ytitle='[Fe/H]'
       axis,xaxis=1,xrange=xrange,xstyle=1,xtickformat='(A1)'
       axis,yaxis=1,yrange=yrange,ystyle=1,ytickformat='(A1)'
+     
+     ;oplot ms stuff
+      cgerrplot,scims(goodmsfit).logmstar,scims(goodmsfit).fehlower,scims(goodmsfit).fehupper,color='tomato',thick=0.5
+      ;oplot,scims(badmsfit).logmstar,scims(badmsfit).feh,psym=cgsymcat(16),color=fsc_Color('tomato'),symsize=0.7
+      for i=0,cgoodmsfit-1 do begin
+        oplot,[scims(goodmsfit[i]).logmstar],[scims(goodmsfit[i]).feh],psym=cgsymcat(46),color=fsc_Color('tomato'),$
+              symsize=goodsymsize[i]
+        oplot,[scims(goodmsfit[i]).logmstar],[scims(goodmsfit[i]).feh],psym=cgsymcat(45),color=fsc_color('brown'),$
+              symsize=goodsymsize[i]
+     endfor
 
-      cgerrplot,sci(goodfit).logmstar,sci(goodfit).fehlower,sci(goodfit).fehupper,color='tomato',thick=0.5
-      oplot,sci(badfit).logmstar,sci(badfit).feh,psym=cgsymcat(16),color=fsc_Color('cadetblue'),symsize=0.7
-      goodsymsize = 1.5/(max(sci(goodfit).snfit)-min(sci(goodfit).snfit))*sci(goodfit).snfit+0.7
-      for i=0,cgoodfit-1 do begin
-        oplot,[sci(goodfit[i]).logmstar],[sci(goodfit[i]).feh],psym=cgsymcat(46),color=fsc_Color('tomato'),symsize=goodsymsize[i]
-        oplot,[sci(goodfit[i]).logmstar],[sci(goodfit[i]).feh],psym=cgsymcat(45),color=fsc_color('maroon'),symsize=goodsymsize[i]
-      endfor
-      ;draw stacked results
-      oplot,stack.logmstar,stack.feh,psym=cgsymcat(16),color=fsc_color('indianred'),symsize=2
+     ;oplot cl stuff
+     for i=0,cgoodwnomosfire-1 do oplot,[scicl(goodwnomosfire[i]).logmstar_sed_bl],[scicl(goodwnomosfire[i]).feh],psym=cgsymcat(46),color=fsc_Color('thistle'),symsize=goodwnomosfiresymsize[i]
+     for i=0,cgoodwmosfire-1 do oplot,[scicl(goodwmosfire[i]).logmstar_sed_bl],[scicl(goodwmosfire[i]).feh],psym=cgsymcat(46),color=fsc_Color('darkorchid'),symsize=goodwmosfiresymsize[i]
+     oplot,stack.logmstar_sed_bl,stack.feh,psym=cgsymcat(16),color=fsc_color('darkorchid'),symsize=2
    device,/close
 
-  psname='ms0451alpha_feh_alpha.eps'
+  psname='cl1604alpha_feh_alpha.eps'
    device, filename = psname,xsize = 15,ysize = 10, $
                 xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
       xrange=[-1.,0.3]
       yrange=[-0.5,0.5]
-      plot,sci.feh,sci.alphafe,/nodata,xrange=xrange,xstyle=5,yrange=yrange,ystyle=5
+      plot,scicl.feh,scicl.alphafe,/nodata,xrange=xrange,xstyle=5,yrange=yrange,ystyle=5
       ;draw axis
       axis,xaxis=0,xrange=xrange,xstyle=1,xtitle='[Zmet/H]'
       axis,yaxis=0,yrange=yrange,ystyle=1,ytitle='['+alpha+'/Zmet]'
       axis,xaxis=1,xrange=xrange,xstyle=1,xtickformat='(A1)'
       axis,yaxis=1,yrange=yrange,ystyle=1,ytickformat='(A1)'
 
-;      cgerrplot,sci(goodfit).alphafe,sci(goodfit).alphafelower,sci(goodfit).alphafeupper,$
+;      cgerrplot,scicl(goodfit).alphafe,scicl(goodfit).alphafelower,scicl(goodfit).alphafeupper,$
 ;                color='tomato',thick=0.5
-;      cgerrplot,sci(goodfit).feh,sci(goodfit).fehlower,sci(goodfit).fehupper,$
+;      cgerrplot,scicl(goodfit).feh,scicl(goodfit).fehlower,scicl(goodfit).fehupper,$
 ;                color='tomato',thick=0.5,/horizontal
-      oplot,sci(badfit).feh,sci(badfit).alphafe,psym=cgsymcat(16),color=fsc_Color('cadetblue'),symsize=0.7
-      goodsymsize = 1.5/(max(sci(goodfit).snfit)-min(sci(goodfit).snfit))*sci(goodfit).snfit+0.7
-      for i=0,cgoodfit-1 do begin
-        oplot,[sci(goodfit[i]).feh],[sci(goodfit[i]).alphafe],psym=cgsymcat(46),color=fsc_Color('tomato'),symsize=goodsymsize[i]
-        oplot,[sci(goodfit[i]).feh],[sci(goodfit[i]).alphafe],psym=cgsymcat(45),color=fsc_color('maroon'),symsize=goodsymsize[i]
-      endfor
-      oplot,stack.feh,stack.alphafe,psym=cgsymcat(16),color=fsc_color('indianred'),symsize=2
+      for i=0,cgoodwnomosfire-1 do $
+        oplot,[scicl(goodwnomosfire[i]).feh],[scicl(goodwnomosfire[i]).alphafe],psym=cgsymcat(46),color=fsc_Color('thistle'),symsize=goodwnomosfiresymsize[i]
+      for i=0,cgoodwmosfire-1 do $
+        oplot,[scicl(goodwmosfire[i]).feh],[scicl(goodwmosfire[i]).alphafe],psym=cgsymcat(46),color=fsc_color('darkorchid'),symsize=goodwmosfiresymsize[i]
+      oplot,stack.feh,stack.alphafe,psym=cgsymcat(16),color=fsc_color('darkorchid'),symsize=2
    device,/close
+
 
 
    stop
