@@ -39,7 +39,7 @@ function get_sps_alpha_obs, xin, a
        spsspec_original = spsspec
        n = n_elements(lambda)
        nhalf = round(double(n)/2.)
-       if n lt 8193 then begin
+       if n gt 8190 and n lt 8195 then begin
           wwhole = lindgen(nhalf)
           ccd2 = 2
        endif else begin
@@ -60,7 +60,7 @@ function get_sps_alpha_obs, xin, a
           if ccd eq 2 then contr = cont
           wwhole += nhalf
        endfor
-       if n lt 8193 then cont = [contb, contr] else cont = contb
+       if ccd2 eq 2 then cont = [contb, contr] else cont = contb
        
        spsspec /= cont
     endif
