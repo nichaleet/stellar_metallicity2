@@ -133,7 +133,7 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
         restlambda = reallambda / (1d + pi[3].value)
         ;;get the model
         rest = 1 ;make the return values an array of model contdiv, full spec, cont
-        spsbestfitarr = get_sps_obs_choi(reallambda, pars) 
+        spsbestfitarr = get_sps_choi_alpha_obs(reallambda, pars) 
         rest = 0 ;make the return values back to only y values     
         spsbestfit=spsbestfitarr[*,1] ;not normallized
 
@@ -234,7 +234,7 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
 pro sps_fit::fitalpha, science, noredraw=noredraw, nostatusbar=nostatusbar
     common sps_spec, sps, spsz, spsage
     common sps_iterproc, contiter
-    common get_sps, dlam, dataivar, datalam, wonfit, contmask, normalize, rest
+    common get_sps, dlam, dataivar, datalam, wonfit, npoly, contmask, normalize,rest
     common toprint, agediff, zdiff
     common mask_in, mask_in, copynum
     common response_fn, rsp_str,logzgrid_rsp,agegrid_rsp
@@ -303,9 +303,9 @@ pro sps_fit::fitalpha, science, noredraw=noredraw, nostatusbar=nostatusbar
     redshfdiff = 1.0
     contiter = 0
     nloop=0
-    widget_control, widget_info(self.base, find_by_uname='maxnloop'), get_value=maxnloop
-    maxnloop = fix(maxnloop[0])
-    if maxnloop eq 0 then maxnloop = 150
+    ;widget_control, widget_info(self.base, find_by_uname='maxnloop'), get_value=maxnloop
+    ;maxnloop = fix(maxnloop[0])
+    ;if maxnloop eq 0 then maxnloop = 150
     maxnloop = 150
     print, '* * * * * * * * * * * * * * * * * * * *'
     print, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
@@ -347,7 +347,7 @@ pro sps_fit::fitalpha, science, noredraw=noredraw, nostatusbar=nostatusbar
 
         ;;get the model
         rest = 1 ;make the return values an array of model contdiv, full spec, cont
-        spsbestfitarr = get_sps_alpha_obs(reallambda, pars)
+        spsbestfitarr = get_sps_choi_alpha_obs(reallambda, pars)
         rest = 0 ;make the return values back to only y values     
         spsbestfit=spsbestfitarr[*,1] ;not normallized
 
@@ -618,8 +618,9 @@ pro sps_fit::fit_all,alpha=alpha
     widget_control, widget_info(self.base, find_by_uname='keepoldfit'), get_value=keepoldfit
     scienceall = *self.science
     curi = self.i
+ for nwalkers=0, 5 do begin
+    nreplace = 0
     for i=0,self.nspec-1 do begin
-    ;for i=53,self.nspec-1 do begin
         self.i = i
         self->default_range
         science = scienceall[self.i]
@@ -647,10 +648,11 @@ pro sps_fit::fit_all,alpha=alpha
             scienceall = *self.science
         endif
     endfor
-    print,'total replace ', nreplace,' fits'
+    print,'nwalker',nwalkers,'total replace ', nreplace,' fits'
     ptr_free, self.science
     self.science = ptr_new(scienceall)
     self->writescience
+  endfor
     self.i = curi
     science = scienceall[self.i]
     self->statusbox, science=science
@@ -1440,7 +1442,7 @@ end
 
 
 pro sps_fit::reprepare, nostatusbar=nostatusbar
-    common mask_in, mask_in
+    common mask_in, mask_in, copynum
     update_else = 1
 
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Repreparing ...'
@@ -1587,7 +1589,7 @@ end
 
 
 pro sps_fit::specres, science, qf=qf, goodoverride=goodoverride
-    common mask_in, mask_in
+    common mask_in, mask_in, copynum
     lambda = science.lambda
     if mask_in eq 'NGC6528' then science.dlam = 3.1/2.35 else science.dlam = science.lambda/1000. ;R=1000
 
@@ -1596,7 +1598,7 @@ end
 
 ; ============= CONTINUUM =============
 pro sps_fit::continuum, science
-  common mask_in, mask_in
+  common mask_in, mask_in, copynum
     fft = 0
     spline = 0
     poly = 0
@@ -1705,7 +1707,7 @@ end
 
 
 ; =============== MASK ================
-pro sps_fit::mask, science, nomask=nomask, zfind=zfind, nozfind=nozfind, nmc=nmc
+pro sps_fit::mask, science, nomask=nomask, zfind=zfind, nozfind=nozfind, nmc=nmc,includemg=includemg
     if ~keyword_set(nomask) then begin
       ;1) remove emission lines
        linestart = *self.linestart
@@ -1955,7 +1957,7 @@ end
 
 pro sps_fit::getscience, files=files
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Initializing ...'
-    common mask_in, mask_in
+    common mask_in, mask_in, copynum
     common npixcom, npix
 ;choi data ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 massbinval = [10.5,10.8,11.0,11.3,10.8,11.1,11.3,10.9,11.0,11.3]
@@ -2074,7 +2076,6 @@ choi = {logmstar:massbinval,feh:fehchoi,feherr:fehchoierr,age:agechoi,ageerr:age
             endif
             self->mask, science
             science.spscont = 1.0
-            self->indices, science, /noredraw
 
             self->statusbox, science=science
             scienceall[i] = science
@@ -2106,7 +2107,7 @@ choi = {logmstar:massbinval,feh:fehchoi,feherr:fehchoierr,age:agechoi,ageerr:age
 
 pro sps_fit::getscience_ngc, files=files
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Initializing ...'
-    common mask_in, mask_in
+    common mask_in, mask_in, copynum
     common npixcom, npix
 
 ;Walcher09/Conroy2014 data ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -2126,7 +2127,7 @@ choi = {logmstar:massbinval,feh:fehchoi,feherr:fehchoierr,age:agechoi,ageerr:age
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
     npix = 3071
     observatory, 'apo', obs
-    sciencefits = self.directory+'sps_fit'+copynum+'.fits.gz')
+    sciencefits = self.directory+'sps_fit'+copynum+'.fits.gz'
     if ~file_test(sciencefits) then begin
         if ~keyword_set(files) then message, 'You must specify the FILES keyword if a sps_fit.fits.gz file does not exist.'
         exposure = strarr(nspec)
@@ -2265,6 +2266,7 @@ end
 
 
 pro sps_fit::writescience
+    common mask_in, mask_in, copynum
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Writing to database ...'
     scienceall = *self.science
     sciencefits = self.directory+'sps_fit'+copynum+'.fits'
@@ -2276,7 +2278,7 @@ end
 
 
 pro sps_fit::initialize_directory, directory=directory
-    common mask_in, mask_in
+    common mask_in, mask_in, copynum
     newdirectory = '/scr2/nichal/workspace4/sps_fit/data/choi/'+mask_in+'/'
     if ~file_test(newdirectory) then file_mkdir, newdirectory
 
@@ -2286,7 +2288,7 @@ pro sps_fit::initialize_directory, directory=directory
     countfiles:
     if mask_in eq 'NGC6528' then files = file_search(directory,'*.fits',count=c) else files = file_search(directory, '*.dat', count=c)
 
-    sciencefits = newdirectory+'sps_fit'+copynum'.fits.gz'
+    sciencefits = newdirectory+'sps_fit'+copynum+'.fits.gz'
     if c eq 0 then begin
         files = file_search(directory+'*/*.dat', count=c)
     endif
@@ -2352,9 +2354,12 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     wgood = cw_bgroup(wgoodbase, ['good spectrum','good fit'], /nonexclusive, set_value=[0,0], uname='good', uvalue='good')
 
     wcurobj = widget_base(wleft, /column, /align_center, tab_mode=0, /frame)
-    widbase = widget_base(wcurobj, /align_left, /row, xsize=235)
+    widbase = widget_base(wcurobj, /align_left, /row, xsize=250)
     widlabel = widget_label(widbase, value='object ID:', /align_right, uname='idlabel', xsize=65)
-    wcurid = widget_label(widbase, value='     ', /align_left, uname='curid', uvalue='curid', xsize=180)
+    wcurid = widget_label(widbase, value='     ', /align_left, uname='curid', uvalue='curid', xsize=195)
+    wmstarbase = widget_base(wcurobj, /align_center, /row)
+    wmstarlabel = widget_label(wmstarbase, value='log M* = ', /align_right, uname='mstarlabel', xsize=95)
+    wcurmstar = widget_label(wmstarbase, value='     ', /align_left, uname='curmstar', uvalue='curmstar', xsize=150)
     wagebase = widget_base(wcurobj, /align_center, /row)
     wagelabel = widget_label(wagebase, value='age = ', /align_right, uname='agelabel', xsize=95)
     wcurage = widget_label(wagebase, value='     ', /align_left, uname='curage', uvalue='curage', xsize=150)
@@ -2364,21 +2369,18 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     wagechoibase = widget_base(wcurobj, /align_center, /row)
     wagechoilabel = widget_label(wagechoibase, value='agechoi = ', /align_right, uname='agechoilabel', xsize=95)
     wcuragechoi = widget_label(wagechoibase, value='     ', /align_left, uname='curagechoi', uvalue='curagechoi', xsize=150)
-    wmstarbase = widget_base(wcurobj, /align_center, /row)
-    wmstarlabel = widget_label(wmstarbase, value='log M* = ', /align_right, uname='mstarlabel', xsize=95)
-    wcurmstar = widget_label(wmstarbase, value='     ', /align_left, uname='curmstar', uvalue='curmstar', xsize=150)
     wfehbase = widget_base(wcurobj, /align_center, /row)
     wfehlabel = widget_label(wfehbase, value='[Fe/H] = ', /align_right, uname='fehlabel', xsize=95)
     wcurfeh = widget_label(wfehbase, value='     ', /align_left, uname='curfeh', uvalue='curfeh', xsize=150)
     wfehuncertbase = widget_base(wcurobj, /align_center, /row)
     wfehuncertlabel = widget_label(wfehuncertbase,value='    ',/align_right,uname='fehuncertlabel',xsize=95)
     wfehuncert = widget_label(wfehuncertbase,value='      ',/align_left, uname='curfehuncert', uvalue='curfehuncert', xsize=150)
-    wmgbase = widget_base(wcurobj, /align_center, /row)
-    wmglabel = widget_label(wMgbase, value='[Mg/Fe] = ', /align_right, uname='mglabel', xsize=95)
-    wcurMg = widget_label(wMgbase, value='     ', /align_left, uname='curmg', uvalue='curmg', xsize=150)
     wfehchoibase = widget_base(wcurobj, /align_center, /row)
     wfehchoilabel = widget_label(wfehchoibase, value='[Fe/H] choi = ', /align_right, uname='fehchoilabel', xsize=95)
     wcurfehchoi = widget_label(wfehchoibase, value='     ', /align_left, uname='curfehchoi', uvalue='curfehchoi', xsize=150)
+    wmgbase = widget_base(wcurobj, /align_center, /row)
+    wmglabel = widget_label(wMgbase, value='[Mg/Fe] = ', /align_right, uname='mglabel', xsize=95)
+    wcurMg = widget_label(wMgbase, value='     ', /align_left, uname='curmg', uvalue='curmg', xsize=150)
     wmgfechoibase = widget_base(wcurobj, /align_center, /row)
     wmgfechoilabel = widget_label(wmgfechoibase, value='[Mg/Fe] choi = ', /align_right, uname='mgfechoilabel', xsize=95)
     wcurmgfechoi = widget_label(wmgfechoibase, value='     ', /align_left, uname='curmgfechoi', uvalue='curmgfechoi', xsize=150)
@@ -2559,8 +2561,12 @@ pro science__define
                zsource:0, $
                age:-999d, $
                ageerr:-999d, $
+               ageupper:-999d, $
+               agelower:-999d, $
                feh:-999d, $
                feherr:-999d, $
+               fehupper:-999d, $
+               fehlower:-999d,$
                agechoi:-999d, $
                agechoierr:-999d, $
                fehchoi:-999d, $
@@ -2569,6 +2575,8 @@ pro science__define
                MgFechoierr:-999d, $
                alphafe:-999d, $
                alphafeerr:-999d, $
+               alphafeupper:-999d, $
+               alphafelower:-999d, $
                logmstar:-999d, $
                vdisp:-999d, $
                vdisperr:-999d, $
@@ -2583,11 +2591,11 @@ end
 
 
 pro sps_fit_choi,copyi=copyi
-    common mask_in, mask_in
+    common mask_in, mask_in, copynum
     mask_in = 'ages'
     if ~keyword_set(copyi) then copyi=1
     copynum = strtrim(string(copyi,format='(I02)'),2)
-    directory = '/scr2/nichal/workspace2/Choi14_spec/'+mask
+    directory = '/scr2/nichal/workspace2/Choi14_spec/'+mask_in
     if ~file_test(directory) then message, 'Mask not found.'
     n = obj_new('sps_fit', directory=directory)
 end
