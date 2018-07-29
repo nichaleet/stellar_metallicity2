@@ -240,17 +240,18 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
        save,str,filename=self.directory+'/sps_fit_data_'+strtrim(string(self.i+1, format='(I3)'), 2)+'.sav'
     endif
     print,agediff,zdiff,format='("--- ------- ----- ------- ---------  -------- ----",D9.6,2X,D9.6)'                            
-    ;;check if the last chisq is the best chisq
-    ;if abs((pi[0].value-bestvalue[0])/bestvalue[0]) gt 0.01 or abs((pi[1].value-bestvalue[1])/bestvalue[1]) gt 0.01 or (curchisq-bestchisq)/bestchisq gt 0.001 then begin
-    ;   print,'THE WHILE LOOP HAS WALKED AWAY FROM THE BEST VALUES. BETTER CHECK YOUR PLOT'
-    ;   print,'The values used are:'
-    ;   print, bestvalue[0], bestvalue[1], bestvalue[2],bestvalue[3],bestchisq,format='(6X,D6.3,1X,D5.2,2X,D6.1,2x,D6.3,1X,D8.3)'
-    ;   science.goodfit = 1.
-    ;   spsbestfitarr = bestspsbestfitarr
-    ;   pi.value = bestvalue
-    ;   perror   = besterror
-    ;   science.spscont = bestcont
-    ;endif
+    ;check if the last chisq is the best chisq
+    if abs((pi[0].value-bestvalue[0])/bestvalue[0]) gt 0.01 or abs((pi[1].value-bestvalue[1])/bestvalue[1]) gt 0.01 or (curchisq-bestchisq)/bestchisq gt 0.001 then begin
+       print,'THE WHILE LOOP HAS WALKED AWAY FROM THE BEST VALUES. BETTER CHECK YOUR PLOT'
+       print,'The values used are:'
+       print, bestvalue[0], bestvalue[1], bestvalue[2],bestvalue[3],bestchisq,format='(6X,D6.3,1X,D5.2,2X,D6.1,2x,D6.3,1X,D8.3)'
+       science.goodfit = 1.
+       spsbestfitarr = bestspsbestfitarr
+       spsbestfit=spsbestfitarr[*,1]
+       pi.value = bestvalue
+       perror   = besterror
+       science.spscont = bestcont
+    endif
 
     science.nloop = nloop
     science.spsspec = spsbestfitarr[*,0] 
@@ -267,6 +268,10 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
     science.zspec = pi[3].value
     science.vdisp = pi[2].value
     science.vdisperr = perror[2]
+    science.alphafe = 0.
+    science.alphafeerr = -999.
+    science.alphafeupper = -999.
+    science.alphafelower = -999.
     ;calculate chisq
     if science.feh ne -999 then begin
        science.chisq = total((spsbestfit[won]-science.contdiv[won]/science.spscont[won])^2*science.contdivivar[won]*(science.spscont[won])^2)/float(n_elements(won))
@@ -485,6 +490,7 @@ pro sps_fit::fitalpha, science, noredraw=noredraw, nostatusbar=nostatusbar
     ;   print, bestvalue[0], bestvalue[1], bestvalue[2],bestvalue[3],bestchisq,format='(6X,D6.3,1X,D5.2,2X,D6.1,2x,D6.3,1X,D8.3)'
     ;   science.goodfit = 1.
     ;   spsbestfitarr = bestspsbestfitarr
+    ;   spsbestfit=spsbestfitarr[*,1]
     ;   pi.value = bestvalue
     ;   perror   = besterror
     ;   science.spscont = bestcont
@@ -1017,8 +1023,18 @@ pro sps_fit::handle_button, ev
            science = scienceall[self.i]
            self->fit, science, /noredraw
            widget_control, widget_info(self.base, find_by_uname='keepoldfit'), get_value=keepoldfit
-           if (keepoldfit eq 0 and science.chisq lt scienceall[self.i].chisq) or (keepoldfit eq 1) then $
+           if (keepoldfit eq 0 and science.chisq lt scienceall[self.i].chisq) or (keepoldfit eq 1) then begin
+               print, scienceall[self.i].feh,scienceall[self.i].age,scienceall[self.i].vdisp,$
+                      scienceall[self.i].zfit,scienceall[self.i].alphafe,scienceall[self.i].chisq,$
+                      format='(5x,D6.3,2x,D6.2,2x,D6.1,2x,D4.2,2x,D6.3,2X,D10.5)'
                scienceall[self.i] = science
+               if keepoldfit eq 0 then print,'chisq is smaller, replaced fit'
+               nreplace += 1
+           endif else begin
+               if keepoldfit eq 0 then begin
+               print, 'chisq is larger, use previous fit'
+               print, scienceall[self.i].feh,scienceall[self.i].age,scienceall[self.i].vdisp,scienceall[self.i].zfit,scienceall[self.i].alphafe,scienceall[self.i].chisq,format='(5x,D6.3,2x,D6.2,2x,D6.1,2x,D4.2,2x,D6.3,2X,D10.5)'
+           endelse
            ptr_free, self.science
            self.science = ptr_new(scienceall)
            self->redraw
@@ -1030,8 +1046,18 @@ pro sps_fit::handle_button, ev
            self->mask, science ,/includemg
            self->fitalpha, science, /noredraw
            widget_control, widget_info(self.base, find_by_uname='keepoldfit'), get_value=keepoldfit
-           if (keepoldfit eq 0 and science.chisq lt scienceall[self.i].chisq) or (keepoldfit eq 1) then $
+           if (keepoldfit eq 0 and science.chisq lt scienceall[self.i].chisq) or (keepoldfit eq 1) then begin
+               print, scienceall[self.i].feh,scienceall[self.i].age,scienceall[self.i].vdisp,$
+                      scienceall[self.i].zfit,scienceall[self.i].alphafe,scienceall[self.i].chisq,$
+                      format='(5x,D6.3,2x,D6.2,2x,D6.1,2x,D4.2,2x,D6.3,2X,D10.5)'
                scienceall[self.i] = science
+               if keepoldfit eq 0 then print,'chisq is smaller, replaced fit'
+               nreplace += 1
+           endif else begin
+               if keepoldfit eq 0 then begin
+               print, 'chisq is larger, use previous fit'
+               print, scienceall[self.i].feh,scienceall[self.i].age,scienceall[self.i].vdisp,scienceall[self.i].zfit,scienceall[self.i].alphafe,scienceall[self.i].chisq,format='(5x,D6.3,2x,D6.2,2x,D6.1,2x,D4.2,2x,D6.3,2X,D10.5)'
+           endelse
            ptr_free, self.science
            self.science = ptr_new(scienceall)
            self->redraw

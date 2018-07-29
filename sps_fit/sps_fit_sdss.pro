@@ -2285,6 +2285,7 @@ pro sps_fit::statusbox, science=science
     widget_control, widget_info(self.base, find_by_uname='curfehuncert'), set_value=science.fehlower gt -100 ? strcompress(string(science.fehlower, format='(D10.2)'), /rem)+(science.fehupper ge -100 ? ' : '+strcompress(string(science.fehupper, format='(D10.2)'), /rem):'') : unknown
     widget_control, widget_info(self.base, find_by_uname='curha'), set_value=science.haew ne -999 ? strcompress(string(science.haew, format='(D10.2)'), /rem)+(science.haewerr le 0 ? '' : ' +/- '+strcompress(string(science.haewerr, format='(D10.2)'), /rem))+' A' : unknown
     widget_control, widget_info(self.base, find_by_uname='curalpha'), set_value=science.alphafe gt -100 ? strcompress(string(science.alphafe, format='(D10.2)'), /rem)+(science.alphafeerr le 0 ? '' : ' +/- '+strcompress(string(science.alphafeerr, format='(D10.2)'), /rem)) : unknown  
+    widget_control, widget_info(self.base, find_by_uname='curalphauncert'), set_value=science.alphafelower gt -100 ? strcompress(string(science.alphafelower, format='(D10.2)'), /rem)+(science.alphafeupper ge -100 ? ' : '+strcompress(string(science.alphafeupper, format='(D10.2)'), /rem):'') : unknown
     widget_control, widget_info(self.base, find_by_uname='curvdisp'), set_value=strcompress(string(science.vdisp, format='(D10.1)'), /rem)+(science.vdisperr le 0 ? '' : ' +/- '+strcompress(string(science.vdisperr, format='(D10.1)'), /rem))+' km/s'
     widget_control, widget_info(self.base, find_by_uname='maxnloop'), set_value=science.nloop gt 0 ? strcompress(string(science.nloop, format='(I4)'), /rem) : unknown
 
@@ -2575,6 +2576,9 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     walphabase = widget_base(wcurobj, /align_center, /row)
     walphalabel = widget_label(walphabase, value='[Mg/Fe] = ', /align_right, uname='alphalabel', xsize=95)
     wcuralha = widget_label(walphabase, value='     ', /align_left, uname='curalpha', uvalue='curalpha', xsize=150)
+    walphauncertbase = widget_base(wcurobj, /align_center, /row)
+    walphauncertlabel = widget_label(walphauncertbase,value='    ',/align_right,uname='alphauncertlabel',xsize=95)
+    wmguncert = widget_label(wmguncertbase,value='      ',/align_left, uname='curmguncert', uvalue='curmguncert', xsize=150)
     wvdispbase = widget_base(wcurobj, /align_center, /row)
     wvdisplabel = widget_label(wvdispbase, value='sigma_v = ', /align_right, uname='vdisplabel', xsize=95)
     wcurvdisp = widget_label(wvdispbase, value='     ', /align_left, uname='curvdisp', uvalue='curvdisp', xsize=150)
