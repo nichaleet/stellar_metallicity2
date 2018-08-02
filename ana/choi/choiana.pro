@@ -40,25 +40,56 @@ pro choiana
 
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
   set_plot,'ps'
- 
-  for i=1,3 do begin
+  domassmetal = 0
+  for i=1,7 do begin
      case i of 
        1:begin
-         name = '5para_5elements'
+         name = '01-5para_5elements'
          sci = mrdfits(dir+'sps_fit01.fits.gz',1,/silent)
          doalpha = 1
+         ytitle='[{Mg,Si,Ca,Ti,O}/Fe]!Dthis work!N'
          end
        2:begin
-         name = '4para'
+         name = '02-4para'
          sci = mrdfits(dir+'sps_fit02.fits.gz',1,/silent)
          doalpha = 0
          end
        3:begin
-         name = '5para_mgonly'
+         name = '03-5para_mgonly'
          sci = mrdfits(dir+'sps_fit03.fits.gz',1,/silent)
          doalpha = 1
+         ytitle='[Mg/Fe]!Dthis work!N'
+	 end
+       4:begin
+         name = '04-4para_mgband'
+         sci = mrdfits(dir+'sps_fit04.fits.gz',1,/silent)
+         doalpha = 1
+         domassmetal = 1
+         ytitle='[Mg/Fe]!Dthis work!N'
+	 end
+       5:begin
+         name = '05-5para_mgonly_polycont'
+         sci = mrdfits(dir+'sps_fit05.fits.gz',1,/silent)
+         doalpha = 1
+         domassmetal=1
+         ytitle='[Mg/Fe]!Dthis work!N'
+
          end
-       else:stop,'something is wrong'
+       6:begin
+         name = '07-5para_mgonly_re-splinefit'
+         sci = mrdfits(dir+'sps_fit07.fits.gz',1,/silent)
+         doalpha = 1
+         domassmetal=1
+         ytitle='[Mg/Fe]!Dthis work!N'
+         end
+       7:begin
+         name = '08-5para_mgonly_polycont_4000A'
+         sci = mrdfits(dir+'sps_fit08.fits.gz',1,/silent)
+         doalpha = 1
+         domassmetal=1
+         ytitle='[Mg/Fe]!Dthis work!N'
+         end
+       else:stop
      endcase
 
      ;test if the str match
@@ -95,32 +126,58 @@ pro choiana
      device,/close
     
      if doalpha eq 1 then begin 
-     psname = name+'_choicompare_alpha.eps'
-     !p.multi=[0,3,1]
-     device,filename=psname,xsize=30,ysize=7,$
-            xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
-        plot,choi.alpha,sci.alphafe,xtitle='[{Mg,Ca}/Fe]!DChoi14!N',$
-             ytitle='[{Mg,Si,Ca,Ti,O}/Fe]!Dthis work!N',/nodata
-        cgerrplot,choi.alpha,sci.alphafelower,sci.alphafeupper
-        cgerrplot,sci.alphafe,choi.alpha-choi.alphaerr,choi.alpha+choi.alphaerr,/horizontal
-        oplot,choi.alpha,sci.alphafe,psym=8,color=fsc_color('red')
-        oplot,!x.crange,!x.crange,linestyle=2
-   
-        plot,choi.mgfe,sci.alphafe,xtitle='[Mg/Fe]!DChoi14!N',$
-             ytitle='[{Mg,Si,Ca,Ti,O}/Fe]!Dthis work!N',/nodata
-        cgerrplot,choi.mgfe,sci.alphafelower,sci.alphafeupper
-        cgerrplot,sci.alphafe,choi.mgfe-choi.mgfeerr,choi.mgfe+choi.mgfeerr,/horizontal
-        oplot,choi.mgfe,sci.alphafe,psym=8,color=fsc_color('red')
-        oplot,!x.crange,!x.crange,linestyle=2
-   
-        plot,choi.cafe,sci.alphafe,xtitle='[Ca/Fe]!DChoi14!N',$
-             ytitle='[{Mg,Si,Ca,Ti,O}/Fe]!Dthis work!N',/nodata
-        cgerrplot,choi.cafe,sci.alphafelower,sci.alphafeupper
-        cgerrplot,sci.alphafe,choi.cafe-choi.cafeerr,choi.cafe+choi.cafeerr,/horizontal
-        oplot,choi.cafe,sci.alphafe,psym=8,color=fsc_color('red')
-        oplot,!x.crange,!x.crange,linestyle=2
-   
-     device,/close
-     endif
+        psname = name+'_choicompare_alpha.eps'
+        !p.multi=[0,3,1]
+        device,filename=psname,xsize=30,ysize=7,$
+               xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
+           plot,choi.alpha,sci.alphafe,xtitle='[{Mg,Ca}/Fe]!DChoi14!N',$
+                ytitle=ytitle,/nodata
+           cgerrplot,choi.alpha,sci.alphafelower,sci.alphafeupper
+           cgerrplot,sci.alphafe,choi.alpha-choi.alphaerr,choi.alpha+choi.alphaerr,/horizontal
+           oplot,choi.alpha,sci.alphafe,psym=8,color=fsc_color('red')
+           oplot,!x.crange,!x.crange,linestyle=2
+      
+           plot,choi.mgfe,sci.alphafe,xtitle='[Mg/Fe]!DChoi14!N',$
+                ytitle=ytitle,/nodata,xrange=[min(choi.mgfe-choi.mgfeerr),max(choi.mgfe+choi.mgfeerr)]
+           cgerrplot,choi.mgfe,sci.alphafelower,sci.alphafeupper
+           cgerrplot,sci.alphafe,choi.mgfe-choi.mgfeerr,choi.mgfe+choi.mgfeerr,/horizontal
+           oplot,choi.mgfe,sci.alphafe,psym=8,color=fsc_color('red')
+           oplot,!x.crange,!x.crange,linestyle=2
+      
+           plot,choi.cafe,sci.alphafe,xtitle='[Ca/Fe]!DChoi14!N',$
+                ytitle=ytitle,/nodata
+           cgerrplot,choi.cafe,sci.alphafelower,sci.alphafeupper
+           cgerrplot,sci.alphafe,choi.cafe-choi.cafeerr,choi.cafe+choi.cafeerr,/horizontal
+           oplot,choi.cafe,sci.alphafe,psym=8,color=fsc_color('red')
+           oplot,!x.crange,!x.crange,linestyle=2
+      
+           device,/close
+        endif
+
+        if domassmetal eq 1 then begin
+           psname = name+'_massmetal.eps'
+           !p.multi=[0,2,1]
+           device,filename=psname,xsize=18,ysize=7,$
+               xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
+           lz = [0.3,0.4,0.55]
+           hz = [0.4,0.55,0.7]
+           color= ['gold','darkgreen','blue']
+           plot,sci.logmstar,sci.feh,xtitle='log M',ytitle='[Fe/H]',/nodata,$
+                xrange=[9.5,12],yrange=[-0.25,0.25],xstyle=1,ystyle=1
+           for j=0,n_Elements(lz)-1 do begin
+              sel = where(sci.zfit gt lz[j] and sci.zfit lt hz[j],csel)
+              if csel le 1 then stop
+              cgerrplot,sci(sel).logmstar,sci(sel).fehlower,sci(sel).fehupper,color=color[j]
+              oplot,sci(sel).logmstar,sci(sel).feh,psym=8,color=fsc_color(color[j])
+           endfor
+           plot,sci.logmstar,sci.alphafe,xtitle='log M',ytitle=ytitle,/nodata,$
+                xrange=[9.5,12],yrange=[-0.05,0.45],xstyle=1,ystyle=1
+           for j=0,n_Elements(lz)-1 do begin
+              sel = where(sci.zfit gt lz[j] and sci.zfit lt hz[j],csel)
+              cgerrplot,sci(sel).logmstar,sci(sel).alphafelower,sci(sel).alphafeupper,color=color[j]
+              oplot,sci(sel).logmstar,sci(sel).alphafe,psym=8,color=fsc_color(color[j])
+           endfor
+           device,/close
+        endif
   endfor
 end

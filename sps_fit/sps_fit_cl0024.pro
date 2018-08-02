@@ -324,7 +324,7 @@ pro sps_fit::fitalpha, science, noredraw=noredraw, nostatusbar=nostatusbar
     widget_control, widget_info(self.base, find_by_uname='maxnloop'), get_value=maxnloop
     maxnloop = fix(maxnloop[0])
     if maxnloop eq 0 then maxnloop = 150
-    maxnloop = 10
+   ; maxnloop = 150
     print, '* * * * * * * * * * * * * * * * * * * *'
     print, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
     print, '* * * * * * * * * * * * * * * * * * * *'
@@ -342,9 +342,6 @@ pro sps_fit::fitalpha, science, noredraw=noredraw, nostatusbar=nostatusbar
     bestchisq = 9999.
     bestvalue = [99.,99.,99.,99.,99.]
     besterror = [99.,99.,99.,99.,99.]
-    chisqarr = fltarr(maxnloop)
-    valuearr = fltarr(5,maxnloop)
-    errorarr = fltarr(5,maxnloop)
    ;;while abs(zdiff) gt 0.001 or abs(agediff) gt 0.001 or abs(vdispdiff) gt 0.001 or abs(redshfdiff) gt 0.001 and nloop le maxnloop do begin
     while nloop lt maxnloop do begin
         contiter++
@@ -412,9 +409,6 @@ pro sps_fit::fitalpha, science, noredraw=noredraw, nostatusbar=nostatusbar
            bestspsbestfitarr = spsbestfitarr
            bestcont = cont
         endif
-        chisqarr[nloop] = curchisq
-        valuearr[*,nloop] = pars
-        errorarr[*,nloop] = perror
         nloop +=1
      endwhile
     close,copynum
@@ -645,13 +639,14 @@ pro sps_fit::fit_all,alpha=alpha
     scienceall = *self.science
     curi = self.i
     nreplace = 0
+  for nwalker=0,4 do begin
     for i=0,self.nspec-1 do begin
         self.i = i
         self->default_range
         science = scienceall[self.i]
         if science.good eq 0 then continue
         if ~keyword_set(alpha) then self->fit, science else begin
-           self->mask, science ,/includemg
+           ;self->mask, science ,/includemg
            self->fitalpha, science
         endelse
         if (keepoldfit eq 0 and science.chisq lt scienceall[self.i].chisq) or (keepoldfit eq 1) then begin
@@ -673,10 +668,11 @@ pro sps_fit::fit_all,alpha=alpha
             scienceall = *self.science
         endif
     endfor
-    print,'total replace ', nreplace,' fits'
+    print,'nwalker',nwalker,'total replace ', nreplace,' fits'
     ptr_free, self.science
     self.science = ptr_new(scienceall)
     self->writescience
+  endfor
     self.i = curi
     science = scienceall[self.i]
     self->statusbox, science=science
@@ -766,7 +762,7 @@ pro sps_fit::handle_button, ev
        'fitalpha':begin
            scienceall = *self.science
            science = scienceall[self.i]
-           self->mask, science ,/includemg
+           ;self->mask, science ,/includemg
            self->fitalpha, science, /noredraw
            widget_control, widget_info(self.base, find_by_uname='keepoldfit'), $
                get_value=keepoldfit

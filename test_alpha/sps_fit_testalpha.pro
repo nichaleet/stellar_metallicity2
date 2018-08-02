@@ -956,7 +956,7 @@ pro sps_fit::fit_all,alpha=alpha
         science = scienceall[self.i]
         if science.good eq 0 then continue
         if ~keyword_set(alpha) then self->fit, science else begin
-           self->mask, science ,/includemg
+           ;self->mask, science ,/includemg
            self->fitalpha, science
         endelse
         if (keepoldfit eq 0 and science.chisq lt scienceall[self.i].chisq) or (keepoldfit eq 1) then begin
@@ -1081,7 +1081,7 @@ pro sps_fit::handle_button, ev
        'fitalpha':begin
            scienceall = *self.science
            science = scienceall[self.i]
-           self->mask, science ,/includemg
+          ; self->mask, science ,/includemg
            self->fitalpha, science, /noredraw
            widget_control, widget_info(self.base, find_by_uname='keepoldfit'), get_value=keepoldfit
            if (keepoldfit eq 0 and science.chisq lt scienceall[self.i].chisq) $
@@ -2218,7 +2218,7 @@ pro sps_fit::statusbox, science=science
    widget_control, widget_info(self.base, find_by_uname='curalphauncert'), set_value=science.alphafelower gt -100 ? strcompress(string(science.alphafelower, format='(D10.2)'), /rem)+(science.alphafeupper ge -100 ? ' : '+strcompress(string(science.alphafeupper, format='(D10.2)'), /rem):'') : unknown
     widget_control, widget_info(self.base, find_by_uname='curgband'), set_value=science.gbanderr gt 0 ? strcompress(string(science.gband, format='(D10.2)'), /rem)+(science.gbanderr le 0 ? '' : ' +/- '+strcompress(string(science.gbanderr, format='(D10.2)'), /rem)) : unknown
     widget_control, widget_info(self.base, find_by_uname='curchisq'), set_value=science.chisq gt 0 ? strcompress(string(science.chisq, format='(D10.2)'), /rem) : unknown
-    widget_control, widget_info(self.base, find_by_uname='maxnloop'), set_value=science.nloop gt 0 ? strcompress(string(science.nloop, format='(I4)'), /rem) : unknown
+    widget_control, widget_info(self.base, find_by_uname='maxnloop'), set_value=science.nloop gt 0 ? strcompress(string(science.nloop, format='(I4)'), /rem) :'0'
 
     ;widget_control, widget_info(self.base, find_by_uname='curafe'), set_value=science.alphafe gt -100 ? strcompress(string(science.alphafe, format='(D10.2)'), /rem)+(science.alphafeerr le 0 ? '' : ' +/- '+strcompress(string(science.alphafeerr, format='(D10.2)'), /rem)) : unknown
     
@@ -2252,6 +2252,7 @@ pro sps_fit::getscience, files=files
             objnames[i] = strjoin(extensions[1:5],'_')
         endfor
         w = where(strmatch(objnames, '*serendip*') eq 0 and strmatch(objnames, '*ACSstar*') eq 0, cw)
+        w = where(strmatch(objnames, '*sn00*') eq 1, cw)
         if cw gt 0 then begin
             masks = masks[w]
             slits = slits[w]
@@ -2343,8 +2344,8 @@ pro sps_fit::getscience, files=files
         widget_control, widget_info(self.base, find_by_uname='filelist'), set_value=speclist
         widget_control, widget_info(self.base, find_by_uname='mode'), set_value=1
         self->writescience
-        self->fit_all;,/alpha
-        self->writescience
+      ;  self->fit_all,/alpha
+      ;  self->writescience
      endif else begin ;if sps_fit.fits.gz exists or not
         scienceall = mrdfits(sciencefits, 1, /silent)
 

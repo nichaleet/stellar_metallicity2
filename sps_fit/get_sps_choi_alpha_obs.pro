@@ -41,9 +41,9 @@ function get_sps_choi_alpha_obs, xin, a, bkspace
     ;fit continuum to synthetic spectra
     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
     if normalize eq 1 or rest eq 1 then begin
-       spline = 1
+       spline = 0
        poly = 0
-       simpoly = 0
+       simpoly = 1
 
        spsspec_original = spsspec
        won = where(contmask eq 1, con)
@@ -65,6 +65,7 @@ function get_sps_choi_alpha_obs, xin, a, bkspace
              cont = legendre_poly(lambda, a, /noderiv)
           end
           simpoly:begin
+             npoly = 7
              degree = npoly
              p=poly_fit(lambda[won],spsspec[won],degree)
              cont = poly(lambda,p)
