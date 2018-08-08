@@ -23,11 +23,12 @@ function get_sps_alpha_obs, xin, a
     clight = 299792.458
 
     spsspec = spsspec*clight/lambda^2    ;change fnu(Lsun/Hz) to flambda
-    spsspec = spsspec/median(spsspec)    ;normalize to around 1
-
     ;add response function
     spsspec = add_response(lambda,spsspec,[z,age],element,rebin([alpha],nelements),/silent)
+    spsspec = spsspec/median(spsspec)    ;normalize to around 1
    ;smooth to data wavelengths
+;    spsspec = smooth_gauss_wrapper(lambda, spsspec, lambda, vdisp/clight*lambda)
+;    spsspec = smooth_gauss_wrapper(lambda*(1.+redshift), spsspec, datalam, dlam)
     spsspec = smooth_gauss_wrapper(lambda*(redshift+1.), spsspec, datalam, sqrt(dlam^2+(vdisp/clight*datalam)^2))
 ;function smooth_gauss_wrapper, lambda1, spec1, lambda2, dlam_in, ivar1=ivar1, ivar2=ivar2
     lambda  = datalam ;datalam is science.lambda

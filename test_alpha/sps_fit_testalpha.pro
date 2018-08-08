@@ -121,7 +121,7 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
     widget_control, widget_info(self.base, find_by_uname='maxnloop'), get_value=maxnloop
     maxnloop = fix(maxnloop[0])
     if maxnloop eq 0 then maxnloop = 150
-    ;maxnloop = 150
+    maxnloop = 150
     print, '* * * * * * * * * * * * * * * * * * * *'
     print, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
     print, '* * * * * * * * * * * * * * * * * * * *'
@@ -260,6 +260,8 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
     science.zspec = pi[3].value
     science.vdisp = pi[2].value
     science.vdisperr = perror[2]
+    science.alphafe = 0.
+    science.alphafeerr = 0.
     ;calculate chisq
     if science.feh ne -999 then begin
        science.chisq = total((spsbestfit[won]-science.contdiv[won]/science.spscont[won])^2*science.contdivivar[won]*(science.spscont[won])^2)/float(n_elements(won))
@@ -299,7 +301,6 @@ pro sps_fit::fitalpha, science, noredraw=noredraw, nostatusbar=nostatusbar
     common get_sps_alpha, element
 
     if ~keyword_set(nostatusbar) then widget_control, widget_info(self.base, find_by_uname='status'), set_value='Fitting 5 parameters ...'
-    savedata = 0 ;1
 
     element= ['Mg','O','Si','Ca','Ti']
     znow = science.zspec
@@ -358,10 +359,11 @@ pro sps_fit::fitalpha, science, noredraw=noredraw, nostatusbar=nostatusbar
     nloop=0
     widget_control, widget_info(self.base, find_by_uname='maxnloop'), get_value=maxnloop
     maxnloop = fix(maxnloop[0])
-    if maxnloop eq 0 then maxnloop = 150
-    ;maxnloop = 150
+    if maxnloop eq 0 then maxnloop = 10
+ ;   maxnloop = 100
     print, '* * * * * * * * * * * * * * * * * * * *'
     print, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
+    print,'elements:',element
     print, '* * * * * * * * * * * * * * * * * * * *'
     print, '  i Z/Z_sun   age sigma_v  redhift  alpha   chi^2  DOF   ZDIFF  AGEDIFF'
     print, '--- ------- ----- ------- --------- --------- -------- ---- -----  ------'
@@ -377,9 +379,6 @@ pro sps_fit::fitalpha, science, noredraw=noredraw, nostatusbar=nostatusbar
     bestchisq = 9999.
     bestvalue = [99.,99.,99.,99.,99.]
     besterror = [99.,99.,99.,99.,99.]
-    chisqarr = fltarr(maxnloop)
-    valuearr = fltarr(5,maxnloop)
-    errorarr = fltarr(5,maxnloop)
     
     ;;while abs(zdiff) gt 0.001 or abs(agediff) gt 0.001 or abs(vdispdiff) gt 0.001 or abs(redshfdiff) gt 0.001 and nloop le maxnloop do begin
     while nloop lt maxnloop do begin
@@ -443,13 +442,6 @@ pro sps_fit::fitalpha, science, noredraw=noredraw, nostatusbar=nostatusbar
         curchisq = bestnorm/dof
 
         ;;keeping the values
-        if savedata eq 1 and nloop mod 10 eq 0 then begin
-           if nloop eq 0 then $
-              str={won:won,lambda:science.lambda,contdiv:science.contdiv,contdivivar:science.contdivivar,fakecont:science.spscont,spsbestfit:spsbestfitarr[*,0],chisq:curchisq,param:pars,perror:perror,loop:nloop} else $
-              str={won:won,lambda:science.lambda,contdiv:science.contdiv,contdivivar:science.contdivivar,fakecont:science.spscont,spsbestfit:spsbestfit,chisq:curchisq,param:pars,perror:perror,loop:nloop}
-           if nloop eq 0 then loopstr = [str] else loopstr=[loopstr,str]
-           save,loopstr,firstguess,filename=self.directory+'/obj'+strtrim(string(self.i+1, format='(I3)'), 2)+'sps_fit_loopinfo.sav'
-        endif
         if curchisq lt bestchisq then begin
            bestchisq = curchisq
            bestvalue = pars
@@ -457,31 +449,25 @@ pro sps_fit::fitalpha, science, noredraw=noredraw, nostatusbar=nostatusbar
            bestspsbestfitarr = spsbestfitarr
            bestcont = cont
         endif
-        chisqarr[nloop] = curchisq
-        valuearr[*,nloop] = pars
-        errorarr[*,nloop] = perror
         nloop +=1
 
      endwhile
 
     close,1
-    if savedata eq 1 then begin
-       str = {chisq:chisqarr,param:valuearr,perror:errorarr,paraname:['Z','age','sigmav','redshift'],objname:strtrim(science.objname, 2),dof:dof}
-       save,str,filename=self.directory+'/sps_fit_data_'+strtrim(string(self.i+1, format='(I3)'), 2)+'.sav'
-    endif
 
     print,agediff,zdiff,format='("--- ------- ----- ------- ---------  -------- ----",D9.6,2X,D9.6)'                            
-    ;;check if the last chisq is the best chisq
-    ;if abs((pi[0].value-bestvalue[0])/bestvalue[0]) gt 0.01 or abs((pi[1].value-bestvalue[1])/bestvalue[1]) gt 0.01 or (curchisq-bestchisq)/bestchisq gt 0.001 then begin
-    ;   print,'THE WHILE LOOP HAS WALKED AWAY FROM THE BEST VALUES. BETTER CHECK YOUR PLOT'
-    ;   print,'The values used are:'
-    ;   print, bestvalue[0], bestvalue[1], bestvalue[2],bestvalue[3],bestchisq,format='(6X,D6.3,1X,D5.2,2X,D6.1,2x,D6.3,1X,D8.3)'
-    ;   science.goodfit = 1.
-    ;   spsbestfitarr = bestspsbestfitarr
-    ;   pi.value = bestvalue
-    ;   perror   = besterror
-    ;   science.spscont = bestcont
-    ;endif
+    ;check if the last chisq is the best chisq
+    if abs((pi[0].value-bestvalue[0])/bestvalue[0]) gt 0.01 or abs((pi[1].value-bestvalue[1])/bestvalue[1]) gt 0.01 or (curchisq-bestchisq)/bestchisq gt 0.001 then begin
+       print,'THE WHILE LOOP HAS WALKED AWAY FROM THE BEST VALUES. BETTER CHECK YOUR PLOT'
+       print,'The values used are:'
+       print, bestvalue[0], bestvalue[1], bestvalue[2],bestvalue[3],bestvalue[4],bestchisq,format='(6X,D6.3,1X,D5.2,2X,D6.1,2x,D6.3,1x,D6.3,1X,D8.3)'
+       science.goodfit = 1.
+       spsbestfitarr = bestspsbestfitarr
+       spsbestfit=spsbestfitarr[*,1]
+       pi.value = bestvalue
+       perror   = besterror
+       science.spscont = bestcont
+    endif
 
     science.nloop = nloop
     science.spsspec = spsbestfitarr[*,0] 
@@ -950,6 +936,8 @@ pro sps_fit::fit_all,alpha=alpha
     widget_control, widget_info(self.base, find_by_uname='keepoldfit'), get_value=keepoldfit
     scienceall = *self.science
     curi = self.i
+ for nwalker=0,4 do begin
+    nreplace = 0
     for i=0,self.nspec-1 do begin
         self.i = i
         self->default_range
@@ -963,6 +951,7 @@ pro sps_fit::fit_all,alpha=alpha
             if keepoldfit eq 0 then print,'chisq is smaller, replaced fit' 
             print, scienceall[self.i].feh,scienceall[self.i].age,scienceall[self.i].vdisp,scienceall[self.i].zfit,scienceall[self.i].alphafe,scienceall[self.i].chisq,format='(5x,D6.3,2x,D6.2,2x,D6.1,2x,D4.2,2x,D6.3,2X,D10.5)'
             scienceall[self.i] = science
+            nreplace += 1
         endif else begin
             if keepoldfit eq 0 then begin
             print, 'chisq is larger, use previous fit'
@@ -971,9 +960,11 @@ pro sps_fit::fit_all,alpha=alpha
         endelse
         self->statusbox
     endfor
+    print,'nwalker',nwalker,'total replace ', nreplace,' fits'
     ptr_free, self.science
     self.science = ptr_new(scienceall)
     self->writescience
+  endfor
     self.i = curi
     science = scienceall[self.i]
     self->statusbox, science=science
@@ -1900,7 +1891,7 @@ pro sps_fit::mask, science, nomask=nomask, zfind=zfind, nozfind=nozfind, nmc=nmc
        ; tellend[4] = 9500. 
         for i=1,1 do begin
             w = where(science.lambda ge tellstart[i] and science.lambda le tellend[i], c)
-            if c gt 0 then mask[w] = 0
+           ; if c gt 0 then mask[w] = 0
          endfor
         ;3) where it peaks greater than 3 sigmas
         ;w = where((science.contdiv-science.continuum) gt 3.*science.contdivivar^(-0.5), cw)
@@ -1928,7 +1919,6 @@ pro sps_fit::mask, science, nomask=nomask, zfind=zfind, nozfind=nozfind, nmc=nmc
         w = where(~finite(science.contdiv) or ~finite(science.lambda),c)
         if c gt 0 then mask[w]=0
         ;;
-
         ;7)where is is Mg region
         if ~keyword_Set(includemg) then begin
            linestart = *self.linestart
@@ -1956,8 +1946,9 @@ pro sps_fit::mask, science, nomask=nomask, zfind=zfind, nozfind=nozfind, nmc=nmc
         mask[0:4] = 0
         mask[nhalf-4:nhalf+4] = 0
         mask[n-5:n-1] = 0
-    endif else begin
-        mask = science.fitmask
+  
+  endif else begin
+        mask = 1; science.fitmask
     endelse
     science.fitmask = mask
 end
@@ -2251,8 +2242,8 @@ pro sps_fit::getscience, files=files
             slits[i] = extensions[1]
             objnames[i] = strjoin(extensions[1:5],'_')
         endfor
-        w = where(strmatch(objnames, '*serendip*') eq 0 and strmatch(objnames, '*ACSstar*') eq 0, cw)
-        w = where(strmatch(objnames, '*sn00*') eq 1, cw)
+        w = where(strmatch(objnames, '*sn00*') eq 0, cw)
+       ; w = where(strmatch(objnames, '*sn00*') eq 1, cw)
         if cw gt 0 then begin
             masks = masks[w]
             slits = slits[w]
@@ -2324,7 +2315,7 @@ pro sps_fit::getscience, files=files
             if science.sn gt 3. then science.good = 1
             science.good = 1
 
-            self->mask, science
+            self->mask, science,/includemg
             science.spscont = 1.0
             self->indices, science, /noredraw
 
@@ -2371,6 +2362,7 @@ pro sps_fit::writescience
     scienceall = *self.science
     sciencefits = self.directory+'sps_fit'+copynum+'.fits'
     mwrfits, scienceall, sciencefits, /create, /silent
+    print, 'saved file'
     spawn, 'gzip -f '+sciencefits
     widget_control, widget_info(self.base, find_by_uname='status'), set_value='Ready.'
 end

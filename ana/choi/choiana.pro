@@ -41,7 +41,7 @@ pro choiana
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
   set_plot,'ps'
   domassmetal = 0
-  for i=1,7 do begin
+  for i=1,8 do begin
      case i of 
        1:begin
          name = '01-5para_5elements'
@@ -88,6 +88,13 @@ pro choiana
          doalpha = 1
          domassmetal=1
          ytitle='[Mg/Fe]!Dthis work!N'
+         end
+       8:begin
+         name = '09-5para-mgo_polycont_4000A'
+         sci = mrdfits(dir+'sps_fit09.fits.gz',1,/silent)
+         doalpha = 1
+         domassmetal=1
+         ytitle='[Mg,O/Fe]!Dthis work!N'
          end
        else:stop
      endcase
@@ -143,12 +150,11 @@ pro choiana
            cgerrplot,sci.alphafe,choi.mgfe-choi.mgfeerr,choi.mgfe+choi.mgfeerr,/horizontal
            oplot,choi.mgfe,sci.alphafe,psym=8,color=fsc_color('red')
            oplot,!x.crange,!x.crange,linestyle=2
-      
-           plot,choi.cafe,sci.alphafe,xtitle='[Ca/Fe]!DChoi14!N',$
-                ytitle=ytitle,/nodata
-           cgerrplot,choi.cafe,sci.alphafelower,sci.alphafeupper
-           cgerrplot,sci.alphafe,choi.cafe-choi.cafeerr,choi.cafe+choi.cafeerr,/horizontal
-           oplot,choi.cafe,sci.alphafe,psym=8,color=fsc_color('red')
+     
+           deltamg = sci.alphafe-choi.mgfe 
+           plot,choi.Nfe,deltamg,xtitle='[N/Fe]!DChoi14!N',$
+                ytitle=delta+'Mg',/nodata
+           oplot,choi.Nfe,deltamg,psym=8,color=fsc_color('red')
            oplot,!x.crange,!x.crange,linestyle=2
       
            device,/close

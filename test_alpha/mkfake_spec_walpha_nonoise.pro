@@ -73,7 +73,7 @@ pro mkfake_spec_walpha_nonoise,notput=notput
       spsstruct = sps_interp(zmet[iz], age[ia])
       spslambda = spsstruct.lambda
       spsspec = spsstruct.spec
-      w = where(spslambda gt 3000 and spslambda lt 6000, c)
+      w = where(spslambda gt 3000 and spslambda lt 8000, c)
       if c lt 25 then message, 'Not enough pixels.'
       spslambda = spslambda[w]
       spsspec = spsspec[w]
@@ -98,12 +98,11 @@ pro mkfake_spec_walpha_nonoise,notput=notput
          spec = spsspec
          ivar = 1./sigmasq
          ;continuum normalizei
-         bkspace =  fix(200./median(abs(ts_diff(lambdaobs,1)))) ;approximately every 200 A
          bkspace = 150
-         bkpt = slatec_splinefit(lambdaobs[won], spec[won], coeff, invvar=ivar[won], $
+         bkpt = slatec_splinefit(lambdarest[won], spec[won], coeff, invvar=ivar[won], $
                 bkspace=bkspace, upper=3, lower=3, /silent)
          if bkpt[0] eq -1 then stop,'cannot do spline continnum fit'
-         cont = slatec_bvalu(lambdaobs, bkpt, coeff)
+         cont = slatec_bvalu(lambdarest, bkpt, coeff)
          contdiv = spec/cont
          contdivivar = ivar*cont^2
    

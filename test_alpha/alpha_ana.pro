@@ -1,17 +1,26 @@
 pro alpha_ana
    ;read data
-   alphafit = mrdfits('/scr2/nichal/workspace4/test_alpha/datasps/mockdata_alpha/sps_fit01.fits.gz',1)
-   feonlyfit = mrdfits('/scr2/nichal/workspace4/test_alpha/datasps/mockdata_alpha/sps_fit02.fits.gz',1)
    nwalkers = 5
 
-   for ff=0,1 do begin         
+   for ff=0,3 do begin         
       if ff eq 0 then begin
-         str = alphafit
-         name='alphafit_5para'
+         str =  mrdfits('/scr2/nichal/workspace4/test_alpha/datasps/mockdata_alpha/sps_fit01.fits.gz',1)
+         name='01alphafit_5para'
       endif
       if ff eq 1 then begin
-         str = feonlyfit
-         name='feonlyfit_4para'
+         str = mrdfits('/scr2/nichal/workspace4/test_alpha/datasps/mockdata_alpha/sps_fit02.fits.gz',1)
+         str.alphafe = 0
+         name='02feonlyfit_4para'
+      endif
+      if ff eq 2 then begin
+         str = mrdfits('/scr2/nichal/workspace4/test_alpha/datasps/mockdata_alpha/sps_fit03.fits.gz',1)
+         name = '03fitmgtoalpha'
+      endif
+      if ff eq 3 then begin
+         str = mrdfits('/scr2/nichal/workspace4/test_alpha/datasps/mockdata_alpha/sps_fit04.fits.gz',1)
+         str.alphafe = 0
+         str.alphafeerr = 0
+         name='04feonlyfit_4para_maskemlines'
       endif
       ;get correct/input values
       nstr = n_elements(str)

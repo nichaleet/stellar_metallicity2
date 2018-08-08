@@ -1,4 +1,4 @@
-function get_sps_choi_alpha_obs, xin, a, bkspace
+function get_sps_choi_alpha_obs, xin, a
     common sps_spec, sps, spsz, spsage
     common get_sps, dlam, dataivar, datalam, wonfit, npoly, contmask, normalize,rest
     common get_sps_alpha, element
@@ -6,12 +6,18 @@ function get_sps_choi_alpha_obs, xin, a, bkspace
     age = a[1]
     vdisp = a[2]
     redshift = a[3]
-    if n_Elements(a) eq 5 then begin
+    if n_Elements(a) ge 5 then begin
        yesalpha=1
-       alpha = a[4]
-       nelements = n_elements(element)
+       if n_elements(a) eq 5 then begin
+          alpha = a[4]
+          nelements = n_elements(element)
+          abund = rebin([alpha],nelements)
+       endif
+       if n_elements(a) eq 6 then begin
+          abund = a[4:5]
+       endif
     endif else yesalpha=0
-    
+ 
     ;spsspec = dblarr(n_elements(xin)) - 99999.
     ;if z lt min(spsz) or z gt max(spsz) then return, spsspec
     ;if age lt min(spsage) or age gt max(spsage) then return, spsspec
@@ -31,7 +37,7 @@ function get_sps_choi_alpha_obs, xin, a, bkspace
 
     ;add response function to [a/Fe]
     if yesalpha then begin
-       spsspec = add_response(lambda,spsspec,[z,age],element,rebin([alpha],nelements),/silent)
+       spsspec = add_response(lambda,spsspec,[z,age],element,abund,/silent)
     endif
     ;smooth to data wavelengths
     spsspec = smooth_gauss_wrapper(lambda*(redshift+1.), spsspec, datalam, sqrt(dlam^2+(vdisp/clight*datalam)^2))
@@ -41,9 +47,9 @@ function get_sps_choi_alpha_obs, xin, a, bkspace
     ;fit continuum to synthetic spectra
     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
     if normalize eq 1 or rest eq 1 then begin
-       spline = 0
+       spline = 1
        poly = 0
-       simpoly = 1
+       simpoly = 0
 
        spsspec_original = spsspec
        won = where(contmask eq 1, con)
@@ -52,23 +58,23 @@ function get_sps_choi_alpha_obs, xin, a, bkspace
 
        case 1 of
           spline: begin
-             bkpt = slatec_splinefit(lambda[won], spsspec[won], coeff, bkspace=165,invvar=invvar,upper=3, lower=3, /silent,/everyn,mask=mask) ;SDSS
+             bkpt = slatec_splinefit(lambda[won]/(1.+redshift), spsspec[won], coeff, bkspace=165,invvar=invvar,upper=3, lower=3, /silent,/everyn,mask=mask) ;SDSS
              
              if bkpt[0] eq -1 then message, 'Could not fit a spline to spsspec.'
-             cont = slatec_bvalu(lambda, bkpt, coeff)
+             cont = slatec_bvalu(lambda/(1.+redshift), bkpt, coeff)
           end
           poly: begin
-             degree = 6
+             degree = 7
              norm = median(spsspec[won])
              a = [norm, replicate(0.0, degree-1)]
-             p = lmfit(lambda[won],spsspec[won], a, measure_errors=(invvar)^(-0.5), /double, function_name='legendre_poly')
-             cont = legendre_poly(lambda, a, /noderiv)
+             p = lmfit(lambda[won]/(1.+redshift),spsspec[won], a, measure_errors=(invvar)^(-0.5), /double, function_name='legendre_poly')
+             cont = legendre_poly(lambda/(1.+redshift), a, /noderiv)
           end
           simpoly:begin
-             npoly = 7
+             npoly = 6
              degree = npoly
-             p=poly_fit(lambda[won],spsspec[won],degree)
-             cont = poly(lambda,p)
+             p=poly_fit(lambda[won]/(1.+redshift),spsspec[won],degree)
+             cont = poly(lambda/(1.+redshift),p)
           end
        endcase
        spsspec /= cont

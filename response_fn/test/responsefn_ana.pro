@@ -37,4 +37,31 @@ pro responsefn_ana
            colors=fsc_color(['maroon','teal','navy','darkorchid','salmon','olivedrab']),/right,/bottom
    device,/close
 
+   abund = findgen(5)*(0.8-0.)/4.+0.
+   specNarr = fltarr(nwl,5)
+   for i=0,4 do specNarr[*,i] = add_response(spslambda,spsspec,[zmet,age],['N'],[abund[i]])
+   
+   abund = findgen(5)*(0.2+0.2)/4.-0.2
+   specFearr = fltarr(nwl,5)
+   for i=0,4 do specFearr[*,i] = add_response(spslambda,spsspec,[zmet,age],['Fe'],[abund[i]])
+
+   color = ['red','salmon','darkgreen','navy','purple']
+   epsname = 'responsefn_N.eps'
+   device,filename = epsname,xsize = 15,ysize = 12, $
+                xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
+       plot,spslambda,specNarr[*,2],/nodata,xtitle='lambda',ytitle='N response fn',$
+            yrange=[0.8,1.1],ystyle=1,xrange=minmax(spslambda),xstyle=1,$
+            title='[Z/H]:'+sigfig(zmet,2)+' Age:'+sigfig(age,2)+' Gyr'
+       for i=0,4 do oplot,spslambda,specNarr[*,i],color=fsc_color(color[i])
+   device,/close
+
+   epsname = 'responsefn_Fe.eps'
+   device,filename = epsname,xsize = 15,ysize = 12, $
+                xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
+       plot,spslambda,specFearr[*,2],/nodata,xtitle='lambda',ytitle='Fe response fn',$
+            yrange=[0.8,1.1],ystyle=1,xrange=minmax(spslambda),xstyle=1,$
+            title='[Z/H]:'+sigfig(zmet,2)+' Age:'+sigfig(age,2)+' Gyr'
+       for i=0,4 do oplot,spslambda,specFearr[*,i],color=fsc_color(color[i])
+   device,/close
+
 end

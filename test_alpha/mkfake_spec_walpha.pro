@@ -6,7 +6,7 @@ pro mkfake_spec_walpha,notput=notput
    alpha = [-0.25,-0.15,0.,0.15,0.25] 
    element=['Mg','O','Si','Ca','Ti']
    nelements = n_elements(element)
-   nspec = 5
+   nspec = 3
    redshift = 0.55
    vdisp = 300. ;km/s in FWHM
    nfinalspec = n_Elements(zmet)*n_Elements(age)*n_Elements(sn)*n_Elements(alpha)*nspec
@@ -100,11 +100,11 @@ pro mkfake_spec_walpha,notput=notput
          spec = spsspec+randomn(seed,nwl)*sqrt(sigmasq)
          ivar = 1./sigmasq
          ;continuum normalizei
-         bkspace =  fix(200./median(abs(ts_diff(lambdaobs,1)))) ;approximately every 200 A
-         bkpt = slatec_splinefit(lambdaobs[won], spec[won], coeff, invvar=ivar[won], $
+         bkspace = 150 
+         bkpt = slatec_splinefit(lambdarest[won], spec[won], coeff, invvar=ivar[won], $
                 bkspace=bkspace, upper=3, lower=3, /silent)
          if bkpt[0] eq -1 then stop,'cannot do spline continnum fit'
-         cont = slatec_bvalu(lambdaobs, bkpt, coeff)
+         cont = slatec_bvalu(lambdarest, bkpt, coeff)
          contdiv = spec/cont
          contdivivar = ivar*cont^2
 
