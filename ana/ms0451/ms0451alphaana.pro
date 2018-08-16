@@ -1,6 +1,6 @@
 pro ms0451alphaana
    ;GETTING SCI DATA
-   sci = mrdfits('/scr2/nichal/workspace4/sps_fit/data/spline_ms0451/sps_fit01.fits.gz',1)
+   sci = mrdfits('/scr2/nichal/workspace4/sps_fit/data/spline_ms0451/sps_fit03.fits.gz',1)
    stack = mrdfits('/scr2/nichal/workspace4/sps_fit/data/stacked_ms0451/sps_fit01.fits.gz',1)
    ;sample selection
    good = where(sci.oiiew gt -5.,cgood)

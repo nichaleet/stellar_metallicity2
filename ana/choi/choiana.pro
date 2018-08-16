@@ -41,7 +41,7 @@ pro choiana
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
   set_plot,'ps'
   domassmetal = 0
-  for i=1,8 do begin
+  for i=1,9 do begin
      case i of 
        1:begin
          name = '01-5para_5elements'
@@ -90,12 +90,20 @@ pro choiana
          ytitle='[Mg/Fe]!Dthis work!N'
          end
        8:begin
-         name = '09-5para-mgo_polycont_4000A'
+         name = '09-6para-mgo_spline_4000A'
          sci = mrdfits(dir+'sps_fit09.fits.gz',1,/silent)
          doalpha = 1
          domassmetal=1
-         ytitle='[Mg,O/Fe]!Dthis work!N'
+         ytitle='[Mg/Fe]!Dthis work!N'
          end
+       9:begin
+         name = '10-6para-mgn_spline_4000A'
+         sci = mrdfits(dir+'sps_fit10.fits.gz',1,/silent)
+         doalpha = 1
+         domassmetal=1
+         ytitle='[Mg/Fe]!Dthis work!N'
+         end
+ 
        else:stop
      endcase
 
@@ -139,15 +147,15 @@ pro choiana
                xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
            plot,choi.alpha,sci.alphafe,xtitle='[{Mg,Ca}/Fe]!DChoi14!N',$
                 ytitle=ytitle,/nodata
-           cgerrplot,choi.alpha,sci.alphafelower,sci.alphafeupper
-           cgerrplot,sci.alphafe,choi.alpha-choi.alphaerr,choi.alpha+choi.alphaerr,/horizontal
+         ;  cgerrplot,choi.alpha,sci.alphafelower,sci.alphafeupper
+         ;  cgerrplot,sci.alphafe,choi.alpha-choi.alphaerr,choi.alpha+choi.alphaerr,/horizontal
            oplot,choi.alpha,sci.alphafe,psym=8,color=fsc_color('red')
            oplot,!x.crange,!x.crange,linestyle=2
       
            plot,choi.mgfe,sci.alphafe,xtitle='[Mg/Fe]!DChoi14!N',$
                 ytitle=ytitle,/nodata,xrange=[min(choi.mgfe-choi.mgfeerr),max(choi.mgfe+choi.mgfeerr)]
-           cgerrplot,choi.mgfe,sci.alphafelower,sci.alphafeupper
-           cgerrplot,sci.alphafe,choi.mgfe-choi.mgfeerr,choi.mgfe+choi.mgfeerr,/horizontal
+         ;  cgerrplot,choi.mgfe,sci.alphafelower,sci.alphafeupper
+         ;  cgerrplot,sci.alphafe,choi.mgfe-choi.mgfeerr,choi.mgfe+choi.mgfeerr,/horizontal
            oplot,choi.mgfe,sci.alphafe,psym=8,color=fsc_color('red')
            oplot,!x.crange,!x.crange,linestyle=2
      

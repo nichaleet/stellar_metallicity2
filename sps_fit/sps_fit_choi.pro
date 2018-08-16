@@ -665,7 +665,7 @@ pro sps_fit::fitomg, science, noredraw=noredraw, nostatusbar=nostatusbar
     widget_control, widget_info(self.base, find_by_uname='maxnloop'), get_value=maxnloop
     maxnloop = fix(maxnloop[0])
     if maxnloop eq 0 then maxnloop = 150
-    maxnloop = 300
+    maxnloop = 400
     print, 'maxnloop ', maxnloop
     print, '* * * * * * * * * * * * * * * * * * * *'
     print, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
@@ -986,9 +986,9 @@ pro sps_fit::fit_all,alpha=alpha,omg=omg
     widget_control, widget_info(self.base, find_by_uname='keepoldfit'), get_value=keepoldfit
     scienceall = *self.science
     curi = self.i
- for nwalkers=0,3 do begin
+ for nwalkers=0,0 do begin
     nreplace = 0
-    for i=8,self.nspec-1 do begin
+    for i=0,self.nspec-1 do begin
         self.i = i
         self->default_range
         science = scienceall[self.i]
@@ -3111,7 +3111,7 @@ pro sps_fit_choi,copyi=copyi
        7: element = ['Mg']
        8: element = ['Mg']
        9: element = ['Mg','O']
-       10: element = ['Mg','O']
+       10: element = ['Mg','N']
        else: element=['nope']
     endcase
     n = obj_new('sps_fit', directory=directory)
