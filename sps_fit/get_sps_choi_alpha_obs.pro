@@ -16,8 +16,10 @@ function get_sps_choi_alpha_obs, xin, a
        if n_elements(a) eq 6 then begin
           abund = a[4:5]
        endif
+       if n_Elements(a) gt 6 then begin
+          abund = a[4:n_elements(a)-1]
+       endif
     endif else yesalpha=0
- 
     ;spsspec = dblarr(n_elements(xin)) - 99999.
     ;if z lt min(spsz) or z gt max(spsz) then return, spsspec
     ;if age lt min(spsage) or age gt max(spsage) then return, spsspec

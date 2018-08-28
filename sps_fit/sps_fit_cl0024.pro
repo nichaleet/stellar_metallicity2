@@ -2815,8 +2815,10 @@ pro sps_fit::getscience, files=files
             scienceall[i] = science
         endfor
         self.i = 0
-        wgood = where(scienceall.oiiew gt -6. and scienceall.logmstar gt 0., cgood)
-        scienceall = scienceall[wgood]
+        ;fix for logmstar
+         sci.logmstar = sci.logmstar-alog10(0.52^2) ;fix for the wrong calculation (should be divide by h^2 not multiply by h^2)
+        ;wgood = where(scienceall.oiiew gt -6. and scienceall.logmstar gt 0., cgood)
+        ;scienceall = scienceall[wgood]
         ptr_free, self.science
         self.science = ptr_new(scienceall)
         self.nspec = cgood
@@ -3193,7 +3195,16 @@ pro science__define
                goodfit:0B, $
                wlfail_blue:0B,$
                wlfail_red:0B,$
-               nloop:0}
+               nloop:0,$
+               NUV_MAG:0.,$
+               NUV_MAGERR:0.,$
+               NUV_FLUX:0.,$
+               NUV_FLUXERR:0.,$
+               FUV_MAG:0.,$
+               FUV_MAGERR:0.,$
+               FUV_FLUX:0.,$
+               FUV_FLUXERR:0.,$
+               FUV_V_REST:0.}
 end
 
 

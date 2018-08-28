@@ -3,7 +3,7 @@ pro ms0451alphaana
    sci = mrdfits('/scr2/nichal/workspace4/sps_fit/data/spline_ms0451/sps_fit03.fits.gz',1)
    stack = mrdfits('/scr2/nichal/workspace4/sps_fit/data/stacked_ms0451/sps_fit01.fits.gz',1)
    ;sample selection
-   good = where(sci.oiiew gt -5.,cgood)
+   good = where(sci.oiiew gt -5. and sci.nuv gt 50. and sci.snfit gt 5. and sci.logmstar gt 6.,cgood)
    sci = sci(good)
    ageform = (galage(sci.zfit,1000.)/1.e9-sci.age)>0. ;age of universe when it was formed
 
@@ -65,7 +65,8 @@ pro ms0451alphaana
    Delta = '!9'+string("104B)+'!x'
    alpha = '!9'+string("141B)+'!x'
 
-   goodfit = where(sci.goodfit eq 1 and sci.snfit gt 10., cgoodfit, complement=badfit,ncomplement=cbadfit)
+;   goodfit = where(sci.goodfit eq 1 and sci.snfit gt 10., cgoodfit, complement=badfit,ncomplement=cbadfit)
+   goodfit = where(sci.oiiew gt -5. and sci.nuv gt 50. and sci.snfit gt 10. and sci.logmstar gt 6.,cgoodfit,complement=badfit,ncomplement=cbadfit)
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
    psname='ms0451alpha_feh_mass.eps'
@@ -109,7 +110,7 @@ pro ms0451alphaana
       oplot,stack.logmstar,stack.feh,psym=cgsymcat(16),color=fsc_color('indianred'),symsize=2
    device,/close
 
-  psname='ms0451alpha_feh_alpha.eps'
+   psname='ms0451alpha_feh_alpha.eps'
    device, filename = psname,xsize = 15,ysize = 10, $
                 xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
       xrange=[-1.,0.3]
@@ -134,6 +135,26 @@ pro ms0451alphaana
       oplot,stack.feh,stack.alphafe,psym=cgsymcat(16),color=fsc_color('indianred'),symsize=2
    device,/close
 
+   psname = 'ms0451alpha_alpha_mass.eps'
+   ah = sci.alphafe+sci.feh
+   ahupper = ah+sqrt((sci.alphafeupper-sci.alphafe)^2+(sci.fehupper-sci.feh)^2)
+   ahlower = ah-sqrt((sci.alphafe-sci.alphafelower)^2+(sci.feh-sci.fehlower)^2)
+   device,filename = psname,xsize = 15,ysize = 10, $
+                xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
+      xrange=[9.5,12]
+      yrange=[-1.,0.5]
+      plot,sci.logmstar,ah,/nodata,xrange=xrange,xstyle=5,yrange=yrange,ystyle=5
+      axis,xaxis=0,xrange=xrange,xstyle=1,xtitle='Log(M!L*!N/M'+sunsym+')'
+      axis,yaxis=0,yrange=yrange,ystyle=1,ytitle='[Mg/H]'
+      axis,xaxis=1,xrange=xrange,xstyle=1,xtickformat='(A1)'
+      axis,yaxis=1,yrange=yrange,ystyle=1,ytickformat='(A1)'
+      oplot,sci(badfit).logmstar,ah(badfit),psym=cgsymcat(16),color=fsc_Color('cadetblue'),symsize=0.7
+      goodsymsize = 1.5/(max(sci(goodfit).snfit)-min(sci(goodfit).snfit))*sci(goodfit).snfit+0.7
+      for i=0,cgoodfit-1 do begin
+        oplot,[sci(goodfit[i]).logmstar],[ah(goodfit[i])],psym=cgsymcat(46),color=fsc_Color('tomato'),symsize=goodsymsize[i]
+        oplot,[sci(goodfit[i]).logmstar],[ah(goodfit[i])],psym=cgsymcat(45),color=fsc_color('maroon'),symsize=goodsymsize[i]
+      endfor
 
+   device,/close
    stop
 end

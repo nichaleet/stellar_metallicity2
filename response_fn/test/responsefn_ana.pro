@@ -12,29 +12,32 @@ pro responsefn_ana
    zmet = -0.2
    age = 3 ;gyr
    ;add response fn
-   specalpha = add_response(spslambda,spsspec,[zmet,age],['Mg','O','Si','Ca','Ti'],rebin(abund,5))
+;   specalpha = add_response(spslambda,spsspec,[zmet,age],['Mg','O','Si','Ca','Ti'],rebin(abund,5))
    specmg = add_response(spslambda,spsspec,[zmet,age],['Mg'],abund)
    speco = add_response(spslambda,spsspec,[zmet,age],['O'],abund)
    specsi = add_response(spslambda,spsspec,[zmet,age],['Si'],abund)
    specca = add_response(spslambda,spsspec,[zmet,age],['Ca'],abund)
    specTi = add_response(spslambda,spsspec,[zmet,age],['Ti'],abund)
+   specN = add_response(spslambda,spsspec,[zmet,age],['N'],abund)
+   specC = add_response(spslambda,spsspec,[zmet,age],['C'],abund)
+
    set_plot,'ps'
    !p.font=0
    !p.multi = [0,1,1]
    epsname = 'responsefn_compare.eps'
-   device, filename = epsname,xsize = 15,ysize = 12, $
+   device, filename = epsname,xsize = 15,ysize = 10, $
                 xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
-      plot,spslambda,spsspec,xtitle='lambda',ytitle='response fn',$
-           yrange=[0.8,1.1],ystyle=1,xrange=minmax(spslambda),xstyle=1,$
-           title='[Z/H]:'+sigfig(zmet,2)+' Age:'+sigfig(age,2)+' Gyr'
-      oplot,spslambda,specalpha,color=fsc_color('maroon')
+      plot,spslambda,spsspec,xtitle='wavelength (Angstrom)',ytitle='response fn',$
+           yrange=[0.8,1.05],ystyle=1,xrange=minmax(spslambda),xstyle=1;,$
+           ;title='[Z/H]:'+sigfig(zmet,2)+' Age:'+sigfig(age,2)+' Gyr'
       oplot,spslambda,specmg,color=fsc_color('teal')
       oplot,spslambda,speco,color=fsc_color('navy')
       oplot,spslambda,specsi,color=fsc_color('darkorchid')
       oplot,spslambda,specca,color=fsc_color('salmon')
-      oplot,spslambda,specca,color=fsc_color('olivedrab')
-      al_legend,['all','Mg','O','Si','Ca','Ti'],psym=cgsymcat(15),$
-           colors=fsc_color(['maroon','teal','navy','darkorchid','salmon','olivedrab']),/right,/bottom
+      oplot,spslambda,specTi,color=fsc_color('olivedrab')
+      oplot,spslambda,specN,color=fsc_color('maroon')
+      al_legend,['Mg','O','Si','Ca','Ti','N'],psym=cgsymcat(15),$
+           colors=['teal','navy','darkorchid','salmon','olivedrab','maroon'],/right,/bottom
    device,/close
 
    abund = findgen(5)*(0.8-0.)/4.+0.
