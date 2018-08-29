@@ -346,7 +346,7 @@ pro sps_fit::fitomg, science, noredraw=noredraw, nostatusbar=nostatusbar
     pi[1].limits = [min(spsage),(galage(znow,1000)/1.e9)<max(spsage)]
     pi[3].limits = [-0.3,0.3]+znow
     pi[4].limits = [-0.4,0.4]
-    pi[5].limits = [-0.2,0.8]
+    pi[5].limits = [-0.4,0.8]
     pi[2].limits = [0.,600.]
 
    ;;make the initial guesses unfix but within limits except redshift
@@ -354,6 +354,8 @@ pro sps_fit::fitomg, science, noredraw=noredraw, nostatusbar=nostatusbar
     pi[3].value = znow
     firstguess = pi.value
     pi[0].limits = minmax(spsz) ;fix the limit of [Fe/H] back
+   ; pi[0].limits[1]=0.4
+
     pi[1].limits = [min(spsage),(galage(znow,1000)/1.e9)<max(spsage)]
     pi[4].limits =[-0.4,0.8]
     pi.step = double([0.1, 0.5, 25.0,0.002,0.1,0.1])
@@ -505,6 +507,8 @@ pro sps_fit::fitomg, science, noredraw=noredraw, nostatusbar=nostatusbar
     science.vdisperr = perror[2]
     science.alphafe = pi[4].value
     science.alphafeerr = perror[4]
+    science.pfit[0:5] = pi.value
+    science.pfiterr[0:5] = perror
     ;calculate chisq
     if science.feh ne -999 then begin
        science.chisq = total((spsbestfit[won]-science.contdiv[won]/science.spscont[won])^2*science.contdivivar[won]*(science.spscont[won])^2)/float(n_elements(won))
@@ -535,449 +539,10 @@ pro sps_fit::fitomg, science, noredraw=noredraw, nostatusbar=nostatusbar
     endif
 end
 
-
-pro sps_fit::fitalpha, science, noredraw=noredraw, nostatusbar=nostatusbar
-    common sps_spec, sps, spsz, spsage
-    common sps_iterproc, contiter
-    common get_sps, dlam, dataivar, datalam, wonfit, contmask, normalize, rest
-    common toprint, agediff, zdiff
-    common mask_in, mask_in, copynum
-    common response_fn, rsp_str,logzgrid_rsp,agegrid_rsp
-    common get_sps_alpha, element
-
-    if ~keyword_set(nostatusbar) then widget_control, widget_info(self.base, find_by_uname='status'), set_value='Fitting 5 parameters ...'
-    savedata = 0 ;1
-
-    element= ['Mg','O','Si','Ca','Ti']
-    znow = science.zspec
-    if znow le 0. then znow = science.z
-    if znow le 0. then stop
-    reallambda = science.lambda
-    nlambda = n_elements(reallambda)
-
-    ;check if the blue chip was failed
-    neg = where(reallambda lt 0., cneg)
-    if cneg gt 0 then reallambda(neg) = reallambda(neg)+10000.
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-    dlam_all = science.dlam
-    baddlam = where(~finite(dlam_all),cbaddlam,complement=gooddlam)
-    if cbaddlam gt 0 then begin
-       dlam_all(baddlam) = interpol(dlam_all(gooddlam),reallambda(gooddlam),reallambda(baddlam))
-    endif
-
-    pi = replicate({value:0d, fixed:0, limited:[1,1], limits:[0.D,0.D], parname:'', mpprint:0, mpformat:'', step:0d, tied:''}, 5)
-
-    pi[0].limits = [-0.6,0.19] ;this is just for initial parameters
-    pi[1].limits = [min(spsage),(galage(znow,1000)/1.e9)<max(spsage)]
-    pi[3].limits = [-0.3,0.3]+znow
-    pi[4].limits = [-0.4,0.4]
-    ;set the prior to velocity dispersion according to Faber-Jackson relation (Dutton2011)
-;    if science.logmstar gt 5. then begin
-;       logvdisp = 2.23+0.37*(science.logmstar-10.9)-0.19*alog10(0.5+0.5*(10.^science.logmstar/10.^10.9))
-;       pi[2].limits = [10.^(logvdisp-0.4),10.^(logvdisp+0.4)]
-;       print, 'velocity dispersion prior = ',pi[2].limits,' km/s'      
-;    endif else pi[2].limits = [40.,400.]; [30.,200.]
-    pi[2].limits = [0.,600.]
-    if mask_in eq 'stacked' then pi[2].limits = [50.,400.]
-   ;;make the initial guesses unfix but within limits except redshift
-    pi.value = randomu(seed,5)*(pi.limits[1,*]-pi.limits[0,*])+pi.limits[0,*]
-    pi[3].value = znow
-    firstguess = pi.value
-    pi[0].limits = minmax(spsz) ;fix the limit of [Fe/H] back
-    pi[1].limits = [min(spsage),(galage(znow,1000)/1.e9)<max(spsage)]
-    pi.step = double([0.1, 0.5, 25.0,0.002,0.1])
-    pi.parname = ['    Z', '  age', 'vdisp','redshift','alpha']
-    pi.mpformat = ['(D6.3)', '(D5.2)', '(D6.1)','(D6.3)','(D6.3)']
-    print, 'prior range:',pi.limits
-
-    won = where(science.fitmask eq 1 and finite(science.contdiv) and finite(science.contdivivar) and science.contdivivar gt 0 and reallambda/(1.+znow) gt 3500. and reallambda/(1.+znow) lt 7400., con)
-    if con lt 10 then begin
-        pi.value = [-999d, -999d, -999d,-999d,-999d]
-        perror = [-999d, -999d, -999d, -999d,-999d]
-        science.spsspec = -999d
-        goto, done
-    endif
-   xmp = reallambda[won]
-    ymp = science.contdiv[won]
-    dymp = (science.contdivivar[won])^(-0.5)
-    wontofit = won
-    zdiff = 1.0
-    agediff = 1.0
-    vdispdiff = 1.0
-    redshfdiff = 1.0
-    contiter = 0
-    nloop=0
-    widget_control, widget_info(self.base, find_by_uname='maxnloop'), get_value=maxnloop
-    maxnloop = fix(maxnloop[0])
-    if maxnloop eq 0 then maxnloop = 150
-    maxnloop = 150
-    print, '* * * * * * * * * * * * * * * * * * * *'
-    print, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
-    print, '* * * * * * * * * * * * * * * * * * * *'
-    print, '  i Z/Z_sun   age sigma_v  redhift  alpha   chi^2  DOF   ZDIFF  AGEDIFF'
-    print, '--- ------- ----- ------- --------- --------- -------- ---- -----  ------'
-
-    openw,1,'/scr2/nichal/workspace4/sps_fit/logsps/sps_fit_ms0451alpha'+copynum+'.log',/append
-    printf,copynum, '* * * * * * * * * * * * * * * * * * * *'
-    printf,copynum,systime()
-    printf,copynum, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
-    printf,copynum, '* * * * * * * * * * * * * * * * * * * *'
-    printf,copynum, '  i Z/Z_sun   age sigma_v  redhift  alpha   chi^2  DOF   ZDIFF  AGEDIFF'
-    printf,copynum, '--- ------- ----- ------- --------- --------- -------- ---- -----  ------'
-;;things to keep during the while loop
-    bestchisq = 9999.
-    bestvalue = [99.,99.,99.,99.,99.]
-    besterror = [99.,99.,99.,99.,99.]
-    chisqarr = fltarr(maxnloop)
-    valuearr = fltarr(5,maxnloop)
-    errorarr = fltarr(5,maxnloop)
-   ;;while abs(zdiff) gt 0.001 or abs(agediff) gt 0.001 or abs(vdispdiff) gt 0.001 or abs(redshfdiff) gt 0.001 and nloop le maxnloop do begin
-    while nloop lt maxnloop do begin
-        contiter++
-        dlam = dlam_all
-        dataivar = science.contdivivar
-        datalam = science.lambda
-        wonfit = wontofit
-        contmask = science.contmask
-        rest =0
-        if nloop eq 0 then normalize =1 else normalize = 0
-        pars = mpfitfun('get_sps_alpha_obs', xmp, ymp, dymp, parinfo=pi, /nocatch, bestnorm=bestnorm, dof=dof, perror=perror, ftol=1d-10, gtol=1d-10, xtol=1d-10, covar=covar, nprint=500, status=status, yfit=ympfit, iterproc='sps_iterproc_alpha')
-
-        zdiff = (pi[0].value-pars[0])/pi[0].value
-        agediff = (pi[1].value-pars[1])/pi[1].value
-        ;vdispdiff = (pi[2].value-pars[2])/pi[2].value
-        ;redshfdiff = (pi[3].value-pars[3])/pi[2].value
-        ;print,'z,age,vdisp diff:',zdiff,agediff,vdispdiff,nloop
-        pi.value = pars
-        restlambda = reallambda / (1d + pi[3].value)
-
-        ;;get the model
-        rest = 1 ;make the return values an array of model contdiv, full spec, cont
-        spsbestfitarr = get_sps_alpha_obs(reallambda, pars)
-        rest = 0 ;make the return values back to only y values     
-        spsbestfit=spsbestfitarr[*,1] ;not normallized
-
-       ;;save previous continuum before the new iteration. 
-        ;;so the cont is the one that data was fitted 
-        if nloop eq 0 then science.spscont = 1
-        if nloop ge 1 then science.spscont = cont
-        ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-        widget_control, widget_info(self.base, find_by_uname='2d'), get_value=index
-        wset, index
-        spectoplot = science.contdiv/science.spscont
-        !p.multi=[0,1,2]
-        plot,restlambda,spsbestfitarr[*,1],/nodata,yrange=[0.1,max(spsbestfitarr[*,1])*1.2],xrange=[3500,6000]
-        oplot,restlambda,spectoplot
-        oplot,restlambda,spsbestfitarr[*,1],color=fsc_color('red')
-
-        bkpt = slatec_splinefit(restlambda[won], science.contdiv[won]/spsbestfit[won], coeff, invvar=science.contdivivar[won]*(spsbestfit[won])^2, bkspace=150, upper=3, lower=3, /silent)
-        if bkpt[0] eq -1 then begin
-            pi.value = [-999d, -999d, -999d, -999d,-999d]
-            perror = [-999d, -999d, -999d, -999d,-999d]
-            science.spsspec = -999d
-            science.spscont = -999d
-            break
-        endif
-        cont = slatec_bvalu(restlambda, bkpt, coeff)
-        ympold = ymp
-        ymp = science.contdiv[won] / cont[won]
-        dymp = (science.contdivivar[won])^(-0.5) / cont[won]
-
-        plot,xmp/(1.+pi[3].value),ympold
-        oplot,xmp/(1.+pi[3].value),ymp,color=fsc_Color('green')
-        oplot,restlambda[won],spsbestfit[won],color=fsc_color('red')
-        !p.multi=[0,1,1]
-
-        ;if nloop eq maxnloop then print,'WARNING: MAX NLOOP REACHED!'
-        curchisq = bestnorm/dof
-
-        ;;keeping the values
-        if savedata eq 1 and nloop mod 10 eq 0 then begin
-           if nloop eq 0 then $
-              str={won:won,lambda:science.lambda,contdiv:science.contdiv,contdivivar:science.contdivivar,fakecont:science.spscont,spsbestfit:spsbestfitarr[*,0],chisq:curchisq,param:pars,perror:perror,loop:nloop} else $
-              str={won:won,lambda:science.lambda,contdiv:science.contdiv,contdivivar:science.contdivivar,fakecont:science.spscont,spsbestfit:spsbestfit,chisq:curchisq,param:pars,perror:perror,loop:nloop}
-           if nloop eq 0 then loopstr = [str] else loopstr=[loopstr,str]
-           save,loopstr,firstguess,filename=self.directory+'/obj'+strtrim(string(self.i+1, format='(I3)'), 2)+'sps_fit_loopinfo.sav'
-        endif
-        if curchisq lt bestchisq then begin
-           bestchisq = curchisq
-           bestvalue = pars
-           besterror = perror
-           bestspsbestfitarr = spsbestfitarr
-           bestcont = cont
-        endif
-        chisqarr[nloop] = curchisq
-        valuearr[*,nloop] = pars
-        errorarr[*,nloop] = perror
-        nloop +=1
-
-     endwhile
-    close,copynum
-    if savedata eq 1 then begin
-       str = {chisq:chisqarr,param:valuearr,perror:errorarr,paraname:['Z','age','sigmav','redshift'],objname:strtrim(science.objname, 2),dof:dof}
-       save,str,filename=self.directory+'/sps_fit_data_'+strtrim(string(self.i+1, format='(I3)'), 2)+'.sav'
-    endif
-    print,agediff,zdiff,format='("--- ------- ----- ------- ---------  -------- ----",D9.6,2X,D9.6)'     
-    ;;check if the last chisq is the best chisq
-    ;if abs((pi[0].value-bestvalue[0])/bestvalue[0]) gt 0.01 or abs((pi[1].value-bestvalue[1])/bestvalue[1]) gt 0.01 or (curchisq-bestchisq)/bestchisq gt 0.001 then begin
-    ;   print,'THE WHILE LOOP HAS WALKED AWAY FROM THE BEST VALUES. BETTER CHECK YOUR PLOT'
-    ;   print,'The values used are:'
-    ;   print, bestvalue[0], bestvalue[1], bestvalue[2],bestvalue[3],bestchisq,format='(6X,D6.3,1X,D5.2,2X,D6.1,2x,D6.3,1X,D8.3)'
-    ;   science.goodfit = 1.
-    ;   spsbestfitarr = bestspsbestfitarr
-    ;   spsbestfit=spsbestfitarr[*,1]
-    ;   pi.value = bestvalue
-    ;   perror   = besterror
-    ;   science.spscont = bestcont
-    ;endif
-
-    science.nloop = nloop
-    science.spsspec = spsbestfitarr[*,0]
-    science.spsspecfull = spsbestfitarr[*,1]
-    science.spscontfull = spsbestfitarr[*,2]
-    print, ' '
-
-    done:
-    science.feh = pi[0].value
-    science.feherr = perror[0]
-    science.age = pi[1].value
-    science.ageerr = perror[1]
-    science.zfit = pi[3].value
-    science.zspec = pi[3].value
-    science.vdisp = pi[2].value
-    science.vdisperr = perror[2]
-    science.alphafe = pi[4].value
-    science.alphafeerr = perror[4]
-    ;calculate chisq
-    if science.feh ne -999 then begin
-       science.chisq = total((spsbestfit[won]-science.contdiv[won]/science.spscont[won])^2*science.contdivivar[won]*(science.spscont[won])^2)/float(n_elements(won))
-    ;calculate new signal to noise
-       contmask = science.contmask
-       n = n_elements(science.lambda)
-       wcont = where(contmask[3:n-4] eq 1)+3
-       dev = abs((science.contdiv[wcont] - science.spsspec[wcont]) / science.spsspec[wcont])
-       avgdev = mean(dev)
-       w = where(dev lt 3.0*avgdev, c)
-       if c gt 0 then science.sn = 1.0/mean(dev[w])
-
-       contmask = science.fitmask
-       n = n_elements(science.lambda)
-       wcont = where(contmask[3:n-4] eq 1)+3
-       dev = abs((science.contdiv[wcont] - science.spsspec[wcont]) / science.spsspec[wcont])
-       avgdev = mean(dev)
-       w = where(dev lt 3.0*avgdev, c)
-       if c gt 0 then science.snfit = 1.0/mean(dev[w])
-    endif
-    ;;;;;;;;;;;;;;;;;;;
-
-    ;self->statusbox, science=science
-    if ~keyword_set(noredraw) then begin
-        self->redraw
-    endif
-end
-
-
-pro sps_fit::fitz, science, noredraw=noredraw, nostatusbar=nostatusbar
-    common sps_spec, sps, spsz, spsage
-    common sps_iterproc, contiter
-    common get_sps, dlam, dataivar, datalam, wonfit, contmask, normalize, rest
-    common toprint, agediff, zdiff
-
-    if ~keyword_set(nostatusbar) then widget_control, widget_info(self.base, find_by_uname='status'), set_value='Fitting ...'
-
-    znow = science.z
-    reallambda = science.lambda
-    nlambda = n_elements(reallambda)
-    
-
-    if min(science.dlam) gt 0.2 and max(science.dlam) lt 10.0 then begin
-        dlam_all = science.dlam
-    endif else begin
-        specresfile = self.directory+'specres_poly.sav'
-        if file_test(specresfile) then begin
-            restore, specresfile
-            dlam_all = poly(science.lambda/1000 - 7.8, specres_poly) / 2.35
-        endif else dlam_all = replicate(3.9/2.35, nlambda)
-    endelse
-
-    pi = replicate({value:0d, fixed:0, limited:[1,1], limits:[0.D,0.D], parname:'', mpprint:0, mpformat:'', step:0d, tied:''}, 4)
-    ;set the prior to velocity dispersion according to Faber-Jackson relation (Dutton2011)
-;    if science.logmstar gt 5. then begin
-;	logvdisp = 2.23+0.37*(science.logmstar-10.9)-0.19*alog10(0.5+0.5*(10.^science.logmstar/10.^10.9))
-;	pi[2].limits = [10.^(logvdisp-0.4),10.^(logvdisp+0.4)]
-;	print, 'velocity dispersion prior = ',pi[2].limits,' km/s'	
-;    endif else pi[2].limits = [40.,400.]; [30.,200.]
-    pi[0].value = -0.2
-    pi[1].value = 3.
-    pi[2].value = 250. 
-    pi[3].value = znow
-    firstguess = pi.value    
-    pi[3].limits = [0.3,0.7] ;redshift 
-    pi[0].limits = [pi[0].value,pi[0].value]
-    pi[1].limits = [pi[1].value,pi[1].value]
-    pi[2].limits = [pi[2].value,pi[2].value]
-    pi.step = double([0,0,0,0.01])
-    pi.fixed = [1,1,1,0]
-    pi.parname = ['    Z', '  age', 'vdisp','redshift']
-    pi.mpformat = ['(D6.3)', '(D5.2)', '(D6.1)','(D6.3)']
-    print, 'prior range:',pi.limits
-
-    won = where(science.fitmask eq 1 and finite(science.contdiv) and finite(science.contdivivar) and science.contdivivar gt 0 and reallambda/(1.+znow) gt 3500. and reallambda/(1.+znow) lt 7400., con)
-
-    if con lt 10 then begin
-        pi.value = [-999d, -999d, -999d,-999d]
-        perror = [-999d, -999d, -999d, -999d]
-        science.spsspec = -999d
-        goto, done
-    endif
-    
-    xmp = reallambda[won]
-    ymp = science.contdiv[won]
-    dymp = (science.contdivivar[won])^(-0.5)
-    wontofit = won
-    zdiff = 1.0
-    agediff = 1.0
-    vdispdiff = 1.0
-    redshfdiff = 1.0
-    contiter = 0
-    nloop=0
-    maxnloop = 10
-    print, '* * * * * * * * * * * * * * * * * * * *'
-    print, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
-    print, '* * * * * * * * * * * * * * * * * * * *'
-    print, '  i Z/Z_sun   age sigma_v  redhift    chi^2  DOF   ZDIFF  AGEDIFF'
-    print, '--- ------- ----- ------- ---------  -------- ---- -----  ------'
-
-;;things to keep during the while loop
-    bestchisq = 9999.
-    bestvalue = [99.,99.,99.,99.]
-    besterror = [99.,99.,99.,99.]
-    chisqarr = fltarr(maxnloop)
-    valuearr = fltarr(4,maxnloop)
-    errorarr = fltarr(4,maxnloop)
-    
-    ;;while abs(zdiff) gt 0.001 or abs(agediff) gt 0.001 or abs(vdispdiff) gt 0.001 or abs(redshfdiff) gt 0.001 and nloop le maxnloop do begin
-    while nloop lt maxnloop do begin
-        contiter++
-        dlam = dlam_all
-        dataivar = science.contdivivar
-        datalam = science.lambda
-        wonfit = wontofit
-        contmask = science.contmask
-        rest =0
-        if nloop eq 0 then normalize =1 else normalize = 0
-        pars = mpfitfun('get_sps_obs', xmp, ymp, dymp, parinfo=pi, /nocatch, bestnorm=bestnorm, dof=dof, perror=perror, ftol=1d-10, gtol=1d-10, xtol=1d-10, covar=covar, nprint=500, status=status, yfit=ympfit, iterproc='sps_iterproc')
-
-        zdiff = (pi[0].value-pars[0])/pi[0].value
-        agediff = (pi[1].value-pars[1])/pi[1].value
-        vdispdiff = (pi[2].value-pars[2])/pi[2].value
-        redshfdiff = (pi[3].value-pars[3])/pi[2].value
-        ;print,'z,age,vdisp diff:',zdiff,agediff,vdispdiff,nloop
-        pi.value = pars
-        restlambda = reallambda / (1d + pi[3].value)
-
-        ;;get the model
-        rest = 1 ;make the return values an array of model contdiv, full spec, cont
-        spsbestfitarr = get_sps_obs(reallambda, pars)                                
-        rest = 0 ;make the return values back to only y values     
-        spsbestfit=spsbestfitarr[*,1] ;not normallized
-
-       ;;save previous continuum before the new iteration. 
-        ;;so the cont is the one that data was fitted 
-        if nloop eq 0 then science.spscont = 1
-        if nloop ge 1 then science.spscont = cont  
-        ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-        widget_control, widget_info(self.base, find_by_uname='2d'), get_value=index
-        wset, index
-        spectoplot = science.contdiv/science.spscont
-        !p.multi=[0,1,2]
-        plot,restlambda,spsbestfitarr[*,1],/nodata,yrange=[0.1,max(spsbestfitarr[*,1])*1.2],xrange=[3500,6000]
-        oplot,restlambda,spectoplot
-        oplot,restlambda,spsbestfitarr[*,1],color=fsc_color('red')
-       
-        bkpt = slatec_splinefit(restlambda[won], science.contdiv[won]/spsbestfit[won], coeff, invvar=science.contdivivar[won]*(spsbestfit[won])^2, bkspace=150, upper=3, lower=3, /silent)
-        if bkpt[0] eq -1 then begin
-            pi.value = [-999d, -999d, -999d, -999d]
-            perror = [-999d, -999d, -999d, -999d]
-            science.spsspec = -999d
-            science.spscont = -999d 
-            break
-        endif
-        cont = slatec_bvalu(restlambda, bkpt, coeff)
-        ympold = ymp
-        ymp = science.contdiv[won] / cont[won]
-        dymp = (science.contdivivar[won])^(-0.5) / cont[won]
-
-        plot,xmp/(1.+pi[3].value),ympold
-        oplot,xmp/(1.+pi[3].value),ymp,color=fsc_Color('green')
-        oplot,restlambda[won],spsbestfit[won],color=fsc_color('red')
-        !p.multi=[0,1,1]
-
-        ;if nloop eq maxnloop then print,'WARNING: MAX NLOOP REACHED!'
-        curchisq = bestnorm/dof
-
-        if curchisq lt bestchisq then begin
-           bestchisq = curchisq
-           bestvalue = pars
-           besterror = perror
-           bestspsbestfitarr = spsbestfitarr
-           bestcont = cont
-        endif
-        chisqarr[nloop] = curchisq
-        valuearr[*,nloop] = pars
-        errorarr[*,nloop] = perror
-        nloop +=1
-
-     endwhile
-
-    print,agediff,zdiff,format='("--- ------- ----- ------- ---------  -------- ----",D9.6,2X,D9.6)'                            
-
-    science.spsspec = spsbestfitarr[*,0] 
-    science.spsspecfull = spsbestfitarr[*,1]
-    science.spscontfull = spsbestfitarr[*,2]
-    print, ' '
-    
-    done:
-    science.feh = -999
-    science.feherr= -999
-    science.age = -999
-    science.ageerr = -999
-    science.zfit = pi[3].value
-    science.zspec = pi[3].value
-    science.vdisp = -999 
-    science.vdisperr = -999
-    ;calculate chisq
-    science.chisq = total((spsbestfit[won]-science.contdiv[won]/science.spscont[won])^2*science.contdivivar[won]*(science.spscont[won])^2)/float(n_elements(won))
-    ;calculate new signal to noise
-       contmask = science.contmask
-       n = n_elements(science.lambda)
-       wcont = where(contmask[3:n-4] eq 1)+3
-       dev = abs((science.contdiv[wcont] - science.spsspec[wcont]) / science.spsspec[wcont])
-       avgdev = mean(dev)
-       w = where(dev lt 3.0*avgdev, c)
-       if c gt 0 then science.sn = 1.0/mean(dev[w])
-
-       contmask = science.fitmask
-       n = n_elements(science.lambda)
-       wcont = where(contmask[3:n-4] eq 1)+3
-       dev = abs((science.contdiv[wcont] - science.spsspec[wcont]) / science.spsspec[wcont])
-       avgdev = mean(dev)
-       w = where(dev lt 3.0*avgdev, c)
-       if c gt 0 then science.snfit = 1.0/mean(dev[w])
-    ;;;;;;;;;;;;;;;;;;;
-
-    self->statusbox, science=science
-    if ~keyword_set(noredraw) then begin
-        self->redraw
-    endif
-end
-
 pro sps_fit::fit_glorious, science, noredraw=noredraw, nostatusbar=nostatusbar
     common sps_spec, sps, spsz, spsage
     common sps_iterproc, contiter
-    common get_sps, dlam, dataivar, datalam, wonfit, npoly, contmask, normalize,rest
+    common get_sps, dlam, dataivar, datalam, wonfit, contmask, normalize,rest
     common toprint, agediff, zdiff
     common mask_in, mask_in, copynum
     common response_fn, rsp_str,logzgrid_rsp,agegrid_rsp
@@ -1011,8 +576,8 @@ pro sps_fit::fit_glorious, science, noredraw=noredraw, nostatusbar=nostatusbar
    ; pi[1].limits=[2,3.]
     pi[3].limits = [-0.05,0.05]+znow
     if pi[3].limits[0] lt 0. then pi[3].limits[0]=0
-    pi[4].limits =[0,0.4]
-    pi[5].limits = [0,0.8]
+    pi[4].limits =[-0.3,0.5]  ;Mg
+    pi[5].limits = [-0.3,0.8] ;N
     pi[6:12].limits = [-0.3,0.4]
     ;set the prior to velocity dispersion according to Faber-Jackson relation (Dutton2011)
 ;    if science.logmstar gt 5. then begin
@@ -1088,7 +653,7 @@ pro sps_fit::fit_glorious, science, noredraw=noredraw, nostatusbar=nostatusbar
         contmask = science.contmask
         rest =0
         if nloop eq 0 then normalize =1 else normalize = 0
-        pars = mpfitfun('get_sps_choi_alpha_obs', xmp, ymp, dymp, parinfo=pi, /nocatch, bestnorm=bestnorm, dof=dof, perror=perror, ftol=1d-10, gtol=1d-10, xtol=1d-10, covar=covar, nprint=500, status=status, yfit=ympfit, iterproc='sps_iterproc_omg')
+        pars = mpfitfun('get_sps_alpha_obs', xmp, ymp, dymp, parinfo=pi, /nocatch, bestnorm=bestnorm, dof=dof, perror=perror, ftol=1d-10, gtol=1d-10, xtol=1d-10, covar=covar, nprint=500, status=status, yfit=ympfit, iterproc='sps_iterproc_omg')
 
         zdiff = (pi[0].value-pars[0])/pi[0].value
         agediff = (pi[1].value-pars[1])/pi[1].value
@@ -1097,7 +662,7 @@ pro sps_fit::fit_glorious, science, noredraw=noredraw, nostatusbar=nostatusbar
 
         ;;get the model
         rest = 1 ;make the return values an array of model contdiv, full spec, cont
-        spsbestfitarr = get_sps_choi_alpha_obs(reallambda, pars)
+        spsbestfitarr = get_sps_alpha_obs(reallambda, pars)
         rest = 0 ;make the return values back to only y values     
         spsbestfit=spsbestfitarr[*,1] ;not normallized
 
@@ -1417,7 +982,6 @@ pro sps_fit::fit_all,alpha=alpha,omg=omg,glorious=glorious
         endelse
         close,copynum
         self->statusbox
-        self->statusbox
         if i mod 30 eq 0 then begin
             ptr_free, self.science
             self.science = ptr_new(scienceall)
@@ -1592,6 +1156,35 @@ pro sps_fit::handle_button, ev
            self->redraw
            self->statusbox
        end
+       'fitglorious':begin
+           scienceall = *self.science
+           ;for nw=0,5 do begin
+           science = scienceall[self.i]
+           ;self->mask, science ,/includemg
+           self->fit_glorious, science, /noredraw
+           widget_control, widget_info(self.base, find_by_uname='keepoldfit'), $
+               get_value=keepoldfit
+           if (keepoldfit eq 0 and science.chisq lt scienceall[self.i].chisq) or (keepoldfit eq 1) then begin
+               print, scienceall[self.i].feh,scienceall[self.i].age,scienceall[self.i].vdisp,$
+                      scienceall[self.i].zfit,scienceall[self.i].alphafe,scienceall[self.i].chisq,$
+                      format='(5x,D6.3,2x,D6.2,2x,D6.1,2x,D4.2,2x,D6.3,2X,D10.5)'
+               scienceall[self.i] = science
+               if keepoldfit eq 0 then print,'chisq is smaller, replaced fit'
+               if keepoldfit eq 0 then printf,copynum,'chisq is smaller, replaced fit'
+           endif else begin
+               if keepoldfit eq 0 then begin
+               print, 'chisq is larger, use previous fit'
+               printf,copynum,'chisq is larger, use previous fit'
+               print, scienceall[self.i].feh,scienceall[self.i].age,scienceall[self.i].vdisp,scienceall[self.i].zfit,scienceall[self.i].alphafe,scienceall[self.i].chisq,format='(5x,D6.3,2x,D6.2,2x,D6.1,2x,D4.2,2x,D6.3,2X,D10.5)'
+               endif
+           endelse
+           close,copynum
+           ;endfor
+           ptr_free, self.science
+           self.science = ptr_new(scienceall)
+           self->redraw
+           self->statusbox
+       end
 
        'fitz': begin
            scienceall = *self.science
@@ -1626,6 +1219,7 @@ pro sps_fit::handle_button, ev
         'fit_all': self->fit_all
         'fit_alpha_all':self->fit_all,/alpha
         'fit_omg_all':self->fit_all,/omg
+        'fit_glorious_all':self->fit_all,/glorious
         'cal_uncertainties_all':self->cal_uncertainties_all
         'cal_uncertainties_alpha_all':self->cal_uncertainties_all,/alpha
         'default_cont': self->default_cont
@@ -2260,7 +1854,7 @@ end
 pro sps_fit::default_mask
     scienceall = *self.science
     science = scienceall[self.i]
-    self->mask, science, nmc=0
+    self->mask, science, nmc=0,/includemg
     scienceall[self.i] = science
     ptr_free, self.science
     self.science = ptr_new(scienceall)
@@ -2273,7 +1867,7 @@ pro sps_fit::default_maskall
      self.i=i
      scienceall = *self.science
      science = scienceall[self.i]
-     self->mask, science, nmc=0
+     self->mask, science, nmc=0,/includemg
      scienceall[self.i] = science
      ptr_free, self.science
      self.science = ptr_new(scienceall)
@@ -2996,7 +2590,7 @@ pro sps_fit::getscience, files=files
         endfor
 
         self.i = 0
-        wgood = where(wgood eq 1 and sci.oiiew gt -5. and sci.nuv gt 50. , cgood)
+        wgood = where(wgood eq 1 and scienceall.oiiew gt -5. and scienceall.nuv gt 50. , cgood)
         scienceall = scienceall[wgood]
         ptr_free, self.science
         self.science = ptr_new(scienceall)
@@ -3094,8 +2688,9 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     wdefault_maskall = widget_button(tools_menu, value='Default Pixel Mask All', uname='default_maskall', uvalue='default_maskall')
     wdefault_goodspec = widget_button(tools_menu, value='Default Good Spectrum', uname='default_goodspec', uvalue='default_goodspec')
     wfit_all = widget_button(tools_menu, value='Fit All', uname='fit_all', uvalue='fit_all')
-    wfitalpha_all = widget_button(tools_menu, value='Fit Alpha All', uname='fit_alpha_all', uvalue='fit_alpha_all')
+;    wfitalpha_all = widget_button(tools_menu, value='Fit Alpha All', uname='fit_alpha_all', uvalue='fit_alpha_all')
     wfitomg_all = widget_button(tools_menu, value='Fit OMg All', uname='fit_omg_all', uvalue='fit_omg_all')
+    wfitglorious_all = widget_button(tools_menu, value='Fit Glorious All', uname='fit_glorious_all', uvalue='fit_glorious_all')
     wcal_uncertainties_all = widget_button(tools_menu, value='Cal uncertainties All',uname='cal_uncertainties_all',uvalue='cal_uncertainties_all')
     wcal_uncertainties_alpha_all = widget_button(tools_menu, value='Cal uncertainties alpha All',uname='cal_uncertainties_alpha_all',uvalue='cal_uncertainties_alpha_all')
     wleft = widget_base(base, /column, uname='left')

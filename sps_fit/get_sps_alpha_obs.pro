@@ -6,8 +6,17 @@ function get_sps_alpha_obs, xin, a
     age = a[1]
     vdisp = a[2]
     redshift = a[3]
-    alpha = a[4]
     nelements= n_elements(element)
+    if n_Elements(a) ge 5 then begin
+       if n_elements(a) eq 5 then begin
+          alpha = a[4]
+          nelements = n_elements(element)
+          abund = rebin([alpha],nelements)
+       endif else begin
+          abund = a[4:n_elements(a)-1]
+       endelse
+    endif
+
     ;spsspec = dblarr(n_elements(xin)) - 99999.
     ;if z lt min(spsz) or z gt max(spsz) then return, spsspec
     ;if age lt min(spsage) or age gt max(spsage) then return, spsspec
@@ -23,9 +32,9 @@ function get_sps_alpha_obs, xin, a
     clight = 299792.458
 
     spsspec = spsspec*clight/lambda^2    ;change fnu(Lsun/Hz) to flambda
-    ;add response function
-    spsspec = add_response(lambda,spsspec,[z,age],element,rebin([alpha],nelements),/silent)
     spsspec = spsspec/median(spsspec)    ;normalize to around 1
+    ;add response function
+    spsspec = add_response(lambda,spsspec,[z,age],element,abund,/silent)
    ;smooth to data wavelengths
 ;    spsspec = smooth_gauss_wrapper(lambda, spsspec, lambda, vdisp/clight*lambda)
 ;    spsspec = smooth_gauss_wrapper(lambda*(1.+redshift), spsspec, datalam, dlam)

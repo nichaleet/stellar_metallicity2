@@ -670,7 +670,7 @@ pro sps_fit::fitomg, science, noredraw=noredraw, nostatusbar=nostatusbar
     print, '* * * * * * * * * * * * * * * * * * * *'
     print, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
     print, '* * * * * * * * * * * * * * * * * * * *'
-    print, '  i Z/Z_sun   age sigma_v  redhift  Mg  O  chi^2  DOF'
+    print, '  i Z/Z_sun   age sigma_v  redhift  Mg  N  chi^2  DOF'
     print, '--- ------- ----- ------- --------- --------- -------- ---- -----  ------'
 
     openw,long(copynum),'/scr2/nichal/workspace4/sps_fit/logsps/sps_fit_choiomg'+copynum+'.log',/append
