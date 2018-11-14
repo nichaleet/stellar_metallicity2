@@ -1,8 +1,8 @@
 pro cl0024alphaana
    ;GETTING SCI DATA
-   sci = mrdfits('/scr2/nichal/workspace4/sps_fit/data/cl0024/sps_fit01.fits.gz',1)
+   sci = mrdfits('/scr2/nichal/workspace4/sps_fit/data/cl0024/sps_fit03.fits.gz',1)
    ;sample selection
-   good = where(sci.oiiew gt -5.,cgood)
+   good = where(sci.good eq 1 and sci.oiiew gt -5 and sci.snfit gt 2. and sci.logmstar gt 6.,cgood)
    sci = sci(good)
    ageform = (galage(sci.zfit,1000.)/1.e9-sci.age)>0. ;age of universe when it was formed
 
@@ -56,15 +56,24 @@ pro cl0024alphaana
    Lu_lu_z0 = {mass:[8.73,8.95,9.18,9.47,9.76,10.09,10.46,10.88],feh:[-.99,-0.84,-0.70,-0.52,-0.31,-0.06,0.18],$
               feherr:[0.1,0.1,0.1,0.1,0.1,0.1,0.10,0.095]}
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-  
+   ;MILES Library abundance (from Conroy17)
+  miles = {feh:[-1.6,-1.4,-1.2,-1.0,-0.8,-0.6,-0.4,-0.2,0.0,0.2],$
+           ofe:[0.6,0.5,0.5,0.4,0.3,0.2,0.2,0.1,0.0,0.0],$
+           mgfe:[0.4,0.4,0.4,0.4,0.34,0.22,0.14,0.11,0.05,0.04],$
+           cafe:[0.32,0.30,0.28,0.26,0.26,0.17,0.12,0.06,0.00,0.00]}
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
+  ;fix the library abundance
+  sci.alphafe = sci.alphafe+interpol(miles.mgfe,miles.feh,sci.feh)
+ 
    set_plot,'ps'
    !p.multi = [0,1,1]
    !p.font = 0
+   !p.charsize = 1.5
    sunsym = sunsymbol()
    Delta = '!9'+string("104B)+'!x'
    alpha = '!9'+string("141B)+'!x'
 
-   goodfit = where(sci.goodfit eq 1 and sci.snfit gt 8., cgoodfit, complement=badfit,ncomplement=cbadfit)
+   goodfit = where(sci.snfit gt 6.83, cgoodfit, complement=badfit,ncomplement=cbadfit)
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
    psname='cl0024alpha_feh_mass.eps'
@@ -93,12 +102,12 @@ pro cl0024alphaana
 
       ;draw axis
       axis,xaxis=0,xrange=xrange,xstyle=1,xtitle='Log(M/M'+sunsym+')'
-      axis,yaxis=0,yrange=yrange,ystyle=1,ytitle='[Zmet/H]'
+      axis,yaxis=0,yrange=yrange,ystyle=1,ytitle='[Fe/H]'
       axis,xaxis=1,xrange=xrange,xstyle=1,xtickformat='(A1)'
       axis,yaxis=1,yrange=yrange,ystyle=1,ytickformat='(A1)'
 
       cgerrplot,sci(goodfit).logmstar,sci(goodfit).fehlower,sci(goodfit).fehupper,color='darkgreen',thick=0.5
-      oplot,sci(badfit).logmstar,sci(badfit).feh,psym=cgsymcat(16),color=fsc_Color('gray'),symsize=0.7
+      oplot,sci(badfit).logmstar,sci(badfit).feh,psym=cgsymcat(16),color=fsc_Color('green'),symsize=0.7
       goodsymsize = 1.5/(max(sci(goodfit).snfit)-min(sci(goodfit).snfit))*sci(goodfit).snfit+0.7
       for i=0,cgoodfit-1 do begin
         oplot,[sci(goodfit[i]).logmstar],[sci(goodfit[i]).feh],psym=cgsymcat(46),color=fsc_Color('darkgreen'),symsize=goodsymsize[i]
@@ -112,11 +121,11 @@ pro cl0024alphaana
    device, filename = psname,xsize = 15,ysize = 10, $
                 xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
       xrange=[-1.,0.3]
-      yrange=[-0.5,0.5]
+      yrange=[-0.5,0.9]
       plot,sci.feh,sci.alphafe,/nodata,xrange=xrange,xstyle=5,yrange=yrange,ystyle=5
       ;draw axis
-      axis,xaxis=0,xrange=xrange,xstyle=1,xtitle='[Zmet/H]'
-      axis,yaxis=0,yrange=yrange,ystyle=1,ytitle='['+alpha+'/Zmet]'
+      axis,xaxis=0,xrange=xrange,xstyle=1,xtitle='[Fe/H]'
+      axis,yaxis=0,yrange=yrange,ystyle=1,ytitle='[Mg/Fe]'
       axis,xaxis=1,xrange=xrange,xstyle=1,xtickformat='(A1)'
       axis,yaxis=1,yrange=yrange,ystyle=1,ytickformat='(A1)'
 
@@ -124,13 +133,39 @@ pro cl0024alphaana
 ;                color='tomato',thick=0.5
 ;      cgerrplot,sci(goodfit).feh,sci(goodfit).fehlower,sci(goodfit).fehupper,$
 ;                color='tomato',thick=0.5,/horizontal
-      oplot,sci(badfit).feh,sci(badfit).alphafe,psym=cgsymcat(16),color=fsc_Color('darkgray'),symsize=0.7
+      oplot,sci(badfit).feh,sci(badfit).alphafe,psym=cgsymcat(16),color=fsc_Color('green'),symsize=0.7
       goodsymsize = 1.5/(max(sci(goodfit).snfit)-min(sci(goodfit).snfit))*sci(goodfit).snfit+0.7
       for i=0,cgoodfit-1 do begin
         oplot,[sci(goodfit[i]).feh],[sci(goodfit[i]).alphafe],psym=cgsymcat(46),color=fsc_Color('darkgreen'),symsize=goodsymsize[i]
         oplot,[sci(goodfit[i]).feh],[sci(goodfit[i]).alphafe],psym=cgsymcat(45),color=fsc_color('darkgreen'),symsize=goodsymsize[i]
       endfor
 ;      oplot,stack.feh,stack.alphafe,psym=cgsymcat(16),color=fsc_color('indianred'),symsize=2
+   device,/close
+
+   psname = 'cl0024alpha_alpha_mass.eps'
+   ah = sci.alphafe+sci.feh
+   ahupper = ah+sqrt((sci.alphafeupper-sci.alphafe)^2+(sci.fehupper-sci.feh)^2)
+   ahlower = ah-sqrt((sci.alphafe-sci.alphafelower)^2+(sci.feh-sci.fehlower)^2)
+   device,filename = psname,xsize = 15,ysize = 10, $
+                xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
+      xrange=[9.5,12]
+      yrange=[-1.,0.9]
+      plot,sci.logmstar,ah,/nodata,xrange=xrange,xstyle=5,yrange=yrange,ystyle=5
+      axis,xaxis=0,xrange=xrange,xstyle=1,xtitle='Log(M!L*!N/M'+sunsym+')'
+      axis,yaxis=0,yrange=yrange,ystyle=1,ytitle='[Mg/H]'
+      axis,xaxis=1,xrange=xrange,xstyle=1,xtickformat='(A1)'
+      axis,yaxis=1,yrange=yrange,ystyle=1,ytickformat='(A1)'
+      goodsymsize = 1.5/(max(sci(goodfit).snfit)-min(sci(goodfit).snfit))*sci(goodfit).snfit+0.7
+      for i=0,cgoodfit-1 do begin
+        oplot,[sci(goodfit[i]).logmstar],[sci(goodfit[i]).feh],psym=cgsymcat(46),color=fsc_Color('lightgray'),symsize=goodsymsize[i]
+      endfor
+
+      oplot,sci(badfit).logmstar,ah(badfit),psym=cgsymcat(16),color=fsc_Color('green'),symsize=0.7
+      for i=0,cgoodfit-1 do begin
+        oplot,[sci(goodfit[i]).logmstar],[ah(goodfit[i])],psym=cgsymcat(46),color=fsc_Color('darkgreen'),symsize=goodsymsize[i]
+        oplot,[sci(goodfit[i]).logmstar],[ah(goodfit[i])],psym=cgsymcat(45),color=fsc_color('darkgreen'),symsize=goodsymsize[i]
+      endfor
+      ;oplot,stack.logmstar,stack.feh+stack.alphafe,psym=cgsymcat(16),color=fsc_color('indianred'),symsize=2
    device,/close
 
 

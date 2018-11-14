@@ -1,5 +1,5 @@
 pro demo_ms0451
-   sci = mrdfits('/scr2/nichal/workspace4/sps_fit/data/spline_ms0451/sps_fit03.fits.gz',1)
+   sci = mrdfits('/scr2/nichal/workspace4/sps_fit/data/spline_ms0451/arxiv/sps_fit03.fits.gz',1)
    sci.oiiew = sci.oiiew*(-1.)
    whiem = where(sci.oiiew gt 22.5)
    sci(whiem).oiiew = 23.

@@ -1,9 +1,9 @@
 pro ms0451alphaana
    ;GETTING SCI DATA
    sci = mrdfits('/scr2/nichal/workspace4/sps_fit/data/spline_ms0451/sps_fit03.fits.gz',1)
-   stack = mrdfits('/scr2/nichal/workspace4/sps_fit/data/stacked_ms0451/sps_fit01.fits.gz',1)
+   stack = mrdfits('/scr2/nichal/workspace4/sps_fit/data/stacked_ms0451/sps_fit03.fits.gz',1)
    ;sample selection
-   good = where(sci.oiiew gt -5. and sci.nuv gt 50. and sci.snfit gt 5. and sci.logmstar gt 6.,cgood)
+   good = where(sci.snfit gt 2 and sci.logmstar gt 6. and sci.oiiew gt -5.,cgood)
    sci = sci(good)
    ageform = (galage(sci.zfit,1000.)/1.e9-sci.age)>0. ;age of universe when it was formed
 
@@ -57,16 +57,24 @@ pro ms0451alphaana
    Lu_lu_z0 = {mass:[8.73,8.95,9.18,9.47,9.76,10.09,10.46,10.88],feh:[-.99,-0.84,-0.70,-0.52,-0.31,-0.06,0.18],$
               feherr:[0.1,0.1,0.1,0.1,0.1,0.1,0.10,0.095]}
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-  
+  ;MILES Library abundance (from Conroy17)
+  miles = {feh:[-1.6,-1.4,-1.2,-1.0,-0.8,-0.6,-0.4,-0.2,0.0,0.2],$
+           ofe:[0.6,0.5,0.5,0.4,0.3,0.2,0.2,0.1,0.0,0.0],$
+           mgfe:[0.4,0.4,0.4,0.4,0.34,0.22,0.14,0.11,0.05,0.04],$
+           cafe:[0.32,0.30,0.28,0.26,0.26,0.17,0.12,0.06,0.00,0.00]}
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
+  ;fix the library abundance
+  sci.alphafe = sci.alphafe+interpol(miles.mgfe,miles.feh,sci.feh)
+  stack.alphafe = stack.alphafe+interpol(miles.mgfe,miles.feh,stack.feh) 
    set_plot,'ps'
    !p.multi = [0,1,1]
    !p.font = 0
+   !p.charsize = 1.5
    sunsym = sunsymbol()
    Delta = '!9'+string("104B)+'!x'
    alpha = '!9'+string("141B)+'!x'
 
-;   goodfit = where(sci.goodfit eq 1 and sci.snfit gt 10., cgoodfit, complement=badfit,ncomplement=cbadfit)
-   goodfit = where(sci.oiiew gt -5. and sci.nuv gt 50. and sci.snfit gt 10. and sci.logmstar gt 6.,cgoodfit,complement=badfit,ncomplement=cbadfit)
+   goodfit = where(sci.snfit gt 6.5 and sci.logmstar gt 6.,cgoodfit,complement=badfit,ncomplement=cbadfit)
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
    psname='ms0451alpha_feh_mass.eps'
@@ -95,7 +103,7 @@ pro ms0451alphaana
 
       ;draw axis
       axis,xaxis=0,xrange=xrange,xstyle=1,xtitle='Log(M/M'+sunsym+')'
-      axis,yaxis=0,yrange=yrange,ystyle=1,ytitle='[Zmet/H]'
+      axis,yaxis=0,yrange=yrange,ystyle=1,ytitle='[Fe/H]'
       axis,xaxis=1,xrange=xrange,xstyle=1,xtickformat='(A1)'
       axis,yaxis=1,yrange=yrange,ystyle=1,ytickformat='(A1)'
 
@@ -114,11 +122,11 @@ pro ms0451alphaana
    device, filename = psname,xsize = 15,ysize = 10, $
                 xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
       xrange=[-1.,0.3]
-      yrange=[-0.5,0.5]
+      yrange=[-0.5,0.9]
       plot,sci.feh,sci.alphafe,/nodata,xrange=xrange,xstyle=5,yrange=yrange,ystyle=5
       ;draw axis
-      axis,xaxis=0,xrange=xrange,xstyle=1,xtitle='[Zmet/H]'
-      axis,yaxis=0,yrange=yrange,ystyle=1,ytitle='['+alpha+'/Zmet]'
+      axis,xaxis=0,xrange=xrange,xstyle=1,xtitle='[Fe/H]'
+      axis,yaxis=0,yrange=yrange,ystyle=1,ytitle='[Mg/Fe]'
       axis,xaxis=1,xrange=xrange,xstyle=1,xtickformat='(A1)'
       axis,yaxis=1,yrange=yrange,ystyle=1,ytickformat='(A1)'
 
@@ -142,19 +150,34 @@ pro ms0451alphaana
    device,filename = psname,xsize = 15,ysize = 10, $
                 xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
       xrange=[9.5,12]
-      yrange=[-1.,0.5]
+      yrange=[-1.,0.9]
       plot,sci.logmstar,ah,/nodata,xrange=xrange,xstyle=5,yrange=yrange,ystyle=5
       axis,xaxis=0,xrange=xrange,xstyle=1,xtitle='Log(M!L*!N/M'+sunsym+')'
       axis,yaxis=0,yrange=yrange,ystyle=1,ytitle='[Mg/H]'
       axis,xaxis=1,xrange=xrange,xstyle=1,xtickformat='(A1)'
       axis,yaxis=1,yrange=yrange,ystyle=1,ytickformat='(A1)'
-      oplot,sci(badfit).logmstar,ah(badfit),psym=cgsymcat(16),color=fsc_Color('cadetblue'),symsize=0.7
       goodsymsize = 1.5/(max(sci(goodfit).snfit)-min(sci(goodfit).snfit))*sci(goodfit).snfit+0.7
+      for i=0,cgoodfit-1 do begin
+        oplot,[sci(goodfit[i]).logmstar],[sci(goodfit[i]).feh],psym=cgsymcat(46),color=fsc_Color('lightgray'),symsize=goodsymsize[i]
+      endfor
+
+      oplot,sci(badfit).logmstar,ah(badfit),psym=cgsymcat(16),color=fsc_Color('cadetblue'),symsize=0.7
       for i=0,cgoodfit-1 do begin
         oplot,[sci(goodfit[i]).logmstar],[ah(goodfit[i])],psym=cgsymcat(46),color=fsc_Color('tomato'),symsize=goodsymsize[i]
         oplot,[sci(goodfit[i]).logmstar],[ah(goodfit[i])],psym=cgsymcat(45),color=fsc_color('maroon'),symsize=goodsymsize[i]
       endfor
-
+      oplot,stack.logmstar,stack.feh+stack.alphafe,psym=cgsymcat(16),color=fsc_color('indianred'),symsize=2
    device,/close
+
+   ;below is to print out RA and DECs of the high Fe/H vs lower Fe/H of the galaxies with M gt 11 Msun
+   hifegroup = where(sci.logmstar gt 11. and sci.feh gt 0.)
+   lofegroup = where(sci.logmstar gt 11. and sci.feh gt -0.4 and sci.feh lt 0.)
+   write_ds9_regionfile, sci(hifegroup).ra, sci(hifegroup).dec, filename='ms0451_high_fe_group.reg',color='red'
+   write_ds9_regionfile, sci(lofegroup).ra, sci(lofegroup).dec, filename='ms0451_low_fe_group.reg',color='green'
+
+   himggroup = where(sci.logmstar gt 9.5 and ah gt sci.logmstar*1.4/2.5-5.82)
+   lomggroup = where(sci.logmstar gt 9.5 and ah lt sci.logmstar*1.4/2.5-5.82)
+   write_ds9_regionfile, sci(himggroup).ra, sci(himggroup).dec, filename='ms0451_high_mg_group.reg',color='red',symbol='diamond'
+   write_ds9_regionfile, sci(lomggroup).ra, sci(lomggroup).dec, filename='ms0451_low_mg_group.reg',color='green',symbol='diamond'
    stop
 end
