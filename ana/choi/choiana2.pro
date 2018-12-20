@@ -73,14 +73,28 @@ pro choiana2
     logagejc_lower = alog10(sci1.agechoi-sci1.agechoierr)+9.
     logagejc_upper = alog10(sci1.agechoi+sci1.agechoierr)+9.
   
-    plot,logagejc,sci1.age,psym=1,xtitle='log(Age!DChoi14!N)',ytitle='log(Age!Dthis work!N)',$
-       xrange=[9.3,9.8],yrange=[9.4,9.8],/nodata
-    ;cgerrplot,logagejc,logagenl_lower,logagenl_upper
-    cgerrplot,sci1.age,logagejc_lower,logagejc_upper,/horizontal,color='firebrick'
-    cgerrplot,sci3.age,logagejc_lower,logagejc_upper,/horizontal,color='chocolate'
-    cgerrplot,sci9.age,logagejc_lower,logagejc_upper,/horizontal,color='blu5'
-    cgerrplot,sci10.age,logagejc_lower,logagejc_upper,/horizontal,color='lightseagreen'
-    cgerrplot,sci11.age,logagejc_lower,logagejc_upper,/horizontal,color='darkorchid'
+    xrange = [9.3,9.8]
+    yrange = [9.4,9.8]
+    plot,logagejc,sci1.age,psym=1,xrange=xrange,yrange=yrange,/nodata,xstyle=5,ystyle=5
+
+     polyfill,[9.3,9.7,9.8,9.8,9.5],[9.4,9.8,9.8,9.7,9.4],color=fsc_color('lightgray')
+     axis,xaxis=0,xrange=xrange,xstyle=1,xtitle='log(Age!DChoi14!N)'
+     axis,yaxis=0,yrange=yrange,ystyle=1,ytitle='log(Age!Dthis work!N)'
+     axis,xaxis=1,xrange=xrange,xstyle=1,xtickformat='(A1)'
+     axis,yaxis=1,yrange=yrange,ystyle=1,ytickformat='(A1)'
+
+;    cgerrplot,logagejc,sci1.agelower,sci1.ageupper,color='firebrick'
+;    cgerrplot,logagejc,sci3.agelower,sci3.ageupper,color='chocolate'
+;    cgerrplot,logagejc,sci9.agelower,sci9.ageupper,color='blu5'
+;    cgerrplot,logagejc,sci10.agelower,sci10.ageupper,color='lightseagreen'
+;    cgerrplot,logagejc,sci11.agelower,sci11.ageupper,color='darkorchid'
+    
+
+;    cgerrplot,sci1.age,logagejc_lower,logagejc_upper,/horizontal,color='firebrick'
+;    cgerrplot,sci3.age,logagejc_lower,logagejc_upper,/horizontal,color='chocolate'
+;    cgerrplot,sci9.age,logagejc_lower,logagejc_upper,/horizontal,color='blu5'
+;    cgerrplot,sci10.age,logagejc_lower,logagejc_upper,/horizontal,color='lightseagreen'
+;    cgerrplot,sci11.age,logagejc_lower,logagejc_upper,/horizontal,color='darkorchid'
 
     cgplot,logagejc,sci1.age,/overplot,psym=18,color=fsc_color('firebrick')
     cgplot,logagejc,sci3.age,/overplot,psym=15,color=fsc_color('chocolate')
@@ -95,8 +109,16 @@ pro choiana2
   device,filename=psname,xsize=12,ysize=10,$
          xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
   
-    plot,choi.feh,sci1.feh,psym=1,xtitle='log([Fe/H]!DChoi14!N)',ytitle='log([Fe/H]!Dthis work!N)',$
-       xrange=[-0.2,0.1],yrange=[-0.2,0.2],/nodata
+    xrange=[-0.2,0.1]
+    yrange=[-0.2,0.2]
+    plot,choi.feh,sci1.feh,psym=1,xrange=xrange,yrange=yrange,xstyle=5,ystyle=5,/nodata
+
+     polyfill,[-0.2,-0.2,0.1,0.1,-0.1],[-0.2,-0.1,0.2,0.,-0.2],color=fsc_color('lightgray')
+     axis,xaxis=0,xrange=xrange,xstyle=1,xtitle='log([Fe/H]!DChoi14!N)'
+     axis,yaxis=0,yrange=yrange,ystyle=1,ytitle='log([Fe/H]!Dthis work!N)'
+     axis,xaxis=1,xrange=xrange,xstyle=1,xtickformat='(A1)'
+     axis,yaxis=1,yrange=yrange,ystyle=1,ytickformat='(A1)'
+
     cgplot,choi.feh,sci1.feh,/overplot,psym=18,color=fsc_color('firebrick')
     cgplot,choi.feh,sci3.feh,/overplot,psym=15,color=fsc_color('chocolate')
     cgplot,choi.feh,sci9.feh,/overplot,psym=16,color=fsc_color('blu5')
@@ -110,8 +132,14 @@ pro choiana2
   device,filename=psname,xsize=12,ysize=10,$
          xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
 
-    plot,choi.mgfe,sci1.alphafe,psym=1,xtitle='log([Mg/Fe]!DChoi14!N)',ytitle='log([Mg/Fe]!Dthis work!N)',$
-       xrange=[0.0,0.4],yrange=[0.0,0.4],/nodata
+    plot,choi.mgfe,sci1.alphafe,psym=1,xrange=[0.0,0.4],yrange=[0.0,0.4],/nodata,xstyle=5,ystyle=5
+
+     polyfill,[0.,0.,0.3,0.4,0.4,0.1],[0,0.1,0.4,0.4,0.3,0.],color=fsc_color('lightgray')
+     axis,xaxis=0,xrange=xrange,xstyle=1,xtitle='log([Mg/Fe]!DChoi14!N)'
+     axis,yaxis=0,yrange=yrange,ystyle=1,ytitle='log([Mg/Fe]!Dthis work!N)'
+     axis,xaxis=1,xrange=xrange,xstyle=1,xtickformat='(A1)'
+     axis,yaxis=1,yrange=yrange,ystyle=1,ytickformat='(A1)'
+
     cgplot,choi.mgfe,sci1.alphafe,/overplot,psym=18,color=fsc_color('firebrick')
     cgplot,choi.mgfe,sci3.alphafe,/overplot,psym=15,color=fsc_color('chocolate')
     cgplot,choi.mgfe,sci9.alphafe,/overplot,psym=16,color=fsc_color('blu5')

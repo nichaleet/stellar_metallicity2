@@ -1,12 +1,14 @@
 pro demo_cl0024
    sciold = mrdfits('/scr2/nichal/workspace2/sps_fit/data/all_cl0024/sps_fit.fits.gz',1)
-   sci = mrdfits('/scr2/nichal/workspace4/sps_fit/data/cl0024/sps_fit02.fits.gz',1)
+   sci = mrdfits('/scr2/nichal/workspace4/sps_fit/data/cl0024/sps_fit02.fits.gz',1);300 rows
    sci.oiiew = sci.oiiew*(-1.)
    wHiEm = where(sci.oiiew gt 22.5)
    sci(whiem).oiiew = 23.
 
    quiescent = where(sci.oiiew lt 5. and (sci.fuv_v_rest gt 3. or sci.nuv_mag eq -99.) and sci.logmstar gt 6.,cquiescent)
-   good = where(sci.oiiew lt 5. and (sci.fuv_v_rest gt 3. or sci.nuv_mag eq -99.) and sciold.snfit gt 6.83 and sci.logmstar gt 6.,cgood) ;equivalent to sn=10 per ang in rest frame
+;   good = where(sci.oiiew lt 5. and (sci.fuv_v_rest gt 3. or sci.nuv_mag eq -99.) and sciold.snfit gt 6.83 and sci.logmstar gt 6.,cgood) ;equivalent to sn=10 per ang in rest frame
+
+   good = where(sci.oiiew lt 5. and (sci.fuv_v_rest gt 3. or sci.nuv_mag eq -99.) and sciold.snfit gt 6 and sci.logmstar gt 6.,cgood) ;equivalent to sn=8 per ang in rest frame
    set_plot,'ps'
    !p.multi = [0,2,1]
    !p.font = 0

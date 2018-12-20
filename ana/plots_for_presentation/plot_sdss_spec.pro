@@ -26,8 +26,8 @@ pro plot_sdss_spec
         ytitle='f!D!9'+String("154B)+'!X!N (10!U-17!N erg/s/cm!U2!N/Ang)',$
         xtitle = 'wavelength(Ang)'
       aa = string("154B)  
-      oplot, passive.field1/(1.+zpassive),passive.field3,color=fsc_color('red')
-      oplot,sf.field1/(1.+zsf),sf.field3,color=fsc_Color('blue')
+;      oplot, passive.field1/(1.+zpassive),passive.field3,color=fsc_color('red')
+      oplot,sf.field1/(1.+zsf),sf.field3,color=fsc_Color('blue'),thick=1.5
 
       n = n_elements(linewaves)
       for j=0,n-1 do begin
@@ -36,4 +36,22 @@ pro plot_sdss_spec
       xyouts, (linewaves)[j]+0.002*(!X.CRANGE[1]-!X.CRANGE[0]), 0.07*!Y.CRANGE[0]+0.93*!Y.CRANGE[1], (linenames)[j], orientation=90, alignment=1, color=fsc_color((linecolors)[j]),charsize=0.8
    endfor
    device,/close
+   psname = 'sfgalspec.eps'
+   device, filename = psname,xsize = 25,ysize = 10,decomposed=1,color=1, $
+              xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated;
+
+      plot,sf.field1/(1.+zsf),sf.field3,xrange=[3700,5000],/nodata,xstyle=1,$
+        ytitle='f!D!9'+String("154B)+'!X!N (10!U-17!N erg/s/cm!U2!N/Ang)',$
+        xtitle = 'wavelength(Ang)',yrange=[5,20]
+      aa = string("154B)
+      oplot,sf.field1/(1.+zsf),sf.field3,color=fsc_Color('blue'),thick=1.5
+
+      n = n_elements(linewaves)
+      for j=0,n-1 do begin
+      if (linewaves)[j] le !X.CRANGE[0] or (linewaves)[j] ge !X.CRANGE[1] then continue
+      oplot, [(linewaves)[j], (linewaves)[j]], [0.06*!Y.CRANGE[0]+0.94*!Y.CRANGE[1], 0.02*!Y.CRANGE[0]+0.98*!Y.CRANGE[1]], color=fsc_color((linecolors)[j])
+      xyouts, (linewaves)[j]+0.002*(!X.CRANGE[1]-!X.CRANGE[0]), 0.07*!Y.CRANGE[0]+0.93*!Y.CRANGE[1], (linenames)[j], orientation=90, alignment=1, color=fsc_color((linecolors)[j]),charsize=0.8
+   endfor
+   device,/close
+
 end
