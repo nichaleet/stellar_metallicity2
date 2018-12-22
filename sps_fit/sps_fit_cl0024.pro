@@ -83,6 +83,7 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
 
     ;fix the prior range back to normal    
     pi[0].limits = minmax(spsz)
+   ; pi[0].limits = [-0.2,0.12]
     pi[1].limits = [min(spsage),(galage(znow,1000)/1.e9)<max(spsage)]
     pi.step = double([0.1, 0.5, 25.0,0.0002])
     pi.parname = ['    Z', '  age', 'vdisp','redshift']
@@ -111,7 +112,7 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
     widget_control, widget_info(self.base, find_by_uname='maxnloop'), get_value=maxnloop
     maxnloop = fix(maxnloop[0])
     if maxnloop eq 0 then maxnloop = 150
-    maxnloop = 150
+    maxnloop = 100
     print, '* * * * * * * * * * * * * * * * * * * *'
     print, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
     print, '* * * * * * * * * * * * * * * * * * * *'
@@ -207,18 +208,18 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
      endwhile
     close, copynum
     print,agediff,zdiff,format='("--- ------- ----- ------- ---------  -------- ----",D9.6,2X,D9.6)'
-   ;;check if the last chisq is the best chisq
-    ;if abs((pi[0].value-bestvalue[0])/bestvalue[0]) gt 0.01 or abs((pi[1].value-bestvalue[1])/bestvalue[1]) gt 0.01 or (curchisq-bestchisq)/bestchisq gt 0.001 then begin
-    ;   print,'THE WHILE LOOP HAS WALKED AWAY FROM THE BEST VALUES. BETTER CHECK YOUR PLOT'
-    ;   print,'The values used are:'
-    ;   print, bestvalue[0], bestvalue[1], bestvalue[2],bestvalue[3],bestchisq,format='(6X,D6.3,1X,D5.2,2X,D6.1,2x,D6.3,1X,D8.3)'
-    ;   science.goodfit = 1.
-    ;   spsbestfitarr = bestspsbestfitarr
-    ;   spsbestfit=spsbestfitarr[*,1] ;not normallized
-    ;   pi.value = bestvalue
-    ;   perror   = besterror
-    ;   science.spscont = bestcont
-    ;endif
+   ;check if the last chisq is the best chisq
+    if abs((pi[0].value-bestvalue[0])/bestvalue[0]) gt 0.01 or abs((pi[1].value-bestvalue[1])/bestvalue[1]) gt 0.01 or (curchisq-bestchisq)/bestchisq gt 0.001 then begin
+       print,'THE WHILE LOOP HAS WALKED AWAY FROM THE BEST VALUES. BETTER CHECK YOUR PLOT'
+       print,'The values used are:'
+       print, bestvalue[0], bestvalue[1], bestvalue[2],bestvalue[3],bestchisq,format='(6X,D6.3,1X,D5.2,2X,D6.1,2x,D6.3,1X,D8.3)'
+       science.goodfit = 1.
+       spsbestfitarr = bestspsbestfitarr
+       spsbestfit=spsbestfitarr[*,1] ;not normallized
+       pi.value = bestvalue
+       perror   = besterror
+       science.spscont = bestcont
+    endif
 
     science.nloop = nloop
     science.spsspec = spsbestfitarr[*,0]
@@ -235,7 +236,8 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
     science.zfit = pi[3].value
     science.vdisp = pi[2].value
     science.vdisperr = perror[2]
-
+    science.alphafe = 0.
+    science.alphafeerr = 0.
     ;calculate chisq
     if science.feh ne -999 then begin
        science.chisq = total((spsbestfit[won]-science.contdiv[won]/science.spscont[won])^2*science.contdivivar[won]*(science.spscont[won])^2)/float(n_elements(won))
@@ -277,7 +279,7 @@ pro sps_fit::fitomg, science, noredraw=noredraw, nostatusbar=nostatusbar
     if ~keyword_set(nostatusbar) then widget_control, widget_info(self.base, find_by_uname='status'), set_value='Fitting 5 parameters ...'
     widget_control, widget_info(self.base, find_by_uname='keepoldfit'), get_value=keepoldfit
     oldchisq = science.chisq
-    element= ['Mg','N']
+    element= ['Mg','O']
     znow = science.zspec
     if znow le 0. then znow = science.z
     if znow le 0. then stop
@@ -304,8 +306,15 @@ pro sps_fit::fitomg, science, noredraw=noredraw, nostatusbar=nostatusbar
    ;;make the initial guesses unfix but within limits except redshift
     pi.value = randomu(seed,6)*(pi.limits[1,*]-pi.limits[0,*])+pi.limits[0,*]
     pi[3].value = znow
+
+   ;if fixing N to 0
+   ; pi[5].value = 0.
+   ; pi[5].fixed=1
+
+    ;fix the limits back
     firstguess = pi.value
     pi[0].limits = minmax(spsz) ;fix the limit of [Fe/H] back
+    pi[0].limits[1] = 0.2
     pi[1].limits = [min(spsage),(galage(znow,1000)/1.e9)<max(spsage)]
     pi[4].limits =[-0.4,0.8]
     pi.step = double([0.1, 0.5, 25.0,0.002,0.1,0.1])
@@ -413,7 +422,7 @@ pro sps_fit::fitomg, science, noredraw=noredraw, nostatusbar=nostatusbar
 
         ;if nloop eq maxnloop then print,'WARNING: MAX NLOOP REACHED!'
         curchisq = bestnorm/dof
-        if curchisq lt bestchisq then begin
+        if (curchisq lt bestchisq) then begin ;or (nloop lt 3) then begin
            bestchisq = curchisq
            bestvalue = pars
            besterror = perror
@@ -427,7 +436,9 @@ pro sps_fit::fitomg, science, noredraw=noredraw, nostatusbar=nostatusbar
  ;       if nloop eq 98 and keepoldfit eq 0 and curchisq-oldchisq gt 0.1 then maxnloop = 100
      endwhile
     print,agediff,zdiff,format='("--- ------- ----- ------- ---------  -------- ----",D9.6,2X,D9.6)'
-    ;check if the last chisq is the best chisq
+    checkchisq = 0b;1b 
+   ;check if the last chisq is the best chisq
+    if checkchisq then begin
     if abs((pi[0].value-bestvalue[0])/bestvalue[0]) gt 0.01 or abs((pi[1].value-bestvalue[1])/bestvalue[1]) gt 0.01 or (curchisq-bestchisq)/bestchisq gt 0.001 then begin
        print,'THE WHILE LOOP HAS WALKED AWAY FROM THE BEST VALUES. BETTER CHECK YOUR PLOT'
        print,'The values used are:'
@@ -438,6 +449,7 @@ pro sps_fit::fitomg, science, noredraw=noredraw, nostatusbar=nostatusbar
        pi.value = bestvalue
        perror   = besterror
        science.spscont = bestcont
+    endif
     endif
 
     science.nloop = nloop
@@ -957,20 +969,26 @@ end
 
 
 pro sps_fit::cal_uncertainties, science
-   widget_control, widget_info(self.base, find_by_uname='status'), set_value='Calculatign uncertainties ...'
+   widget_control, widget_info(self.base, find_by_uname='status'), set_value='Calculating uncertainties ...'
    grid_file = *self.degen_file   ;nage
    grid_feh = *self.degen_fehgrid
    grid_age = *self.degen_agegrid
    grid_alpha = *self.degen_alphagrid ;nfeh x nage x nalpha
    loc_alpha = where(grid_alpha[0,0,*] eq 0.,cloc_alpha)
+   if cloc_alpha eq 0 then begin
+      print,'Cannot find where alpha/Fe = 0'
+      junk = min((abs(grid_alpha[0,0,*]-0)),loc_alpha)
+      print,'using alpha/Fe =',grid_alpha[0,0,loc_alpha],' instead'
+      cloc_alpha = 1
+   endif
    loc_ext = loc_alpha+1
-   if cloc_alpha eq 0 then stop,'Cannot find where alpha/Fe = 0'
+    
    grid_Feh = grid_feh[*,*,loc_alpha]
    grid_age = grid_age[*,*,loc_alpha]
 
    ;find where is the spec closest to the input age and feh and alpha
-   min_dist = min(sqrt((spec_arr.feh-science.feh)^2+(spec_arr.age-science.age)^2),iref)
-   if min_dist gt 0.05 then stop,'halted because matching might be off grid in make_chisqarr_new.pro'
+   min_dist = min(sqrt((grid_feh-science.feh)^2+(grid_age-science.age)^2),iref)
+   if min_dist gt 0.05 then print,'matching might be off grid'
    loc = array_indices(grid_feh,iref)
    ;make noisy ref spectra
    specarr = mrdfits(grid_file(loc[1]),loc_ext,/silent)
@@ -1036,6 +1054,7 @@ pro sps_fit::cal_uncertainties, science
 end
 
 pro sps_fit::cal_uncertainties_alpha, science
+   common mask_in, mask_in, copynum
    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Calculatign uncertainties ...'
    grid_file = *self.degen_file   ;nage
    grid_feh = *self.degen_fehgrid ;nfeh x nage x nalpha
@@ -1051,9 +1070,9 @@ pro sps_fit::cal_uncertainties_alpha, science
    if refspecstr.feh ne grid_feh(iref) or refspecstr.age ne grid_age(iref) or refspecstr.alpha ne grid_alpha(iref) $
         then stop,'grid does not match with file'
    npix = n_elements(refspecstr.lambda)
+   ;method 1) noise by snfit (1 number)
    refspec_err = abs(refspecstr.spec/science.snfit)
    refspec = refspecstr.spec+randomn(seed,npix)*refspec_err
-
    ;make chisqarr
    gridsize = size(grid_feh,/dimensions)
    chisqarr = fltarr(gridsize)
@@ -1100,7 +1119,7 @@ pro sps_fit::cal_uncertainties_alpha, science
    for jj=1,arr_dimen(0)-1 do cumprobfeh(jj) = int_tabulated(feharr[0:jj],probfeh[0:jj])
    cumprobage = fltarr(arr_dimen(1))
    for jj=1,arr_dimen(1)-1 do cumprobage(jj) = int_tabulated(agearr[0:jj],probage[0:jj])
-   cumprobalpha = fltarr(arr_diment(2))
+   cumprobalpha = fltarr(arr_dimen(2))
    for kk=1,arr_dimen(2)-1 do cumprobalpha(kk) = int_tabulated(alphaarr[0:kk],probalpha[0:kk])
    midagevalue = interpol(agearr,cumprobage,0.5)
    midfehvalue = interpol(feharr,cumprobfeh,0.5)
@@ -1112,6 +1131,32 @@ pro sps_fit::cal_uncertainties_alpha, science
    science.fehlower = science.feh+(interpol(feharr,cumprobfeh,0.16)-midfehvalue)
    science.alphafeupper = science.alphafe+(interpol(alphaarr,cumprobalpha,0.84)-midalphavalue)
    science.alphafelower = science.alphafe+(interpol(alphaarr,cumprobalpha,0.16)-midalphavalue)
+   ;check if the output probgrid is created
+   probfits = self.directory+'probdist/probdist_'+copynum+'.fits'
+   if ~file_test(probfits) then begin
+      probstr = {objname:'name',feharr:feharr,probfeh:feharr*0.,agearr:agearr,probage:agearr*0,$
+                 alphaarr:alphaarr,probalpha:alphaarr*0.,cubeprob:probgrid*0.,age50:0.,feh50:0.,$
+                 alpha50:0.}
+      probstr = replicate(probstr,self.nspec)
+      mwrfits,probstr,probfits,/create,/silent
+   endif
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+   ;writing output to the probgrid.fits
+   probstr = mrdfits(probfits,1,/silent)
+   curi = self.i
+   probstr[curi].objname = science.objname
+   probstr[curi].feharr = feharr
+   probstr[curi].probfeh = probfeh
+   probstr[curi].agearr = agearr
+   probstr[curi].probage = probage
+   probstr[curi].alphaarr = alphaarr
+   probstr[curi].probalpha = probalpha
+   probstr[curi].cubeprob = probgrid
+   probstr[curi].age50 = midagevalue
+   probstr[curi].feh50 = midfehvalue
+   probstr[curi].alpha50 = midalphavalue
+   mwrfits,probstr,probfits,/create,/silent
+
    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Ready ...'
 end
 
@@ -1121,8 +1166,9 @@ pro sps_fit::fit_all,alpha=alpha,omg=omg,glorious=glorious
     widget_control, widget_info(self.base, find_by_uname='keepoldfit'), get_value=keepoldfit
     scienceall = *self.science
     curi = self.i
+  for nwalker=0,2 do begin
     nreplace = 0
-  for nwalker=0,4 do begin
+    if nwalker ge 1 then keepoldfit=0
     for i=0,self.nspec-1 do begin
         self.i = i
         self->default_range
@@ -1179,7 +1225,7 @@ pro sps_fit::cal_uncertainties_all,alpha=alpha
     for i=0,self.nspec-1 do begin
         self.i = i
         science = scienceall[self.i]
-        if science.goodfit eq 0 then continue
+        if science.good eq 0 then continue
         print,strtrim(string(i+1),2)+'/'+strtrim(string(self.nspec),2)
         if ~keyword_set(alpha) then self->cal_uncertainties, science else $
                                     self->cal_uncertainties_alpha,science
@@ -1248,7 +1294,10 @@ pro sps_fit::handle_button, ev
             widget_control, widget_info(self.base, find_by_uname='keepoldfit'), $
                get_value=keepoldfit
            if (keepoldfit eq 0 and science.chisq lt scienceall[self.i].chisq) or $
-               (keepoldfit eq 1) then scienceall[self.i] = science
+               (keepoldfit eq 1) then begin
+               scienceall[self.i] = science
+               print,'use this new fit'
+            endif else print,'use old fit'
             ptr_free, self.science
             self.science = ptr_new(scienceall)
             self->redraw
@@ -1261,7 +1310,11 @@ pro sps_fit::handle_button, ev
            widget_control, widget_info(self.base, find_by_uname='keepoldfit'), $
                get_value=keepoldfit
            if (keepoldfit eq 0 and science.chisq lt scienceall[self.i].chisq) or $
-               (keepoldfit eq 1) then scienceall[self.i] = science
+               (keepoldfit eq 1) then begin
+                scienceall[self.i] = science
+               print,'use this new fit'
+            endif else print,'use old fit'
+
            ptr_free, self.science
            self.science = ptr_new(scienceall)
            self->redraw
@@ -1353,6 +1406,7 @@ pro sps_fit::handle_button, ev
         'default_cont': self->default_cont
         'default_mask': self->default_mask
         'default_maskall': self->default_maskall
+        'mask_mgall': self->add_mgmaskall
         'default_goodspec':self->default_goodspec
         'backward': self->step, -1
         'forward': self->step, 1
@@ -1452,196 +1506,196 @@ pro sps_fit::newspec, increment=increment, noredraw=noredraw
     self.keystate = 0
     if ~keyword_set(noredraw) then self->redraw
 
-    common slit, bgood, rgood, bslit, rslit, bwidth, rwidth, bheight, rheight
-    bgood = 0
-    rgood = 0
-    science = (*self.science)[self.i]
-    if strmid(science.mask,0,4) eq '0024' then maskname = '0024' else maskname = science.mask
-    if strmid(science.mask,0,5) eq '0024b' then maskname = science.mask
-    bslitfile = file_dirname(science.spec1dfile, /mark_directory)+'slit.'+maskname+'.'+string(science.slit, format='(I03)')+'B.fits.gz'
-    rslitfile = file_dirname(science.spec1dfile, /mark_directory)+'slit.'+maskname+'.'+string(science.slit, format='(I03)')+'R.fits.gz'
-    widget_control, widget_info(self.base, find_by_uname='2d'), get_value=index
-    wset, index
-    loadct, 0, /silent
-    tv, dblarr(1600, 300), 0, 0
-    if file_test(bslitfile) then bslit = mrdfits(bslitfile, 1, /silent)
-    if file_test(rslitfile) then rslit = mrdfits(rslitfile, 1, /silent)
-    case 1 of
-        file_test(bslitfile) and file_test(rslitfile): begin
-            bflux = bslit.flux
-            rflux = rslit.flux
-            width = min([(size(bflux, /dimensions))[1], (size(rflux, /dimensions))[1]])
-            flux = [bflux[*,0:width-1], rflux[*,0:width-1]]
-        end
-        file_test(bslitfile): flux = bslit.flux
-        file_test(rslitfile): flux = rslit.flux
-        else: return
-    endcase
-    med = median(flux)
-    sig = stddev(flux)
-    max_value = (med + (10 * sig)) < max(flux)
-    min_value = (med - (2 * sig))  > min(flux)
-    if (finite(min_value) EQ 0) then min_value = image_min
-    if (finite(max_value) EQ 0) then max_value = image_max
-    if (min_value GE max_value) then begin
-        min_value = min_value - 1
-        max_value = max_value + 1
-    endif
-
-    if file_test(bslitfile) then begin
-        bflux = bytscl(bslit.flux, /nan, min=min_value, max=max_value, top=255) + 8
-        bflux = -1.0*bflux + 255.0
-        bheight = 1600./2047.*(size(bslit.dlambda, /dimensions))[1]
-        if bheight gt 74 then begin
-            bwidth = round(74./bheight*1600.)
-            bheight = 74
-        endif else begin
-            bwidth = 1600
-            bheight = round(bheight)
-        endelse
-        bflux1 = congrid(bflux[0:2047,*], bwidth, bheight, /interp)
-        bflux2 = congrid(bflux[2048:4095,*], bwidth, bheight, /interp)
-        tv, bflux1, 0, 225
-        tv, bflux2, 0, 150
-        bgood = 1
-    endif else bgood = 0
-    if file_test(rslitfile) then begin
-        rflux = bytscl(rslit.flux, /nan, min=min_value, max=max_value, top=247) + 8
-        rflux = -1.0*rflux + 255.0
-        rheight = 1600./2047.*(size(rslit.dlambda, /dimensions))[1]
-        if rheight gt 74 then begin
-            rwidth = round(74./rheight*1600.)
-            rheight = 74
-        endif else begin
-            rwidth = 1600
-            rheight = round(rheight)
-        endelse
-        rflux1 = congrid(rflux[0:2047,*], rwidth, rheight, /interp)
-        rflux2 = congrid(rflux[2048:4095,*], rwidth, rheight, /interp)
-        tv, rflux1, 0, 75
-        tv, rflux2, 0, 0
-        rgood = 1
-    endif else rgood = 0
-
-    if bgood eq 1 and rgood eq 1 then begin
-        n = n_elements(*self.tellstart)
-        for i=0,n-1 do begin
-            x1 = interpol(dindgen(4096), bslit.lambda0, (*self.tellstart)[i])
-            offset1 = 0
-            case 1 of
-                x1 lt 0: x1 = -1
-                x1 le 2047: offset1 = 225
-                x1 le 4095: begin
-                    offset1 = 150
-                    x1 -= 2047
-                end
-                x1 gt 4095: begin
-                    x1 = interpol(dindgen(4096), rslit.lambda0, (*self.tellstart)[i])
-                    case 1 of
-                        x1 lt 0: x1 = -1
-                        x1 le 2047: offset1 = 75
-                        x1 le 4095: begin
-                            offset1 = 0
-                            x1 -= 2047
-                        end
-                        x1 gt 4095: x1 = -1
-                    endcase
-                end
-            endcase
-            if x1 gt 0 then begin
-                width1 = offset1 ge 150 ? bwidth : rwidth
-                x1 *= width1 / 2047.
-                height1 = offset1 ge 150 ? bheight : rheight
-            endif else begin
-                width1 = 0
-                height1 = 0
-            endelse
-
-            x2 = interpol(dindgen(4096), bslit.lambda0, (*self.tellend)[i])
-            offset2 = 0
-            case 1 of
-                x2 lt 0: begin
-                    x2 = 2047
-                    offset2 = offset1
-                end
-                x2 le 2047: offset2 = 225
-                x2 le 4095: begin
-                    offset2 = 150
-                    x2 -= 2047
-                end
-                x2 gt 4095: begin
-                    x2 = interpol(dindgen(4096), rslit.lambda0, (*self.tellend)[i])
-                    case 1 of
-                        x2 lt 0: begin
-                            x2 = 2047
-                            offset2 = offset1
-                        end
-                        x2 le 2047: offset2 = 75
-                        x2 le 4095: begin
-                            offset2 = 0
-                            x2 -= 2047
-                        end
-                        x2 gt 4095: x2 = 2047
-                    endcase
-                end
-            endcase
-            if x2 gt 0 then begin
-                width2 = offset2 ge 150 ? bwidth : rwidth
-                x2 *= width2 / 2047.
-                height2 = offset2 ge 150 ? bheight : rheight
-            endif else begin
-                width2 = 0
-                height2 = 0
-            endelse
-
-            case 1 of
-                x1 lt 0 and x2 lt 0: break
-                x1 ge width1 and x2 ge width2: break
-                offset1 eq offset2: begin
-                    plots, [x1 > 0, x2 < width2], [0, 0]+height1-3+offset1, color=fsc_color('green'), /device, thick=(*self.tellthick)[i]
-                    plots, [x1 > 0, x2 < width2], [0, 0]+2+offset1, color=fsc_color('green'), /device, thick=(*self.tellthick)[i]
-                end
-                offset1 gt offset2: begin
-                    plots, [x1 > 0, width2], [0, 0]+height1-3+offset1, color=fsc_color('green'), /device, thick=(*self.tellthick)[i]
-                    plots, [x1 > 0, width2], [0, 0]+2+offset1, color=fsc_color('green'), /device, thick=(*self.tellthick)[i]
-                    plots, [0, x2 < width2], [0, 0]+height2-3+offset2, color=fsc_color('green'), /device, thick=(*self.tellthick)[i]
-                    plots, [0, x2 < width2], [0, 0]+2+offset2, color=fsc_color('green'), /device, thick=(*self.tellthick)[i]
-                end
-                else:
-            endcase
-        endfor
-
-        n = n_elements(*self.linewaves)
-        for i=0,n-1 do begin
-            x = interpol(dindgen(4096), bslit.lambda0, (*self.linewaves)[i] * (1d + science.zspec))
-            case 1 of
-                x lt 0: x = -1
-                x le 2047: offset = 225
-                x le 4095: begin
-                    offset = 150
-                    x -= 2047
-                end
-                x gt 4095: begin
-                    x = interpol(dindgen(4096), rslit.lambda0, (*self.linewaves)[i] * (1d + science.zspec))
-                    case 1 of
-                        x lt 0: x = -1
-                        x le 2047: offset = 75
-                        x le 4095: begin
-                            offset = 0
-                            x -= 2047
-                        end
-                        x gt 4095: x = -1
-                    endcase
-                end
-            endcase
-            if x lt 0 then continue
-            x *= (offset ge 150 ? bwidth : rwidth) / 2047.
-            height = offset ge 150 ? bheight : rheight
-            plots, [x, x], [0, 5]+offset, color=fsc_color((*self.linecolors)[i]), /device
-            plots, [x, x], [height-6, height-1]+offset, color=fsc_color((*self.linecolors)[i]), /device
-            xyouts, x+3, height-7+offset, (*self.linenames)[i], color=fsc_color((*self.linecolors)[i]), orientation=90, alignment=1, /device
-        endfor
-     endif
+;    common slit, bgood, rgood, bslit, rslit, bwidth, rwidth, bheight, rheight
+;    bgood = 0
+;    rgood = 0
+;    science = (*self.science)[self.i]
+;    if strmid(science.mask,0,4) eq '0024' then maskname = '0024' else maskname = science.mask
+;    if strmid(science.mask,0,5) eq '0024b' then maskname = science.mask
+;    bslitfile = file_dirname(science.spec1dfile, /mark_directory)+'slit.'+maskname+'.'+string(science.slit, format='(I03)')+'B.fits.gz'
+;    rslitfile = file_dirname(science.spec1dfile, /mark_directory)+'slit.'+maskname+'.'+string(science.slit, format='(I03)')+'R.fits.gz'
+;    widget_control, widget_info(self.base, find_by_uname='2d'), get_value=index
+;    wset, index
+;    loadct, 0, /silent
+;    tv, dblarr(1600, 300), 0, 0
+;    if file_test(bslitfile) then bslit = mrdfits(bslitfile, 1, /silent)
+;    if file_test(rslitfile) then rslit = mrdfits(rslitfile, 1, /silent)
+;    case 1 of
+;        file_test(bslitfile) and file_test(rslitfile): begin
+;            bflux = bslit.flux
+;            rflux = rslit.flux
+;            width = min([(size(bflux, /dimensions))[1], (size(rflux, /dimensions))[1]])
+;            flux = [bflux[*,0:width-1], rflux[*,0:width-1]]
+;        end
+;        file_test(bslitfile): flux = bslit.flux
+;        file_test(rslitfile): flux = rslit.flux
+;        else: return
+;    endcase
+;    med = median(flux)
+;    sig = stddev(flux)
+;    max_value = (med + (10 * sig)) < max(flux)
+;    min_value = (med - (2 * sig))  > min(flux)
+;    if (finite(min_value) EQ 0) then min_value = image_min
+;    if (finite(max_value) EQ 0) then max_value = image_max
+;    if (min_value GE max_value) then begin
+;        min_value = min_value - 1
+;        max_value = max_value + 1
+;    endif
+;
+;    if file_test(bslitfile) then begin
+;        bflux = bytscl(bslit.flux, /nan, min=min_value, max=max_value, top=255) + 8
+;        bflux = -1.0*bflux + 255.0
+;        bheight = 1600./2047.*(size(bslit.dlambda, /dimensions))[1]
+;        if bheight gt 74 then begin
+;            bwidth = round(74./bheight*1600.)
+;            bheight = 74
+;        endif else begin
+;            bwidth = 1600
+;            bheight = round(bheight)
+;        endelse
+;        bflux1 = congrid(bflux[0:2047,*], bwidth, bheight, /interp)
+;        bflux2 = congrid(bflux[2048:4095,*], bwidth, bheight, /interp)
+;        tv, bflux1, 0, 225
+;        tv, bflux2, 0, 150
+;        bgood = 1
+;    endif else bgood = 0
+;    if file_test(rslitfile) then begin
+;        rflux = bytscl(rslit.flux, /nan, min=min_value, max=max_value, top=247) + 8
+;        rflux = -1.0*rflux + 255.0
+;        rheight = 1600./2047.*(size(rslit.dlambda, /dimensions))[1]
+;        if rheight gt 74 then begin
+;            rwidth = round(74./rheight*1600.)
+;            rheight = 74
+;        endif else begin
+;            rwidth = 1600
+;            rheight = round(rheight)
+;        endelse
+;        rflux1 = congrid(rflux[0:2047,*], rwidth, rheight, /interp)
+;        rflux2 = congrid(rflux[2048:4095,*], rwidth, rheight, /interp)
+;        tv, rflux1, 0, 75
+;        tv, rflux2, 0, 0
+;        rgood = 1
+;    endif else rgood = 0
+;
+;    if bgood eq 1 and rgood eq 1 then begin
+;        n = n_elements(*self.tellstart)
+;        for i=0,n-1 do begin
+;            x1 = interpol(dindgen(4096), bslit.lambda0, (*self.tellstart)[i])
+;            offset1 = 0
+;            case 1 of
+;                x1 lt 0: x1 = -1
+;                x1 le 2047: offset1 = 225
+;                x1 le 4095: begin
+;                    offset1 = 150
+;                    x1 -= 2047
+;                end
+;                x1 gt 4095: begin
+;                    x1 = interpol(dindgen(4096), rslit.lambda0, (*self.tellstart)[i])
+;                    case 1 of
+;                        x1 lt 0: x1 = -1
+;                        x1 le 2047: offset1 = 75
+;                        x1 le 4095: begin
+;                            offset1 = 0
+;                            x1 -= 2047
+;                        end
+;                        x1 gt 4095: x1 = -1
+;                    endcase
+;                end
+;            endcase
+;            if x1 gt 0 then begin
+;                width1 = offset1 ge 150 ? bwidth : rwidth
+;                x1 *= width1 / 2047.
+;                height1 = offset1 ge 150 ? bheight : rheight
+;            endif else begin
+;                width1 = 0
+;                height1 = 0
+;            endelse
+;
+;            x2 = interpol(dindgen(4096), bslit.lambda0, (*self.tellend)[i])
+;            offset2 = 0
+;            case 1 of
+;                x2 lt 0: begin
+;                    x2 = 2047
+;                    offset2 = offset1
+;                end
+;                x2 le 2047: offset2 = 225
+;                x2 le 4095: begin
+;                    offset2 = 150
+;                    x2 -= 2047
+;                end
+;                x2 gt 4095: begin
+;                    x2 = interpol(dindgen(4096), rslit.lambda0, (*self.tellend)[i])
+;                    case 1 of
+;                        x2 lt 0: begin
+;                            x2 = 2047
+;                            offset2 = offset1
+;                        end
+;                        x2 le 2047: offset2 = 75
+;                        x2 le 4095: begin
+;                            offset2 = 0
+;                            x2 -= 2047
+;                        end
+;                        x2 gt 4095: x2 = 2047
+;                    endcase
+;                end
+;            endcase
+;            if x2 gt 0 then begin
+;                width2 = offset2 ge 150 ? bwidth : rwidth
+;                x2 *= width2 / 2047.
+;                height2 = offset2 ge 150 ? bheight : rheight
+;            endif else begin
+;                width2 = 0
+;                height2 = 0
+;            endelse
+;
+;            case 1 of
+;                x1 lt 0 and x2 lt 0: break
+;                x1 ge width1 and x2 ge width2: break
+;                offset1 eq offset2: begin
+;                    plots, [x1 > 0, x2 < width2], [0, 0]+height1-3+offset1, color=fsc_color('green'), /device, thick=(*self.tellthick)[i]
+;                    plots, [x1 > 0, x2 < width2], [0, 0]+2+offset1, color=fsc_color('green'), /device, thick=(*self.tellthick)[i]
+;                end
+;                offset1 gt offset2: begin
+;                    plots, [x1 > 0, width2], [0, 0]+height1-3+offset1, color=fsc_color('green'), /device, thick=(*self.tellthick)[i]
+;                    plots, [x1 > 0, width2], [0, 0]+2+offset1, color=fsc_color('green'), /device, thick=(*self.tellthick)[i]
+;                    plots, [0, x2 < width2], [0, 0]+height2-3+offset2, color=fsc_color('green'), /device, thick=(*self.tellthick)[i]
+;                    plots, [0, x2 < width2], [0, 0]+2+offset2, color=fsc_color('green'), /device, thick=(*self.tellthick)[i]
+;                end
+;                else:
+;            endcase
+;        endfor
+;
+;        n = n_elements(*self.linewaves)
+;        for i=0,n-1 do begin
+;            x = interpol(dindgen(4096), bslit.lambda0, (*self.linewaves)[i] * (1d + science.zspec))
+;            case 1 of
+;                x lt 0: x = -1
+;                x le 2047: offset = 225
+;                x le 4095: begin
+;                    offset = 150
+;                    x -= 2047
+;                end
+;                x gt 4095: begin
+;                    x = interpol(dindgen(4096), rslit.lambda0, (*self.linewaves)[i] * (1d + science.zspec))
+;                    case 1 of
+;                        x lt 0: x = -1
+;                        x le 2047: offset = 75
+;                        x le 4095: begin
+;                            offset = 0
+;                            x -= 2047
+;                        end
+;                        x gt 4095: x = -1
+;                    endcase
+;                end
+;            endcase
+;            if x lt 0 then continue
+;            x *= (offset ge 150 ? bwidth : rwidth) / 2047.
+;            height = offset ge 150 ? bheight : rheight
+;            plots, [x, x], [0, 5]+offset, color=fsc_color((*self.linecolors)[i]), /device
+;            plots, [x, x], [height-6, height-1]+offset, color=fsc_color((*self.linecolors)[i]), /device
+;            xyouts, x+3, height-7+offset, (*self.linenames)[i], color=fsc_color((*self.linecolors)[i]), orientation=90, alignment=1, /device
+;        endfor
+;     endif
 end
 
 
@@ -2283,6 +2337,7 @@ pro sps_fit::default_mask
     self->redraw
 end
 
+
 pro sps_fit::default_maskall
   curi = self.i
   for i=0,self.nspec-1 do begin
@@ -2297,6 +2352,32 @@ pro sps_fit::default_maskall
   self.i = curi
   self->redraw
 end
+
+pro sps_fit::add_mgmask
+    scienceall = *self.science
+    science = scienceall[self.i]
+    self->maskmg, science
+    scienceall[self.i] = science
+    ptr_free, self.science
+    self.science = ptr_new(scienceall)
+    self->redraw
+end
+
+pro sps_fit::add_mgmaskall
+  curi = self.i
+  for i=0,self.nspec-1 do begin
+     self.i=i
+     scienceall = *self.science
+     science = scienceall[self.i]
+     self->maskmg, science
+     scienceall[self.i] = science
+     ptr_free, self.science
+     self.science = ptr_new(scienceall)
+  endfor
+  self.i = curi
+  self->redraw
+end
+
 
 pro sps_fit::default_goodspec
     scienceall = *self.science
@@ -2810,7 +2891,6 @@ pro sps_fit::mask, science, nomask=nomask, zfind=zfind, nozfind=nozfind, nmc=nmc
     endif
 
     if ~keyword_set(nomask) then begin
-
        ;1) remove emission lines
         linestart = *self.linestart
         lineend = *self.lineend
@@ -2921,43 +3001,26 @@ pro sps_fit::maskmg, science, nomask=nomask, zfind=zfind, nozfind=nozfind, nmc=n
     endif
 
     if ~keyword_set(nomask) then begin
+        mask = science.fitmask
         linestart = *self.linestart
         lineend  = *self.lineend
         linetype = *self.linetype
         indstart = *self.indstart 
         indend   = *self.indend   
         indname  = *self.indname 
-        mask = bytarr(n_elements(science.lambda))
 
-        ;mask everywhere else = 0 except where the indices bands are
+        ;keep the same mask and mask the Mg indices bands are
         use_indices = ['Mg_b','Mg_2','Mg_1']
         for i=0,n_elements(use_indices)-1 do begin
            indnow = where(indname eq use_indices(i),cindnow)
            if cindnow eq 0 then stop
            w = where(science.lambda/(1.+science.zspec) gt indstart(indnow[0]) and science.lambda/(1.+science.zspec) lt indend(indnow[0]),cw)
-           if cw gt 0 then mask[w]=1
+           if cw gt 0 then mask[w]=0
         endfor
-
-        w = where(science.ivar le 0 or ~finite(science.ivar) or science.lambda/(1d + science.zspec) lt 3650 or science.lambda/(1.+science.zspec) gt 7400, cw)
-        if cw gt 0 then mask[w] = 0 ;bad points
-       ; w = where(science.fitmask eq 0, cw)
-       ; if cw gt 0 then mask[w] = 0 ;bad points
-
-        tellstart = [6864., 7591., 8938.]
-        tellend = [6935., 7694., 100000.]
-        for i=0,n_elements(tellstart)-1 do begin
-            w = where(science.lambda ge tellstart[i] and science.lambda le tellend[i], c)
-            if c gt 0 then mask[w] = 0
-        endfor
-        ;w = where((science.contdiv-science.continuum) gt 3.*science.contdivivar^(-0.5), cw)
-        ;if cw gt 0 then mask[w] = 0
-        n = n_elements(science.lambda)
-        mask[0:4] = 0
-        mask[n-5:n-1] = 0
     endif else begin
-        mask = science.fitmgmask
+        mask = science.fitmask
     endelse
-    science.fitmgmask = mask
+    science.fitmask = mask
 end
 
 ; ============== REDRAW ===============
@@ -3464,6 +3527,7 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     wdefaultrange = widget_button(tools_menu, value='Default Spectrum Settings', uname='default_range', uvalue='default_range')
     wdefault_cont = widget_button(tools_menu, value='Default Continuum Regions', uname='default_cont', uvalue='default_cont')
     wdefault_maskall = widget_button(tools_menu, value='Default Pixel Mask All', uname='default_maskall', uvalue='default_maskall')
+    wmask_mgall = widget_button(tools_menu, value='Mask Mgband All', uname=',mask_mgall', uvalue='mask_mgall')
     wdefault_goodspec = widget_button(tools_menu, value='Default Good Spectrum', uname='default_goodspec', uvalue='default_goodspec')
     wfit_all = widget_button(tools_menu, value='Fit All', uname='fit_all', uvalue='fit_all')
     wfitomg_all = widget_button(tools_menu, value='Fit OMg All', uname='fit_omg_all', uvalue='fit_omg_all')
@@ -3561,8 +3625,8 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     wstatus = widget_text(wfile, xsize=108, value='Initializing ...', uname='status', uvalue='status', tab_mode=0)
 
     wspec = widget_base(wright, /frame, /column)
-    wspecplot = widget_draw(wspec, xsize=1600, ysize=400, uname='spec', /button_events, keyboard_events=1)
-    w2dplot = widget_draw(wspec, xsize=1600, ysize=300, uname='2d', /tracking_events, /motion_events)
+    wspecplot = widget_draw(wspec, xsize=1400, ysize=400, uname='spec', /button_events, keyboard_events=1)
+    w2dplot = widget_draw(wspec, xsize=1400, ysize=200, uname='2d', /tracking_events, /motion_events)
 
     wspeccontrol = widget_base(wright, /row, /align_center, tab_mode=1)
     wkeepoldfitcontrol = widget_base(wspeccontrol,/row,/frame)

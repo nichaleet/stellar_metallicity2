@@ -145,7 +145,7 @@ pro sps_fit::fit, science, noredraw=noredraw, nostatusbar=nostatusbar
     widget_control, widget_info(self.base, find_by_uname='maxnloop'), get_value=maxnloop
     maxnloop = fix(maxnloop[0])
     if maxnloop eq 0 then maxnloop = 150
-    maxnloop = 150
+    maxnloop = 100
     print, '* * * * * * * * * * * * * * * * * * * *'
     print, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
     print, '* * * * * * * * * * * * * * * * * * * *'
@@ -325,7 +325,7 @@ pro sps_fit::fitomg, science, noredraw=noredraw, nostatusbar=nostatusbar
     if ~keyword_set(nostatusbar) then widget_control, widget_info(self.base, find_by_uname='status'), set_value='Fitting 5 parameters ...'
     widget_control, widget_info(self.base, find_by_uname='keepoldfit'), get_value=keepoldfit
     oldchisq = science.chisq
-    element= ['Mg','N']
+    element= ['Mg','O']
     znow = science.zspec
     if znow le 0. then znow = science.z
     if znow le 0. then stop
@@ -344,6 +344,7 @@ pro sps_fit::fitomg, science, noredraw=noredraw, nostatusbar=nostatusbar
     pi = replicate({value:0d, fixed:0, limited:[1,1], limits:[0.D,0.D], parname:'', mpprint:0, mpformat:'', step:0d, tied:''}, 6)
     pi[0].limits = [-0.6,0.19] ;this is just for initial parameters
     pi[1].limits = [min(spsage),(galage(znow,1000)/1.e9)<max(spsage)]
+    pi[1].limits = [7,(galage(znow,1000)/1.e9)<max(spsage)]
     pi[3].limits = [-0.3,0.3]+znow
     pi[4].limits = [-0.4,0.4]
     pi[5].limits = [-0.4,0.8]
@@ -352,9 +353,17 @@ pro sps_fit::fitomg, science, noredraw=noredraw, nostatusbar=nostatusbar
    ;;make the initial guesses unfix but within limits except redshift
     pi.value = randomu(seed,6)*(pi.limits[1,*]-pi.limits[0,*])+pi.limits[0,*]
     pi[3].value = znow
+ 
+   ;if fixing N to 0
+    if copynum eq '01' then begin
+       pi[5].value = 0.
+       pi[5].fixed=1
+    endif 
+
+    ;change the limits back to full range
     firstguess = pi.value
     pi[0].limits = minmax(spsz) ;fix the limit of [Fe/H] back
-   ; pi[0].limits[1]=0.4
+  ;  pi[0].limits[1]=0.3
 
     pi[1].limits = [min(spsage),(galage(znow,1000)/1.e9)<max(spsage)]
     pi[4].limits =[-0.4,0.8]
@@ -864,7 +873,8 @@ pro sps_fit::cal_uncertainties, science
 end
 
 pro sps_fit::cal_uncertainties_alpha, science
-   widget_control, widget_info(self.base, find_by_uname='status'), set_value='Calculatign uncertainties ...'
+   common mask_in, mask_in, copynum
+   ;widget_control, widget_info(self.base, find_by_uname='status'), set_value='Calculating uncertainties ...'
    grid_file = *self.degen_file   ;nage
    grid_feh = *self.degen_fehgrid ;nfeh x nage x nalpha
    grid_age = *self.degen_agegrid ;nfeh x nage x nalpha
@@ -882,7 +892,6 @@ pro sps_fit::cal_uncertainties_alpha, science
    npix = n_elements(refspecstr.lambda)
    refspec_err = abs(refspecstr.spec/science.snfit)
    refspec = refspecstr.spec+randomn(seed,npix)*refspec_err
-
    ;make chisqarr
    gridsize = size(grid_feh,/dimensions)
    chisqarr = fltarr(gridsize)
@@ -929,7 +938,7 @@ pro sps_fit::cal_uncertainties_alpha, science
    for jj=1,arr_dimen(0)-1 do cumprobfeh(jj) = int_tabulated(feharr[0:jj],probfeh[0:jj])
    cumprobage = fltarr(arr_dimen(1))
    for jj=1,arr_dimen(1)-1 do cumprobage(jj) = int_tabulated(agearr[0:jj],probage[0:jj])
-   cumprobalpha = fltarr(arr_diment(2))
+   cumprobalpha = fltarr(arr_dimen(2))
    for kk=1,arr_dimen(2)-1 do cumprobalpha(kk) = int_tabulated(alphaarr[0:kk],probalpha[0:kk])
    midagevalue = interpol(agearr,cumprobage,0.5)
    midfehvalue = interpol(feharr,cumprobfeh,0.5)
@@ -941,6 +950,31 @@ pro sps_fit::cal_uncertainties_alpha, science
    science.fehlower = science.feh+(interpol(feharr,cumprobfeh,0.16)-midfehvalue)
    science.alphafeupper = science.alphafe+(interpol(alphaarr,cumprobalpha,0.84)-midalphavalue)
    science.alphafelower = science.alphafe+(interpol(alphaarr,cumprobalpha,0.16)-midalphavalue)
+   ;check if the output probgrid is created
+   probfits = self.directory+'probdist/probdist_'+copynum+'.fits'
+   if ~file_test(probfits) then begin
+      probstr = {objname:'name',feharr:feharr,probfeh:feharr*0.,agearr:agearr,probage:agearr*0,$
+                 alphaarr:alphaarr,probalpha:alphaarr*0.,cubeprob:probgrid*0.,age50:0.,feh50:0.,$
+                 alpha50:0.}
+      probstr = replicate(probstr,self.nspec)
+      mwrfits,probstr,probfits,/create,/silent
+   endif
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+   ;writing output to the probgrid.fits
+   probstr = mrdfits(probfits,1,/silent)
+   curi = self.i
+   probstr[curi].objname = science.objname
+   probstr[curi].feharr = feharr
+   probstr[curi].probfeh = probfeh
+   probstr[curi].agearr = agearr
+   probstr[curi].probage = probage
+   probstr[curi].alphaarr = alphaarr
+   probstr[curi].probalpha = probalpha
+   probstr[curi].cubeprob = probgrid
+   probstr[curi].age50 = midagevalue
+   probstr[curi].feh50 = midfehvalue
+   probstr[curi].alpha50 = midalphavalue
+   mwrfits,probstr,probfits,/create,/silent
    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Ready ...'
 end
 
@@ -950,8 +984,11 @@ pro sps_fit::fit_all,alpha=alpha,omg=omg,glorious=glorious
     widget_control, widget_info(self.base, find_by_uname='keepoldfit'), get_value=keepoldfit
     scienceall = *self.science
     curi = self.i
+  for nwalker=0,3 do begin
     nreplace = 0
-    for i=0,self.nspec-1 do begin
+    if nwalker gt 0 then keepoldfit = 0
+    if nwalker eq 0 then istart=61 else istart = 0
+    for i=istart,self.nspec-1 do begin
         self.i = i
         self->default_range
         science = scienceall[self.i]
@@ -990,10 +1027,11 @@ pro sps_fit::fit_all,alpha=alpha,omg=omg,glorious=glorious
         endif
 
     endfor
-    print,'total replace ', nreplace,' fits'
+    print,'nwalker',nwalker,'total replace ', nreplace,' fits'
     ptr_free, self.science
     self.science = ptr_new(scienceall)
     self->writescience
+  endfor
     self.i = curi
     science = scienceall[self.i]
     self->statusbox, science=science
@@ -1007,8 +1045,9 @@ pro sps_fit::cal_uncertainties_all,alpha=alpha
     for i=0,self.nspec-1 do begin
         self.i = i
         science = scienceall[self.i]
-        if science.goodfit eq 0 then continue
+        if science.good eq 0 then continue
         print,strtrim(string(i+1),2)+'/'+strtrim(string(self.nspec),2)
+        widget_control, widget_info(self.base, find_by_uname='status'), set_value='Calculating uncertainties for '+strtrim(string(i+1),2)+'/'+strtrim(string(self.nspec),2)
         if ~keyword_set(alpha) then self->cal_uncertainties, science else $
                                     self->cal_uncertainties_alpha,science
         scienceall[self.i] = science
@@ -1225,6 +1264,7 @@ pro sps_fit::handle_button, ev
         'default_cont': self->default_cont
         'default_mask': self->default_mask
         'default_maskall': self->default_maskall
+        'mask_mgall': self->add_mgmaskall
         'default_goodspec':self->default_goodspec
         'backward': self->step, -1
         'forward': self->step, 1
@@ -1876,6 +1916,31 @@ pro sps_fit::default_maskall
   self->redraw
 end
 
+pro sps_fit::add_mgmask
+    scienceall = *self.science
+    science = scienceall[self.i]
+    self->maskmg, science
+    scienceall[self.i] = science
+    ptr_free, self.science
+    self.science = ptr_new(scienceall)
+    self->redraw
+end
+
+pro sps_fit::add_mgmaskall
+  curi = self.i
+  for i=0,self.nspec-1 do begin
+     self.i=i
+     scienceall = *self.science
+     science = scienceall[self.i]
+     self->maskmg, science
+     scienceall[self.i] = science
+     ptr_free, self.science
+     self.science = ptr_new(scienceall)
+  endfor
+  self.i = curi
+  self->redraw
+end
+
 pro sps_fit::default_goodspec
     scienceall = *self.science
     curi = self.i
@@ -2050,6 +2115,37 @@ pro sps_fit::mask, science, nomask=nomask, zfind=zfind, nozfind=nozfind, nmc=nmc
     science.fitmask = mask
 end
 
+pro sps_fit::maskmg, science, nomask=nomask, nmc=nmc
+    specresfile = self.directory+'specres_poly.sav'
+    globalres = 0
+    if file_test(specresfile) then begin
+        restore, specresfile
+        dlam = poly(science.lambda/1000 - 7.8, specres_poly) / 2.35
+        globalres = 1
+    endif
+
+    if ~keyword_set(nomask) then begin
+        mask = science.fitmask
+        linestart = *self.linestart
+        lineend  = *self.lineend
+        linetype = *self.linetype
+        indstart = *self.indstart
+        indend   = *self.indend
+        indname  = *self.indname
+
+        ;keep the same mask and mask the Mg indices bands are
+        use_indices = ['Mg_b','Mg_2','Mg_1']
+        for i=0,n_elements(use_indices)-1 do begin
+           indnow = where(indname eq use_indices(i),cindnow)
+           if cindnow eq 0 then stop
+           w = where(science.lambda/(1.+science.zspec) gt indstart(indnow[0]) and science.lambda/(1.+science.zspec) lt indend(indnow[0]),cw)
+           if cw gt 0 then mask[w]=0
+        endfor
+    endif else begin
+        mask = science.fitmask
+    endelse
+    science.fitmask = mask
+end
 
 ; ============== REDRAW ===============
 pro sps_fit::redraw
@@ -2686,6 +2782,7 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     wdefaultrange = widget_button(tools_menu, value='Default Spectrum Settings', uname='default_range', uvalue='default_range')
     wdefault_cont = widget_button(tools_menu, value='Default Continuum Regions', uname='default_cont', uvalue='default_cont')
     wdefault_maskall = widget_button(tools_menu, value='Default Pixel Mask All', uname='default_maskall', uvalue='default_maskall')
+    wmask_mgall = widget_button(tools_menu, value='Mask Mgband All', uname=',mask_mgall', uvalue='mask_mgall')
     wdefault_goodspec = widget_button(tools_menu, value='Default Good Spectrum', uname='default_goodspec', uvalue='default_goodspec')
     wfit_all = widget_button(tools_menu, value='Fit All', uname='fit_all', uvalue='fit_all')
 ;    wfitalpha_all = widget_button(tools_menu, value='Fit Alpha All', uname='fit_alpha_all', uvalue='fit_alpha_all')
@@ -2714,6 +2811,7 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     wdefault_mask = widget_button(windicesbase,value='Default Mask',uvalue='default_mask',uname='default_mask',tab_mode=1,xsize=100)
     wuncertbase = widget_base(wleft,/row,/align_center)
     wuncertainties = widget_button(wuncertbase,value='cal_uncertainties',uvalue='cal_uncertainties',uname='cal_uncertainties')
+    wuncertainties_alpha = widget_button(wuncertbase,value='cal_uncertainties_alpha',uvalue='cal_uncertainties_alpha',uname='cal_uncertainties_alpha')
     wgoodbase = widget_base(wleft, /column, /align_center)
     wgood = cw_bgroup(wgoodbase, ['good spectrum','good fit'], /nonexclusive, set_value=[0, 0], uname='good', uvalue='good')
 
@@ -2793,8 +2891,8 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     wstatus = widget_text(wfile, xsize=108, value='Initializing ...', uname='status', uvalue='status', tab_mode=0)
 
     wspec = widget_base(wright, /frame, /column)
-    wspecplot = widget_draw(wspec, xsize=1600, ysize=400, uname='spec', /button_events, keyboard_events=1)
-    w2dplot = widget_draw(wspec, xsize=1600, ysize=300, uname='2d', /tracking_events, /motion_events)
+    wspecplot = widget_draw(wspec, xsize=1300, ysize=400, uname='spec', /button_events, keyboard_events=1)
+    w2dplot = widget_draw(wspec, xsize=1300, ysize=250, uname='2d', /tracking_events, /motion_events)
 
     wspeccontrol = widget_base(wright, /row, /align_center, tab_mode=1)
     wkeepoldfitcontrol = widget_base(wspeccontrol,/row,/frame)

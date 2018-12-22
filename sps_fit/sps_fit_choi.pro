@@ -425,8 +425,8 @@ pro sps_fit::fitalpha, science, noredraw=noredraw, nostatusbar=nostatusbar
     nloop=0
     widget_control, widget_info(self.base, find_by_uname='maxnloop'), get_value=maxnloop
     maxnloop = fix(maxnloop[0])
-    if maxnloop eq 0 then maxnloop = 150
-    ;maxnloop = 200
+    if maxnloop eq 0 then maxnloop = 100
+    maxnloop = 100
     print, '* * * * * * * * * * * * * * * * * * * *'
     print, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
     print, '* * * * * * * * * * * * * * * * * * * *'
@@ -638,6 +638,7 @@ pro sps_fit::fitomg, science, noredraw=noredraw, nostatusbar=nostatusbar
     pi[0].limits = minmax(spsz) ;fix the limit of [Fe/H] back
     pi[1].limits = [min(spsage),(galage(znow,1000)/1.e9)<max(spsage)]
     pi[4].limits =[-0.4,0.4]
+    pi[5].limits =[-0.4,0.8]
     pi.step = double([0.1, 0.5, 25.0,0.002,0.1,0.1])
     pi.parname = ['    Z', '  age', 'vdisp','redshift','Mg','O']
     pi.mpformat = ['(D6.3)', '(D5.2)', '(D6.1)','(D6.3)','(D6.3)','(D6.3)']
@@ -665,7 +666,7 @@ pro sps_fit::fitomg, science, noredraw=noredraw, nostatusbar=nostatusbar
     widget_control, widget_info(self.base, find_by_uname='maxnloop'), get_value=maxnloop
     maxnloop = fix(maxnloop[0])
     if maxnloop eq 0 then maxnloop = 150
-    maxnloop = 400
+    maxnloop = 100
     print, 'maxnloop ', maxnloop
     print, '* * * * * * * * * * * * * * * * * * * *'
     print, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
@@ -3119,7 +3120,7 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     wprepbase = widget_base(wleft, /row, /align_center)
     wfitalphaband = widget_button(wprepbase, value='Fit alpha band', uvalue='fitalphaband', uname='fitalphaband', tab_mode=1)
     wfit = widget_button(wprepbase, value='Fit', uvalue='fit', uname='fit', tab_mode=1, xsize=75)
-;    wfitalpha = widget_button(wprepbase, value='Fit alpha', uvalue='fitalpha', uname='fitalpha', tab_mode=1, xsize=85)
+    wfitalpha = widget_button(wprepbase, value='Fit alpha', uvalue='fitalpha', uname='fitalpha', tab_mode=1, xsize=85)
     wfitglorious = widget_button(wprepbase, value='Fit glorious', uvalue='fitglorious', uname='fitglorious', tab_mode=1, xsize=85)
     windicesbase = widget_base(wleft, /row, /align_center)
     wfitomg = widget_button(windicesbase,value='Fit O Mg',uvalue='fitomg',uname='fitomg',tab_mode=1,xsize=100)

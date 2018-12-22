@@ -77,7 +77,7 @@ common get_sps_alpha, element
       endfor
    endif else begin
       nalpha = n_elements(grid_alpha)
-      element = ['Mg','O','Si','Ca','Ti']
+      element = ['Mg']
       for  iz=0,nfeh-1 do for ia=0,nage-1 do for iap=0,nalpha-1 do begin
          spsspec = get_sps_alpha_obs(xmp,[grid_feh(iz),grid_age(ia),vdisp/2.35,redshift,grid_alpha(iap)])
          str = {lambda:xmp,spec:spsspec,feh:grid_feh(iz),age:grid_age(ia),alpha:grid_alpha(iap),$
@@ -93,10 +93,11 @@ end
 
 pro mkgrid_for_caluncertainties_choi
    ;make spectra with these grids (Total 100 files at each fixed age)
-   grid_feh = findgen(61)/50-1.003 ;range from [-1,0.197] dex 
-   grid_age = findgen(100)/10.+0.1 ;range from [0.1,10] Gyr
-   grid_alpha = findgen(41)/50.-0.4 ;range from [-0.4,0.4] dex
-   for ia = 0,99 do begin
+   grid_feh = findgen(51)/40-1.00 ;range from [-1,0.25] dex, dz = 0.025
+   grid_age = findgen(51)/4.2+0.1 ;range from [0.1,12] Gyr, dage = 0.24 Gyr
+   grid_alpha = findgen(41)/33.33-0.4 ;range from [-0.4,0.8] dex, dalpha=0.03
+
+   for ia = 0,50 do begin
      for iap=0,40 do begin
       spec_arr = make_spec(grid_feh,grid_age(ia),grid_alpha=[grid_alpha(iap)])
       outfile = 'sspdegen/sspdegen_choi/age'+strtrim(string(ia,format='(I02)'),2)+'_sspdegen_gridspec_choi'+'.fits'

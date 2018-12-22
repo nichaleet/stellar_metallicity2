@@ -276,7 +276,7 @@ pro sps_fit::fitalpha, science, noredraw=noredraw, nostatusbar=nostatusbar
     common toprint, agediff, zdiff
     common mask_in, mask_in, copynum
     common response_fn, rsp_str,logzgrid_rsp,agegrid_rsp
-    common get_sps_alpha, element,sdss
+    common get_sps_alpha, element
 
     if ~keyword_set(nostatusbar) then widget_control, widget_info(self.base, find_by_uname='status'), set_value='Fitting 5 parameters ...'
     savedata = 0 ;1
@@ -523,7 +523,7 @@ pro sps_fit::fitomg, science, noredraw=noredraw, nostatusbar=nostatusbar
     if ~keyword_set(nostatusbar) then widget_control, widget_info(self.base, find_by_uname='status'), set_value='Fitting 5 parameters ...'
     widget_control, widget_info(self.base, find_by_uname='keepoldfit'), get_value=keepoldfit
     oldchisq = science.chisq
-    element= ['Mg','N']
+    element= ['Mg','O']
     znow = science.zspec
     if znow le 0. then znow = science.z
     if znow le 0. then stop
@@ -550,6 +550,13 @@ pro sps_fit::fitomg, science, noredraw=noredraw, nostatusbar=nostatusbar
    ;;make the initial guesses unfix but within limits except redshift
     pi.value = randomu(seed,6)*(pi.limits[1,*]-pi.limits[0,*])+pi.limits[0,*]
     pi[3].value = znow
+
+    if copynum eq '01' then begin
+       pi[5].value = 0.
+       pi[5].fixed=1
+    endif
+
+    ;change the limits back to full range
     firstguess = pi.value
     pi[0].limits = minmax(spsz) ;fix the limit of [Fe/H] back
    ; pi[0].limits[1]=0.4
@@ -583,7 +590,7 @@ pro sps_fit::fitomg, science, noredraw=noredraw, nostatusbar=nostatusbar
     widget_control, widget_info(self.base, find_by_uname='maxnloop'), get_value=maxnloop
     maxnloop = fix(maxnloop[0])
     if maxnloop eq 0 then maxnloop = 150
-    maxnloop = 100
+    ;maxnloop = 100
     print, 'maxnloop ', maxnloop
     print, '* * * * * * * * * * * * * * * * * * * *'
     print, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
@@ -981,7 +988,7 @@ pro sps_fit::fit_glorious, science, noredraw=noredraw, nostatusbar=nostatusbar
     endif
 end
 pro sps_fit::cal_uncertainties, science
-   widget_control, widget_info(self.base, find_by_uname='status'), set_value='Calculatign uncertainties ...'
+   ;widget_control, widget_info(self.base, find_by_uname='status'), set_value='Calculatign uncertainties ...'
    grid_file = *self.degen_file   ;nage
    grid_feh = *self.degen_fehgrid
    grid_age = *self.degen_agegrid
@@ -1061,7 +1068,8 @@ pro sps_fit::cal_uncertainties, science
 end
 
 pro sps_fit::cal_uncertainties_alpha, science
-   widget_control, widget_info(self.base, find_by_uname='status'), set_value='Calculatign uncertainties ...'
+   common mask_in, mask_in, copynum
+  ; widget_control, widget_info(self.base, find_by_uname='status'), set_value='Calculating uncertainties ...'
    grid_file = *self.degen_file   ;nage
    grid_feh = *self.degen_fehgrid ;nfeh x nage x nalpha
    grid_age = *self.degen_agegrid ;nfeh x nage x nalpha
@@ -1079,7 +1087,6 @@ pro sps_fit::cal_uncertainties_alpha, science
    npix = n_elements(refspecstr.lambda)
    refspec_err = abs(refspecstr.spec/science.snfit)
    refspec = refspecstr.spec+randomn(seed,npix)*refspec_err
-
    ;make chisqarr
    gridsize = size(grid_feh,/dimensions)
    chisqarr = fltarr(gridsize)
@@ -1126,7 +1133,7 @@ pro sps_fit::cal_uncertainties_alpha, science
    for jj=1,arr_dimen(0)-1 do cumprobfeh(jj) = int_tabulated(feharr[0:jj],probfeh[0:jj])
    cumprobage = fltarr(arr_dimen(1))
    for jj=1,arr_dimen(1)-1 do cumprobage(jj) = int_tabulated(agearr[0:jj],probage[0:jj])
-   cumprobalpha = fltarr(arr_diment(2))
+   cumprobalpha = fltarr(arr_dimen(2))
    for kk=1,arr_dimen(2)-1 do cumprobalpha(kk) = int_tabulated(alphaarr[0:kk],probalpha[0:kk])
    midagevalue = interpol(agearr,cumprobage,0.5)
    midfehvalue = interpol(feharr,cumprobfeh,0.5)
@@ -1138,6 +1145,31 @@ pro sps_fit::cal_uncertainties_alpha, science
    science.fehlower = science.feh+(interpol(feharr,cumprobfeh,0.16)-midfehvalue)
    science.alphafeupper = science.alphafe+(interpol(alphaarr,cumprobalpha,0.84)-midalphavalue)
    science.alphafelower = science.alphafe+(interpol(alphaarr,cumprobalpha,0.16)-midalphavalue)
+   ;check if the output probgrid is created
+   probfits = self.directory+'probdist/probdist_'+copynum+'.fits'
+   if ~file_test(probfits) then begin
+      probstr = {objname:'name',feharr:feharr,probfeh:feharr*0.,agearr:agearr,probage:agearr*0,$
+                 alphaarr:alphaarr,probalpha:alphaarr*0.,cubeprob:probgrid*0.,age50:0.,feh50:0.,$
+                 alpha50:0.}
+      probstr = replicate(probstr,self.nspec)
+      mwrfits,probstr,probfits,/create,/silent 
+   endif
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+   ;writing output to the probgrid.fits
+   probstr = mrdfits(probfits,1,/silent)
+   curi = self.i
+   probstr[curi].objname = science.objname
+   probstr[curi].feharr = feharr 
+   probstr[curi].probfeh = probfeh
+   probstr[curi].agearr = agearr
+   probstr[curi].probage = probage
+   probstr[curi].alphaarr = alphaarr
+   probstr[curi].probalpha = probalpha
+   probstr[curi].cubeprob = probgrid
+   probstr[curi].age50 = midagevalue
+   probstr[curi].feh50 = midfehvalue
+   probstr[curi].alpha50 = midalphavalue
+   mwrfits,probstr,probfits,/create,/silent
    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Ready ...'
 end
 
@@ -1146,7 +1178,9 @@ pro sps_fit::fit_all,alpha=alpha,omg=omg,glorious=glorious
     widget_control, widget_info(self.base, find_by_uname='keepoldfit'), get_value=keepoldfit
     scienceall = *self.science
     curi = self.i
+  for nwalker=0,3 do begin
     nreplace = 0
+    if nwalker ge 1 then keepoldfit=0
     for i=0,self.nspec-1 do begin
         self.i = i
         self->default_range
@@ -1184,10 +1218,11 @@ pro sps_fit::fit_all,alpha=alpha,omg=omg,glorious=glorious
             scienceall = *self.science
         endif
     endfor
-    print,'total replace ', nreplace,' fits'
+    print,'nwalker',nwalker,'total replace ', nreplace,' fits'
     ptr_free, self.science
     self.science = ptr_new(scienceall)
     self->writescience
+  endfor
     self.i = curi
     science = scienceall[self.i]
     self->statusbox, science=science
@@ -1195,14 +1230,17 @@ pro sps_fit::fit_all,alpha=alpha,omg=omg,glorious=glorious
 end
 
 pro sps_fit::cal_uncertainties_all,alpha=alpha
-    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Calculatign uncertainties ...'
+    widget_control, widget_info(self.base, find_by_uname='status'), set_value='Calculating uncertainties ...'
     scienceall = *self.science
     curi = self.i
     for i=0,self.nspec-1 do begin
         self.i = i
         science = scienceall[self.i]
-        if science.goodfit eq 0 then continue
+        if science.good eq 0 then continue
         print,strtrim(string(i+1),2)+'/'+strtrim(string(self.nspec),2)
+        widget_control, widget_info(self.base, find_by_uname='status'), $
+             set_value='Calculating uncertainties '+strtrim(string(i+1),2)+'/'$
+             +strtrim(string(self.nspec),2)
         if ~keyword_set(alpha) then self->cal_uncertainties, science else $
                                     self->cal_uncertainties_alpha,science
         scienceall[self.i] = science
@@ -2835,7 +2873,7 @@ pro sps_fit::statusbox, science=science
     widget_control, widget_info(self.base, find_by_uname='cursn'), set_value=science.sn gt 0 ? strcompress(string(science.sn, format='(D10.1)'),/rem)+' ; '+strcompress(string(science.snfit, format='(D10.1)'), /rem) : unknown
     widget_control, widget_info(self.base, find_by_uname='curage'), set_value=science.age gt -100 ? strcompress(string(science.age, format='(D10.2)'), /rem)+(science.ageerr le 0 ? '' : ' +/- '+strcompress(string(science.ageerr, format='(D10.2)'), /rem))+' Gyr' : unknown
     widget_control, widget_info(self.base, find_by_uname='curageuncert'), set_value=science.agelower gt -100 ? strcompress(string(science.agelower, format='(D10.2)'), /rem)+(science.ageupper gt -100 ? ' : '+strcompress(string(science.ageupper, format='(D10.2)'), /rem):'') : unknown
-    widget_control, widget_info(self.base, find_by_uname='curmstar'), set_value=science.logmstar gt 0 ? strcompress(string(science.logmstar, format='(D10.2)'), /rem) : unknown
+    widget_control, widget_info(self.base, find_by_uname='curmstar'), set_value=science.logm50_ag06 gt 0 ? strcompress(string(science.logmstar, format='(D10.2)'), /rem)+','+strcompress(string(science.logm50_ag06, format='(D10.2)'), /rem) : unknown
     widget_control, widget_info(self.base, find_by_uname='curfeh'), set_value=science.feh gt -100 ? strcompress(string(science.feh, format='(D10.2)'), /rem)+(science.feherr le 0 ? '' : ' +/- '+strcompress(string(science.feherr, format='(D10.2)'), /rem)) : unknown
     widget_control, widget_info(self.base, find_by_uname='curfehuncert'), set_value=science.fehlower gt -100 ? strcompress(string(science.fehlower, format='(D10.2)'), /rem)+(science.fehupper ge -100 ? ' : '+strcompress(string(science.fehupper, format='(D10.2)'), /rem):'') : unknown
     widget_control, widget_info(self.base, find_by_uname='curha'), set_value=science.haew ne -999 ? strcompress(string(science.haew, format='(D10.2)'), /rem)+(science.haewerr le 0 ? '' : ' +/- '+strcompress(string(science.haewerr, format='(D10.2)'), /rem))+' A' : unknown
@@ -3138,7 +3176,7 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     wcuralha = widget_label(walphabase, value='     ', /align_left, uname='curalpha', uvalue='curalpha', xsize=150)
     walphauncertbase = widget_base(wcurobj, /align_center, /row)
     walphauncertlabel = widget_label(walphauncertbase,value='    ',/align_right,uname='alphauncertlabel',xsize=95)
-    wmguncert = widget_label(wmguncertbase,value='      ',/align_left, uname='curmguncert', uvalue='curmguncert', xsize=150)
+    walphauncert = widget_label(walphauncertbase,value='      ',/align_left, uname='curalphauncert', uvalue='curalphauncert', xsize=150)
     wvdispbase = widget_base(wcurobj, /align_center, /row)
     wvdisplabel = widget_label(wvdispbase, value='sigma_v = ', /align_right, uname='vdisplabel', xsize=95)
     wcurvdisp = widget_label(wvdispbase, value='     ', /align_left, uname='curvdisp', uvalue='curvdisp', xsize=150)
@@ -3166,8 +3204,8 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     wstatus = widget_text(wfile, xsize=108, value='Initializing ...', uname='status', uvalue='status', tab_mode=0)
 
     wspec = widget_base(wright, /frame, /column)
-    wspecplot = widget_draw(wspec, xsize=1600, ysize=400, uname='spec', /button_events, keyboard_events=1)
-    w2dplot = widget_draw(wspec, xsize=1600, ysize=300, uname='2d', /tracking_events, /motion_events)
+    wspecplot = widget_draw(wspec, xsize=1400, ysize=400, uname='spec', /button_events, keyboard_events=1)
+    w2dplot = widget_draw(wspec, xsize=1400, ysize=200, uname='2d', /tracking_events, /motion_events)
 
     wspeccontrol = widget_base(wright, /row, /align_center, tab_mode=1)
     wkeepoldfitcontrol = widget_base(wspeccontrol,/row,/frame)
@@ -3211,8 +3249,8 @@ function sps_fit::INIT, directory=directory, lowsn=lowsn
     self.indend   = ptr_new(indbandend)
     self.indname  = ptr_new(indname)
 
-   degendir = '/scr2/nichal/workspace4/sps_fit/sspdegen/sspdegen_ms0451/'
-   degenfile = file_search(degendir+'age*_sspdegen_gridspec_ms0451.fits',count=cdegenfile)
+   degendir = '/scr2/nichal/workspace4/sps_fit/sspdegen/sspdegen_sdss/'
+   degenfile = file_search(degendir+'age*_sspdegen_gridspec_sdss.fits',count=cdegenfile)
    for i=0,cdegenfile-1 do begin
       degen_sps = mrdfits(degenfile(i),1,/silent)
       if i eq 0 then begin
@@ -3354,7 +3392,9 @@ pro science__define
                extinction_g :-999d,$
                extinction_r :-999d,$
                extinction_i :-999d,$
-               extinction_z :-999d}
+               extinction_z :-999d,$
+               pfit:fltarr(13), $
+               pfiterr:fltarr(13)}
 end
 
 

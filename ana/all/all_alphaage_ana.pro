@@ -218,8 +218,11 @@ pro prepdata,sdssfile=sdssfile,cl0024file=cl0024file,ms0451file=ms0451file,$
    mwrfits,scicl0024,outfile,/silent
    mwrfits,scims0451,outfile,/silent
 end
-
-pro linearfit_mzr,sciall,prefix=prefix
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+pro linearfit_mzr,sciall,proball,prefix=prefix
+common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file
    won = where(sciall.goodsn eq 1)
   
    allmzrpar = linfitmc(sciall[won].logmstar-10.,sciall[won].feh,proball[won].dfeharr,proball[won].probfeh,$
@@ -227,30 +230,172 @@ pro linearfit_mzr,sciall,prefix=prefix
    allmarpar = linfitmc(sciall[won].logmstar-10.,sciall[won].ah,proball[won].daharr,proball[won].probdah,$
                         allmarerr,chisq=chiallmar);,/showplot)
 
-   won = where(sciall.zfit lt 0.15 and sciall.goodsn eq 1)
-   sdssmzrpar = linfitmc(sciall[won].logmstar-10.,sciall[won].feh,proball[won].dfeharr,proball[won].probfeh,$
-                        sdssmzrerr,chisq=chisdssmzr);,/showplot)
-   sdssmarpar = linfitmc(sciall[won].logmstar-10.,sciall[won].ah,proball[won].daharr,proball[won].probdah,$
-                        sdssmarerr,chisq=chisdssmar);,/showplot)
-   won = where(sciall.zfit gt 0.35 and sciall.zfit lt 0.42 and sciall.goodsn eq 1)
-   cl0024mzrpar = linfitmc(sciall[won].logmstar-10.,sciall[won].feh,proball[won].dfeharr,proball[won].probfeh,$
-                        cl0024mzrerr,chisq=chicl0024mzr);,/showplot)
-   cl0024marpar = linfitmc(sciall[won].logmstar-10.,sciall[won].ah,proball[won].daharr,proball[won].probdah,$
-                        cl0024marerr,chisq=chicl0024mar);,/showplot)
-   won = where(sciall.zfit gt 0.48 and sciall.goodsn eq 1)
-   ms0451mzrpar = linfitmc(sciall[won].logmstar-10.,sciall[won].feh,proball[won].dfeharr,proball[won].probfeh,$
-                        ms0451mzrerr,chisq=chims0451mzr);,/showplot)
-   ms0451marpar = linfitmc(sciall[won].logmstar-10.,sciall[won].ah,proball[won].daharr,proball[won].probdah,$
-                        ms0451marerr,chisq=chims0451mar);,/showplot)
-   save,allmzrpar,allmarpar,sdssmzrpar,sdssmarpar,cl0024mzrpar,cl0024marpar,ms0451mzrpar,ms0451marpar,filename='linfitpar_'+prefix+'.sav'
+   wonsdss = where(sciall.zfit lt 0.15 and sciall.goodsn eq 1)
+   sdssmzrpar = linfitmc(sciall[wonsdss].logmstar-10.,sciall[wonsdss].feh,proball[wonsdss].dfeharr,$
+                        proball[wonsdss].probfeh,sdssmzrerr,chisq=chisdssmzr);,/showplot)
+   sdssmarpar = linfitmc(sciall[wonsdss].logmstar-10.,sciall[wonsdss].ah,proball[wonsdss].daharr,$
+                        proball[wonsdss].probdah,sdssmarerr,chisq=chisdssmar);,/showplot)
+   woncl0024 = where(sciall.zfit gt 0.35 and sciall.zfit lt 0.42 and sciall.goodsn eq 1)
+   cl0024mzrpar = linfitmc(sciall[woncl0024].logmstar-10.,sciall[woncl0024].feh,proball[woncl0024].dfeharr,$
+                        proball[woncl0024].probfeh,cl0024mzrerr,chisq=chicl0024mzr);,/showplot)
+   cl0024marpar = linfitmc(sciall[woncl0024].logmstar-10.,sciall[woncl0024].ah,proball[woncl0024].daharr,$
+                       proball[woncl0024].probdah,cl0024marerr,chisq=chicl0024mar);,/showplot)
+   wonms0451 = where(sciall.zfit gt 0.48 and sciall.goodsn eq 1)
+   ms0451mzrpar = linfitmc(sciall[wonms0451].logmstar-10.,sciall[wonms0451].feh,proball[wonms0451].dfeharr,$
+                       proball[wonms0451].probfeh,ms0451mzrerr,chisq=chims0451mzr);,/showplot)
+   ms0451marpar = linfitmc(sciall[wonms0451].logmstar-10.,sciall[wonms0451].ah,proball[wonms0451].daharr,$
+                       proball[wonms0451].probdah,ms0451marerr,chisq=chims0451mar);,/showplot)
+   save,allmzrpar,allmarpar,sdssmzrpar,sdssmarpar,cl0024mzrpar,cl0024marpar,ms0451mzrpar,ms0451marpar,$
+        allmzrerr,allmarerr,sdssmzrerr,sdssmarerr,cl0024mzrerr,cl0024marerr,ms0451mzrerr,ms0451marerr,$
+        chiallmzr,chiallmar,chisdssmzr,chisdssmar,chicl0024mzr,chicl0024mar,chims0451mzr,chims0451mar,$
+        filename=linfitparam_file
+end
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+pro test_evolution_regression,sciall,proball,prefix=prefix
+common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file
+   ;read the linfit param
+   restore, linfitparam_file
+
+   ;two-sample t-test for slope and intercept
+   ;slope sdss and cl0024 FEH
+   print, ';;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;'
+   print, 'FEH:'
+   tslope_sdcl_feh = (sdssmzrpar[1]-cl0024mzrpar[1])/sqrt(sdssmzrerr[1]^2+cl0024mzrerr[1]^2)
+   print, 'normal t value for slope of SDSS and Cl0024 =',tslope_sdcl_feh
+   ;slope sdss and ms0451 FEH
+   tslope_sdms_feh = (sdssmzrpar[1]-ms0451mzrpar[1])/sqrt(sdssmzrerr[1]^2+ms0451mzrerr[1]^2)
+   print, 'normal t value for slope of SDSS and MS0451 =',tslope_sdms_feh
+   ;slope cl0024 and ms0451 FEH
+   tslope_clms_feh = (cl0024mzrpar[1]-ms0451mzrpar[1])/sqrt(cl0024mzrerr[1]^2+ms0451mzrerr[1]^2)
+   print, 'normal t value for slope of Cl0024 and MS0451 =',tslope_clms_feh
+   print, ';;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;'
+   print, 'MgH:'
+   tslope_sdcl_mgh = (sdssmarpar[1]-cl0024marpar[1])/sqrt(sdssmarerr[1]^2+cl0024marerr[1]^2)
+   print, 'normal t value for slope of SDSS and Cl0024 =',tslope_sdcl_mgh
+   ;slope sdss and ms0451 FEH
+   tslope_sdms_mgh = (sdssmarpar[1]-ms0451marpar[1])/sqrt(sdssmarerr[1]^2+ms0451marerr[1]^2)
+   print, 'normal t value for slope of SDSS and MS0451 =',tslope_sdms_mgh
+   ;slope cl0024 and ms0451 FEH
+   tslope_clms_mgh = (cl0024marpar[1]-ms0451marpar[1])/sqrt(cl0024marerr[1]^2+ms0451marerr[1]^2)
+   print, 'normal t value for slope of Cl0024 and MS0451 =',tslope_clms_mgh
+
+   ;use t values from here https://www.itl.nist.gov/div898/handbook/eda/section3/eda3672.htm
+   ;https://www.itl.nist.gov/div898/handbook/eda/section3/eda353.htm
+   print, ';;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;'
+   print, 'Two sample t-test'
+   print, 'Reject the null hypothesis that the two pop have the same slope if t values is larger than'
+   print, '(for large degree of freedom but less than 100)'
+   print, '2 sigma: |t| > 2'
+   print, '3 sigma: |t| > 3.2'
+   ;if cannot reject the null hypothesis then proceed to find common slope
+   ;http://www.biostathandbook.com/ancova.html  
+   ;http://www.stat.ucla.edu/~cochran/stat10/winter/lectures/lect21.html
+   ;find the weighted slope
+   fehcommonslope = (ms0451mzrpar[1]/ms0451mzrerr[1]^2+cl0024mzrpar[1]/cl0024mzrerr[1]^2+$
+                      sdssmzrpar[1]/sdssmzrerr[1]^2)/(1./ms0451mzrerr[1]^2+1./cl0024mzrerr[1]^2+$
+                      1./sdssmzrerr[1]^2)
+   fehcommonslope_err = 1./sqrt(1./ms0451mzrerr[1]^2+1./cl0024mzrerr[1]^2+1./sdssmzrerr[1]^2)
+   fehcommonslope_stdev = sqrt(((ms0451mzrpar[1]-fehcommonslope)^2/ms0451mzrerr[1]^2+$
+                                (cl0024mzrpar[1]-fehcommonslope)^2/cl0024mzrerr[1]^2+$
+                                (sdssmzrpar[1]-fehcommonslope)^2/sdssmzrerr[1]^2)/$
+                               (1./ms0451mzrerr[1]^2+1./cl0024mzrerr[1]^2+1./sdssmzrerr[1]^2)/3.)
+
+   mghcommonslope = (ms0451marpar[1]/ms0451marerr[1]^2+cl0024marpar[1]/cl0024marerr[1]^2+$
+                      sdssmarpar[1]/sdssmarerr[1]^2)/(1./ms0451marerr[1]^2+1./cl0024marerr[1]^2+$
+                      1./sdssmarerr[1]^2)
+   mghcommonslope_err = 1./sqrt(1./ms0451marerr[1]^2+1./cl0024marerr[1]^2+1./sdssmarerr[1]^2)
+   mghcommonslope_stdev = sqrt(((ms0451marpar[1]-mghcommonslope)^2/ms0451marerr[1]^2+$
+                                (cl0024marpar[1]-mghcommonslope)^2/cl0024marerr[1]^2+$
+                                (sdssmarpar[1]-mghcommonslope)^2/sdssmarerr[1]^2)/$
+                               (1./ms0451marerr[1]^2+1./cl0024marerr[1]^2+1./sdssmarerr[1]^2)/3.)
+   print, ';;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;'
+   print,'Common Slopes are: commonslope, uncertainty, standard deviation'
+   print, '   For [Fe/H] = ',fehcommonslope,fehcommonslope_err,fehcommonslope_stdev
+   print, '   For [Mg/H] = ',mghcommonslope,mghcommonslope_err,mghcommonslope_stdev
+   print, ';;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;'
+   ; Find difference in the intercepts when fitting with a fixed slope
+   wonsdss = where(sciall.zfit lt 0.15 and sciall.goodsn eq 1)
+   woncl0024 = where(sciall.zfit gt 0.35 and sciall.zfit lt 0.42 and sciall.goodsn eq 1)
+   wonms0451 = where(sciall.zfit gt 0.48 and sciall.goodsn eq 1)
+
+
+   sdssmzrpar_fixslope = [sdssmzrpar[0],fehcommonslope]
+   sdssmzryfit_fixslope = linfit_fixedslope_mc(sciall(wonsdss).logmstar-10.,sciall(wonsdss).feh,$
+                               proball(wonsdss).dfeharr,proball(wonsdss).probfeh,sdssmzrpar_fixslope,$
+                               sdssmzrerr_fixslope,chisq=sdssmzrchi_fixslope)
+   sdssmarpar_fixslope = [sdssmarpar[0],mghcommonslope]
+   sdssmaryfit_fixslope = linfit_fixedslope_mc(sciall(wonsdss).logmstar-10.,sciall(wonsdss).feh,$
+                               proball(wonsdss).dfeharr,proball(wonsdss).probfeh,sdssmarpar_fixslope,$
+                               sdssmarerr_fixslope,chisq=sdssmarchi_fixslope)
+
+   cl0024mzrpar_fixslope = [cl0024mzrpar[0],fehcommonslope]
+   cl0024mzryfit_fixslope = linfit_fixedslope_mc(sciall(woncl0024).logmstar-10.,sciall(woncl0024).feh,$
+                               proball(woncl0024).dfeharr,proball(woncl0024).probfeh,cl0024mzrpar_fixslope,$
+                               cl0024mzrerr_fixslope,chisq=cl0024mzrchi_fixslope)
+   cl0024marpar_fixslope = [cl0024marpar[0],mghcommonslope]
+   cl0024maryfit_fixslope = linfit_fixedslope_mc(sciall(woncl0024).logmstar-10.,sciall(woncl0024).feh,$
+                               proball(woncl0024).dfeharr,proball(woncl0024).probfeh,cl0024marpar_fixslope,$
+                               cl0024marerr_fixslope,chisq=cl0024marchi_fixslope)
+
+   ms0451mzrpar_fixslope = [ms0451mzrpar[0],fehcommonslope]
+   ms0451mzryfit_fixslope = linfit_fixedslope_mc(sciall(wonms0451).logmstar-10.,sciall(wonms0451).feh,$
+                               proball(wonms0451).dfeharr,proball(wonms0451).probfeh,ms0451mzrpar_fixslope,$
+                               ms0451mzrerr_fixslope,chisq=ms0451mzrchi_fixslope)
+   ms0451marpar_fixslope = [ms0451marpar[0],mghcommonslope]
+   ms0451maryfit_fixslope = linfit_fixedslope_mc(sciall(wonms0451).logmstar-10.,sciall(wonms0451).feh,$
+                               proball(wonms0451).dfeharr,proball(wonms0451).probfeh,ms0451marpar_fixslope,$
+                               ms0451marerr_fixslope,chisq=ms0451marchi_fixslope)
+
+   print, 'Linear fit with common fixed slope:'
+   print, 'FeH'
+   print, 'cluster         slope           intercept          intercepterr'
+   print, 'SDSS ',sdssmzrpar_fixslope[1], sdssmzrpar_fixslope[0], sdssmzrerr_fixslope[0]
+   print, 'Cl0024 ',cl0024mzrpar_fixslope[1], cl0024mzrpar_fixslope[0], cl0024mzrerr_fixslope[0]
+   print, 'MS0451 ',ms0451mzrpar_fixslope[1], ms0451mzrpar_fixslope[0], ms0451mzrerr_fixslope[0]
+   print, 'MgH'
+   print, 'cluster         slope           intercept          intercepterr'
+   print, 'SDSS ',sdssmarpar_fixslope[1], sdssmarpar_fixslope[0], sdssmarerr_fixslope[0]
+   print, 'Cl0024 ',cl0024marpar_fixslope[1], cl0024marpar_fixslope[0], cl0024marerr_fixslope[0]
+   print, 'MS0451 ',ms0451marpar_fixslope[1], ms0451marpar_fixslope[0], ms0451marerr_fixslope[0]
+
+   ;z test comparing two means
+   tconst_sdcl_feh = ((sdssmzrpar_fixslope[0]-cl0024mzrpar_fixslope[0])-0.)/$
+                  sqrt(sdssmzrerr_fixslope[0]^2+cl0024mzrerr_fixslope[0]^2)
+   tconst_sdcl_mgh = ((sdssmarpar_fixslope[0]-cl0024marpar_fixslope[0])-0.)/$
+                  sqrt(sdssmarerr_fixslope[0]^2+cl0024marerr_fixslope[0]^2)
+   tconst_sdms_feh = ((sdssmzrpar_fixslope[0]-ms0451mzrpar_fixslope[0])-0.)/$
+                  sqrt(sdssmzrerr_fixslope[0]^2+ms0451mzrerr_fixslope[0]^2)
+   tconst_sdms_mgh = ((sdssmarpar_fixslope[0]-ms0451marpar_fixslope[0])-0.)/$
+                  sqrt(sdssmarerr_fixslope[0]^2+ms0451marerr_fixslope[0]^2)
+   tconst_clms_feh = ((cl0024mzrpar_fixslope[0]-ms0451mzrpar_fixslope[0])-0.)/$
+                  sqrt(cl0024mzrerr_fixslope[0]^2+ms0451mzrerr_fixslope[0]^2)
+   tconst_clms_mgh = ((cl0024marpar_fixslope[0]-ms0451marpar_fixslope[0])-0.)/$
+                  sqrt(cl0024marerr_fixslope[0]^2+ms0451marerr_fixslope[0]^2)
+
+   save, tconst_sdcl_feh,tconst_sdcl_mgh,tconst_sdms_feh,$
+         tconst_sdms_mgh,tconst_clms_feh,tconst_clms_mgh,$
+         tslope_sdcl_feh,tslope_sdcl_mgh,tslope_sdms_feh,$
+         tslope_sdms_mgh,tslope_clms_feh,tslope_clms_mgh,$
+         fehcommonslope,fehcommonslope_err,fehcommonslope_stdev,$
+         mghcommonslope,mghcommonslope_err,mghcommonslope_stdev,$
+         sdssmzrpar_fixslope,cl0024mzrpar_fixslope,ms0451marpar_fixslope,$
+         sdssmzrerr_fixslope,cl0024mzrerr_fixslope,ms0451mzrerr_fixslope,$
+         sdssmzrchi_fixslope,cl0024mzrchi_fixslope,ms0451mzrchi_fixslope,$
+         sdssmarchi_fixslope,cl0024marchi_fixslope,ms0451marchi_fixslope,$
+         filename=linfitparam_fixslope_file
 end
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 pro average_mzr,sciall,proball,prefix=prefix
+common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file
    ;set values for each sample set (clusters)
    zmin = [0.,0.35,0.48]
    zmax = [0.15,0.42,0.6]
    ngalperbin = [10,8,8]
-  
  
    for jj=0,2 do begin
       nperbin = ngalperbin[jj]
@@ -301,19 +446,21 @@ pro average_mzr,sciall,proball,prefix=prefix
       if jj eq 1 then cl0024_avestr = outstr
       if jj eq 2 then ms0451_avestr = outstr
    endfor
-   save, sdss_avestr,cl0024_avestr,ms0451_avestr,filename='aveparam_'+prefix+'.sav'  
-   stop
+   save, sdss_avestr,cl0024_avestr,ms0451_avestr,filename=aveparam_file
 end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;MAIN PROGRAM;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 pro all_alphaage_ana,domgo=domgo
+common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file
 
    redodatamgn = 0
    redodatamgo = 0
-   redolinearfit = 1
-   redoaverage = 1
+   redoaverage = 0
+   redolinearfit = 0
+   retest_evolution_regression = 1
 
+;set up
    if ~keyword_set(domgo) then begin
       domgn=1
       domgo=0
@@ -327,7 +474,13 @@ pro all_alphaage_ana,domgo=domgo
    if redodatamgn or redodatamgo then begin
       redolinearfit = 1
       redoaverage = 1
+      redo_evolution_regression = 1
     endif
+
+;file names
+   aveparam_file = 'aveparam_'+prefix+'.sav'
+   linfitparam_file = 'linfitpar_'+prefix+'.sav'
+   linfitparam_fixslope_file = 'linfitpar_fixslope_'+prefix+'.sav'
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    ;;;PREP DATA;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -375,7 +528,7 @@ pro all_alphaage_ana,domgo=domgo
    ;average and get the highlight
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    if redoaverage eq 1 then average_mzr,sciall,proball,prefix=prefix
-   restore,'aveparam_'+prefix+'.sav' 
+   restore, aveparam_file  
 ;     output: sdss_avestr,cl0024_avestr,ms0451_avestr
 ;             = {galperbin:nperbin,massbins:massbins_now,ave_mass:ave_mass_now,$
 ;                ave_mass_dev:ave_mass_dev_now,ave_feh:ave_feh_now,$
@@ -385,61 +538,104 @@ pro all_alphaage_ana,domgo=domgo
    ;linear fit to all data
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-   if redolinearfit eq 1 then linearfit_mzr,sciall,prefix=prefix 
-   restore,'linfitpar_'+prefix+'.sav'
+   if redolinearfit eq 1 then linearfit_mzr,sciall,proball,prefix=prefix 
+   restore,linfitparam_file 
 
    print, 'MZR PARAMETERS'
-   print, 'cluster       intercept         slope'
+   print, 'cluster       intercept         slope         chisq'
    print, 'ALL     '+string(allmzrpar[0],format='(f5.2)')+'+/-'+strtrim(string(allmzrerr[0],format='(f5.2)'),2)+$
-          '        '+string(allmzrpar[1],format='(f5.2)')+'+/-'+strtrim(string(allmzrerr[1],format='(f5.2)'),2)
+          '        '+string(allmzrpar[1],format='(f5.2)')+'+/-'+strtrim(string(allmzrerr[1],format='(f5.2)'),2)+$
+          '        '+string(chiallmzr,format='(f5.2)')
    print, 'SDSS    '+string(sdssmzrpar[0],format='(f5.2)')+'+/-'+strtrim(string(sdssmzrerr[0],format='(f5.2)'),2)+$
-          '        '+string(sdssmzrpar[1],format='(f5.2)')+'+/-'+strtrim(string(sdssmzrerr[1],format='(f5.2)'),2)
+          '        '+string(sdssmzrpar[1],format='(f5.2)')+'+/-'+strtrim(string(sdssmzrerr[1],format='(f5.2)'),2)+$
+          '        '+string(chisdssmzr,format='(f5.2)')
    print, 'Cl0024  '+string(cl0024mzrpar[0],format='(f5.2)')+'+/-'+strtrim(string(cl0024mzrerr[0],format='(f5.2)'),2)+$
-          '        '+string(cl0024mzrpar[1],format='(f5.2)')+'+/-'+strtrim(string(cl0024mzrerr[1],format='(f5.2)'),2)
+          '        '+string(cl0024mzrpar[1],format='(f5.2)')+'+/-'+strtrim(string(cl0024mzrerr[1],format='(f5.2)'),2)+$
+          '        '+string(chicl0024mzr,format='(f5.2)')
    print, 'MS0451  '+string(ms0451mzrpar[0],format='(f5.2)')+'+/-'+strtrim(string(ms0451mzrerr[0],format='(f5.2)'),2)+$
-          '        '+string(ms0451mzrpar[1],format='(f5.2)')+'+/-'+strtrim(string(ms0451mzrerr[1],format='(f5.2)'),2)
+          '        '+string(ms0451mzrpar[1],format='(f5.2)')+'+/-'+strtrim(string(ms0451mzrerr[1],format='(f5.2)'),2)+$
+          '        '+string(chims0451mzr,format='(f5.2)')
    print, 'MAR PARAMETERS'
    print, 'cluster       intercept         slope'
    print, 'ALL     '+string(allmarpar[0],format='(f5.2)')+'+/-'+strtrim(string(allmarerr[0],format='(f5.2)'),2)+$
-          '        '+string(allmarpar[1],format='(f5.2)')+'+/-'+strtrim(string(allmarerr[1],format='(f5.2)'),2)
+          '        '+string(allmarpar[1],format='(f5.2)')+'+/-'+strtrim(string(allmarerr[1],format='(f5.2)'),2)+$
+          '        '+string(chiallmar,format='(f5.2)')
    print, 'SDSS    '+string(sdssmarpar[0],format='(f5.2)')+'+/-'+strtrim(string(sdssmarerr[0],format='(f5.2)'),2)+$
-          '        '+string(sdssmarpar[1],format='(f5.2)')+'+/-'+strtrim(string(sdssmarerr[1],format='(f5.2)'),2)
+          '        '+string(sdssmarpar[1],format='(f5.2)')+'+/-'+strtrim(string(sdssmarerr[1],format='(f5.2)'),2)+$
+          '        '+string(chisdssmar,format='(f5.2)')
    print, 'Cl0024  '+string(cl0024marpar[0],format='(f5.2)')+'+/-'+strtrim(string(cl0024marerr[0],format='(f5.2)'),2)+$
-          '        '+string(cl0024marpar[1],format='(f5.2)')+'+/-'+strtrim(string(cl0024marerr[1],format='(f5.2)'),2)
+          '        '+string(cl0024marpar[1],format='(f5.2)')+'+/-'+strtrim(string(cl0024marerr[1],format='(f5.2)'),2)+$
+          '        '+string(chicl0024mar,format='(f5.2)')
    print, 'MS0451  '+string(ms0451marpar[0],format='(f5.2)')+'+/-'+strtrim(string(ms0451marerr[0],format='(f5.2)'),2)+$
-          '        '+string(ms0451marpar[1],format='(f5.2)')+'+/-'+strtrim(string(ms0451marerr[1],format='(f5.2)'),2)
-
+          '        '+string(ms0451marpar[1],format='(f5.2)')+'+/-'+strtrim(string(ms0451marerr[1],format='(f5.2)'),2)+$
+          '        '+string(chims0451mar,format='(f5.2)')
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
    ;TEST EVOLUTION;;;;;;;;;;;;;;;;
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
-   
-   ;normal z test for slope and intercept
-   ;slope sdss and cl0024 FEH
-   zslope = (sdssmzrpar[1]-cl0024mzrpar[1])/sqrt(sdssmzrerr[1]^2+cl0024mzrerr[1]^2)
-   print, 'normal z value for slope of SDSS and Cl0024 =',zslope
-   ;slope sdss and ms0451 FEH
-   zslope = (sdssmzrpar[1]-ms0451mzrpar[1])/sqrt(sdssmzrerr[1]^2+ms0451mzrerr[1]^2)
-   print, 'normal z value for slope of SDSS and MS0451 =',zslope
-   ;slope cl0024 and ms0451 FEH
-   zslope = (cl0024mzrpar[1]-ms0451mzrpar[1])/sqrt(cl0024mzrerr[1]^2+ms0451mzrerr[1]^2)
-   print, 'normal z value for slope of Cl0024 and MS0451 =',zslope
-stop
-   ;The z value is ~-0.5 which is p=0.3. The slopes are not different. So can proceed to do intercept according to
-   ;http://www.biostathandbook.com/ancova.html 
+
+ 
+   ;FIRST, TEST WITH REGRESSION
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+   if retest_evolution_regression eq 1 then test_evolution_regression,sciall,proball,prefix=prefix 
+   restore,linfitparam_fixslope_file
+   print, ';;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;'
+   print, 'FEH:'
+   print, 'normal t value for slope of SDSS and Cl0024 =',tslope_sdcl_feh
+   print, 'normal t value for slope of SDSS and MS0451 =',tslope_sdms_feh
+   print, 'normal t value for slope of Cl0024 and MS0451 =',tslope_clms_feh
+   print, ';;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;'
+   print, 'MgH:'
+   print, 'normal t value for slope of SDSS and Cl0024 =',tslope_sdcl_mgh
+   print, 'normal t value for slope of SDSS and MS0451 =',tslope_sdms_mgh
+   print, 'normal t value for slope of Cl0024 and MS0451 =',tslope_clms_mgh
+
+   ;use t values from here https://www.itl.nist.gov/div898/handbook/eda/section3/eda3672.htm
+   ;https://www.itl.nist.gov/div898/handbook/eda/section3/eda353.htm
+   print, ';;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;'
+   print, 'Two sample t-test'
+   print, 'Reject the null hypothesis that the two pop have the same slope if t values is larger than'
+   print, '(for large degree of freedom but less than 100)'
+   print, '2 sigma: |t| > 2'
+   print, '3 sigma: |t| > 3.2'
+   ;if cannot reject the null hypothesis then proceed to find common slope
+   ;http://www.biostathandbook.com/ancova.html  
+   ;http://www.stat.ucla.edu/~cochran/stat10/winter/lectures/lect21.html
    ;find the weighted slope
-;   commonslope = (lin_mzr_cl(1)/lin_mzr_cl_err(1)^2+lin_mzr_sdss(1)/lin_mzr_sdss_err(1)^2)$
-;                 /(1./lin_mzr_cl_err(1)^2+1./lin_mzr_sdss_err(1)^2)
-;   commonslope_err = 1./sqrt(1./lin_mzr_cl_err(1)^2+1./lin_mzr_sdss_err(1)^2)
-;   commonslope_stdev = sqrt(((lin_mzr_cl(1)-commonslope)^2/lin_mzr_cl_err(1)^2+$
-;                             (lin_mzr_sdss(1)-commonslope)^2/lin_mzr_sdss_err(1)^2)/$
-;                            (1./lin_mzr_cl_err(1)^2+1./lin_mzr_sdss_err(1)^2)/2.)
-;
-;   print, 'common slope',commonslope,commonslope_err,commonslope_stdev
+   print, ';;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;'
+   print,'Common Slopes are: commonslope, uncertainty, standard deviation'
+   print, '   For [Fe/H] = ',fehcommonslope,fehcommonslope_err,fehcommonslope_stdev
+   print, '   For [Mg/H] = ',mghcommonslope,mghcommonslope_err,mghcommonslope_stdev
+   print, ';;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;'
+   print, 'Linear fit with common fixed slope:'
+   print, 'FeH'
+   print, 'cluster         slope           intercept          intercepterr'
+   print, 'SDSS ',sdssmzrpar_fixslope[1], sdssmzrpar_fixslope[0], sdssmzrerr_fixslope[0]
+   print, 'Cl0024 ',cl0024mzrpar_fixslope[1], cl0024mzrpar_fixslope[0], cl0024mzrerr_fixslope[0]
+   print, 'MS0451 ',ms0451mzrpar_fixslope[1], ms0451mzrpar_fixslope[0], ms0451mzrerr_fixslope[0]
+   print, 'MgH'
+   print, 'cluster         slope           intercept          intercepterr'
+   print, 'SDSS ',sdssmarpar_fixslope[1], sdssmarpar_fixslope[0], sdssmarerr_fixslope[0]
+   print, 'Cl0024 ',cl0024marpar_fixslope[1], cl0024marpar_fixslope[0], cl0024marerr_fixslope[0]
+   print, 'MS0451 ',ms0451marpar_fixslope[1], ms0451marpar_fixslope[0], ms0451marerr_fixslope[0]
+   ;t test comparing two intercepts with fixed slope
+   print, ';;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;'
+   print, 'FEH:'
+   print, 'normal t value for slope of SDSS and Cl0024 =',tconst_sdcl_feh
+   print, 'normal t value for slope of SDSS and MS0451 =',tconst_sdms_feh
+   print, 'normal t value for slope of Cl0024 and MS0451 =',tconst_clms_feh
+   print, ';;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;'
+   print, 'MgH:'
+   print, 'normal t value for slope of SDSS and Cl0024 =',tconst_sdcl_mgh
+   print, 'normal t value for slope of SDSS and MS0451 =',tconst_sdms_mgh
+   print, 'normal t value for slope of Cl0024 and MS0451 =',tconst_clms_mgh
+stop
+   ;SECOND, TEST WITH ANOVA FOR EACH MASS BIN
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
    ;group into mass bins then compare the three redshifts from each mass bin with ANOVA
     
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
-   ;REFERENCE VALUES
+   ;REFERENCE VALUES FOR PLOTTING
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    restore,'/scr2/nichal/workspace4/ana/ms0451/leetho18a_avevals.sav'
    hifeh_cl0024 = hifeh
