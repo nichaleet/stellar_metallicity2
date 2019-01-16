@@ -1,11 +1,113 @@
-pro separate_cluster,sciall,wonsdss,woncl0024,wonms0451,cwonsdss,cwoncl0024,cwonms0451
-  
-   wonsdss = where(sciall.zfit lt 0.15 and sciall.goodsn eq 1,cwonsdss)
-   woncl0024 = where(sciall.zfit gt 0.35 and sciall.zfit lt 0.42 and sciall.goodsn eq 1,cwoncl0024)
-   wonms0451 = where(sciall.zfit gt 0.48 and sciall.goodsn eq 1,cwonms0451)
+function get_refvalue,dummy,leetho18=leetho18,gallazzi05=gallazzi05,choi14=choi14,$
+              conroy14=conroy14,derossi17=derossi17,sybilska17=sybilska17
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
+   ;REFERENCE VALUES FOR PLOTTING
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+   if keyword_set(leetho18) then begin
+      restore,'/scr2/nichal/workspace4/ana/ms0451/leetho18a_avevals.sav'
+      outstr = {hifeh_cl0024:hifeh,lofeh_cl0024:lofeh,bndry_mass_cl0024:bndry_mass,$
+                HIFEH_SDSS:HIFEH_SDSS,LOFEH_SDSS:LOFEH_SDSS,BNDRY_MASS_SDSS:BNDRY_MASS_SDSS}
+      return,outstr
+   endif
+ 
+   ;Get the average values measured in Gallazzi05
+   if keyword_set(gallazzi05) then begin
+      mass = [9.00,9.11,9.31,9.51,9.72,9.91,10.11,10.31,10.51,10.72,10.91,11.11,11.31,11.5];the first mass is actually 8.91
+      feh  = [-0.6,-0.61,-0.65,-0.61,-0.52,-0.41,-0.23,-0.11,-0.01,0.04,0.07,0.10,0.12,0.13]
+      ;below are the stars in the figure 8 of Gallazzi05
+      feherr = [0.62,0.56,0.59,0.55,0.47,0.43,0.35,0.31,0.27,0.25,0.22,0.21,0.2,0.2]/2.
+      fehlo = g05_feh-g05_feherr
+      fehhi = g05_feh+g05_feherr
+      outstr = {mass:mass,feh:feh,feherr:feherr,fehlo:fehlo,fehhi:fehhi}
+      return,outstr
+   endif
+
+   ;Choi's Data
+   if keyword_set(choi14) then begin
+      Choi14z01 = {zlow:0.1,zhigh:0.2,mass:[9.9,10.2,10.4,10.7,11.0],$
+                   Feh:[-0.05,-0.06,-0.01,-0.03,0.02],Feherr:[0.04,0.02,0.01,0.01,0.01],$
+                   mgfe:[0.04,0.13,0.16,0.21,0.23],mgfeerr:[0.05,0.03,0.01,0.01,0.02]}
+      Choi14z02 = {zlow:0.2,zhigh:0.3,mass:[10.2,10.5,10.7,11.0,11.3],$
+                   Feh:[-0.08,-0.06,-0.03,-0.01,-0.05],Feherr:[0.04,0.02,0.01,0.01,0.02],$
+                   mgfe:[0.17,0.19,0.20,0.22,0.23],mgfeerr:[0.06,0.02,0.01,0.02,0.04]}
+      Choi14z03 = {zlow:0.3,zhigh:0.4,mass:[10.5,10.8,11.0,11.3,-99],$
+                   Feh:[-0.11,-0.05,-0.02,-0.03,-99],Feherr:[0.03,0.01,0.01,0.02,-99],$
+                   mgfe:[0.18,0.22,0.21,0.29,-99],mgfeerr:[0.04,0.02,0.01,0.03,-99]}
+      Choi14z04 = {zlow:0.4,zhigh:0.55,mass:[10.8,11.1,11.3,-99,-99],$
+                   Feh:[-0.07,-0.04,-0.05,-99,-99],Feherr:[0.02,0.01,0.02,-99,-99],$
+                   mgfe:[0.23,0.23,0.30,-99,-99],mgfeerr:[0.04,0.02,0.03,-99,-99]}
+      Choi14z06 = {zlow:0.55,zhigh:0.7,mass:[10.9,11.0,11.3,-99,-99],$
+                   Feh:[-0.15,-0.02,-0.05,-99,-99],Feherr:[0.07,0.03,0.03,-99,-99],$
+                   mgfe:[0.05,0.09,0.19,-99,-99],mgfeerr:[0.13,0.05,0.04,-99,-99]}
+      return, [Choi14z01,Choi14z02,Choi14z03,Choi14z04,Choi14z06]
+   endif
+   
+   if keyword_set(conroy14) then begin
+      conroy = {mass:[9.63,9.75,9.80,10.08,10.55,10.70,11.07],Feh:[-0.07,-0.05,-0.04,-0.03,-0.01,-0.02,0.],$
+                MgFe:[.05,0.08,0.09,0.12,0.15,0.20,0.22]}
+      return, conroy
+   endif
+
+   if keyword_set(ma16) then begin
+   ;Xiangcheng's FIRE data
+      readcol,'/scr2/nichal/workspace2/catalogs/xiangcheng_ma/mzr_z0pt8.txt',mass08,feh08
+      readcol,'/scr2/nichal/workspace2/catalogs/xiangcheng_ma/mzr_z0.txt',mass0,feh0
+      feh08 = feh08-0.2
+      feh0 = feh0-0.2
+      outstr = {mass08:mass08,feh08:feh08,mass0:mass0,feh0:feh0}
+      return, outstr
+   endif
+
+   if keyword_set(derossi17) then begin
+   ;De Rossi 2017 (EAGLE)
+   ;read off from Figure 5
+      DeRossi_z0={z:0.,mass:[9.15,9.48,9.81,10.15,10.5,10.72],feh:[-0.17,-0.08,0.05,0.12,0.17,0.31],feherr:[0.075,0.08,0.07,0.07,0.07,0.03]}
+      DeRossi_z1={z:1.,mass:[9.18,9.47,9.85,10.15,10.55,-99],feh:[-0.39,-0.28,-0.09,0.08,0.17,-99],feherr:[0.06,0.06,0.08,0.07,0.085,0]}
+      return, [DeRossi_z0,DeRossi_z1]
+   endif
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+   ;Sybilska et al 2017 (hELENa, IFU from Sauron data)
+   if keyword_set(sybilska17) then begin
+      aa=read_csv('/scr2/nichal/workspace2/catalogs/sybilska.csv',n_table_header=1,header=header)
+      Syb_z0 = {mass:aa.field1,feh:aa.field2}
+      return, syb_z0
+   endif
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+   ;Lu 2014
+   if keyword_set(lu14) then begin
+      Lu_z0 = {model:'luz0',mass:[8.21,8.61,9.0,9.41,9.8,10.2,10.61,11],$
+              feh:[-0.53,-0.43,-0.35,-0.26,-0.16,-0.098,-0.075,-0.09],$
+              feherr:[0.13,0.12,0.11,0.12,0.11,0.10,0.095,0.095]}
+      Lu_z1 = {model:'luz',mass:[8.21,8.61,9.0,9.4,9.8,10.2,10.6,11],$
+              feh:[-0.56,-0.44,-0.35,-0.25,-0.18,-0.13,-0.11,-0.11],$
+              feherr:[0.14,0.13,0.11,0.11,0.11,0.10,0.10,0.09]}
+      Lu_somerville_z0 = {model:'lusomervillez0',mass:[-99,8.25,8.65,9.05,9.45,9.85,10.25,10.64],$
+                         feh:[-99,-1.00,-0.82,-0.64,-0.46,-0.33,-0.15,-0.03],$
+                         feherr:[0,0.06,0.1,0.1,0.1,0.1,0.10,0.095]}
+      Lu_lu_z0 = {model:'luluz0',mass:[8.73,8.95,9.18,9.47,9.76,10.09,10.46,10.88],$
+                 feh:[-.99,-0.84,-0.70,-0.52,-0.31,-0.06,0.18],$
+                 feherr:[0.1,0.1,0.1,0.1,0.1,0.1,0.10,0.095]}
+      return,[lu_z0,Lu_z1,Lu_somerville_z0,Lu_lu_z0]
+   endif
+end
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+pro separate_cluster,sciall,wonsdss,woncl0024,wonms0451,cwonsdss,cwoncl0024,cwonms0451,badsn=badsn
+   if ~keyword_set(badsn) then begin  
+      wonsdss = where(sciall.zfit lt 0.15 and sciall.goodsn eq 1,cwonsdss)
+      woncl0024 = where(sciall.zfit gt 0.35 and sciall.zfit lt 0.42 and sciall.goodsn eq 1,cwoncl0024)
+      wonms0451 = where(sciall.zfit gt 0.48 and sciall.goodsn eq 1,cwonms0451)
+   endif else begin
+      wonsdss = where(sciall.zfit lt 0.15 and sciall.goodsn eq 0,cwonsdss)
+      woncl0024 = where(sciall.zfit gt 0.35 and sciall.zfit lt 0.42 and sciall.goodsn eq 0,cwoncl0024)
+      wonms0451 = where(sciall.zfit gt 0.48 and sciall.goodsn eq 0,cwonms0451)
+   endelse
 
 end
-
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 pro prepdata,sdssfile=sdssfile,cl0024file=cl0024file,ms0451file=ms0451file,$
              sdssprob=sdssprob,cl0024prob=cl0024prob,ms0451prob=ms0451prob,$
              outfile=outfile,plot=plot
@@ -15,7 +117,7 @@ pro prepdata,sdssfile=sdssfile,cl0024file=cl0024file,ms0451file=ms0451file,$
               fehupper:99.,fehlower:99.,alphafe:99.,alphafeerr:99.,$
               alphafeupper:99.,alphafelower:99.,logmstar:99.,oiiew:99.,$
               oiiewerr:99.,vdisp:99.,vdisperr:99.,pfit:fltarr(13),pfiterr:fltarr(13),$
-              ah:99.,ahupper:99.,ahlower:99,goodsn:1b,ageform:99.} 
+              ah:99.,ahupper:99.,ahlower:99.,goodsn:1b,ageform:99.} 
 
    ;GETTING SCI DATA
    sciall=[]
@@ -58,7 +160,7 @@ pro prepdata,sdssfile=sdssfile,cl0024file=cl0024file,ms0451file=ms0451file,$
    ;change to gt 6 to reduce the s/n criteria to ~9 per rest Angstrom so that the sample size is similar to Leethochawalit2018
    goodspec = bytarr(cgood)
    goodspec(goodfit) = 1
-
+   
    str = replicate(scitemp,cgood)
    struct_assign,scinow,str
    sciall = [sciall,str]
@@ -100,6 +202,11 @@ pro prepdata,sdssfile=sdssfile,cl0024file=cl0024file,ms0451file=ms0451file,$
    sciall.ageform = (galage(sciall.zfit,1000.)/1.e9-sciall.age)>0. ;age of universe when it was formed
    sciall.ah = sciall.feh+sciall.alphafe
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+   outlier = where(sciall.ah lt -0.3 and sciall.logmstar gt 10.1 and sciall.logmstar lt 10.4 $
+                   and sciall.goodsn eq 1 and sciall.zfit gt 0.3 and sciall.zfit lt 0.5,coutlier)
+   print,'excluding', coutlier, ' outliers from cl0024'
+   if coutlier gt 0 then sciall(outlier).goodsn=0
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    ngals = n_elements(sciall)
    dfeharr   = fltarr(51,ngals)
    dagearr   = fltarr(51,ngals)
@@ -230,9 +337,9 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 pro linearfit_mzr,sciall,proball,prefix=prefix
-common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file
+common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file,fileanova,deviationparam_file
    won = where(sciall.goodsn eq 1,cwon)
-  
+   
    allmzrpar = linfitmc(sciall[won].logmstar-10.,sciall[won].feh,proball[won].dfeharr,proball[won].probfeh,$
                         allmzrerr,chisq=chiallmzr);,/showplot)
    allmarpar = linfitmc(sciall[won].logmstar-10.,sciall[won].ah,proball[won].daharr,proball[won].probdah,$
@@ -269,7 +376,7 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 pro test_evolution_regression,sciall,proball,prefix=prefix
-common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file
+common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file,fileanova,deviationparam_file
    ;read the linfit param
    restore, linfitparam_file
 
@@ -313,8 +420,8 @@ common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file
                                proball(wonsdss).dfeharr,proball(wonsdss).probfeh,sdssmzrpar_fixslope,$
                                sdssmzrerr_fixslope,chisq=sdssmzrchi_fixslope)
    sdssmarpar_fixslope = [sdssmarpar[0],mghcommonslope]
-   sdssmaryfit_fixslope = linfit_fixedslope_mc(sciall(wonsdss).logmstar-10.,sciall(wonsdss).feh,$
-                               proball(wonsdss).dfeharr,proball(wonsdss).probfeh,sdssmarpar_fixslope,$
+   sdssmaryfit_fixslope = linfit_fixedslope_mc(sciall(wonsdss).logmstar-10.,sciall(wonsdss).ah,$
+                               proball(wonsdss).daharr,proball(wonsdss).probdah,sdssmarpar_fixslope,$
                                sdssmarerr_fixslope,chisq=sdssmarchi_fixslope)
 
    cl0024mzrpar_fixslope = [cl0024mzrpar[0],fehcommonslope]
@@ -322,8 +429,8 @@ common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file
                                proball(woncl0024).dfeharr,proball(woncl0024).probfeh,cl0024mzrpar_fixslope,$
                                cl0024mzrerr_fixslope,chisq=cl0024mzrchi_fixslope)
    cl0024marpar_fixslope = [cl0024marpar[0],mghcommonslope]
-   cl0024maryfit_fixslope = linfit_fixedslope_mc(sciall(woncl0024).logmstar-10.,sciall(woncl0024).feh,$
-                               proball(woncl0024).dfeharr,proball(woncl0024).probfeh,cl0024marpar_fixslope,$
+   cl0024maryfit_fixslope = linfit_fixedslope_mc(sciall(woncl0024).logmstar-10.,sciall(woncl0024).ah,$
+                               proball(woncl0024).daharr,proball(woncl0024).probdah,cl0024marpar_fixslope,$
                                cl0024marerr_fixslope,chisq=cl0024marchi_fixslope)
 
    ms0451mzrpar_fixslope = [ms0451mzrpar[0],fehcommonslope]
@@ -331,8 +438,8 @@ common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file
                                proball(wonms0451).dfeharr,proball(wonms0451).probfeh,ms0451mzrpar_fixslope,$
                                ms0451mzrerr_fixslope,chisq=ms0451mzrchi_fixslope)
    ms0451marpar_fixslope = [ms0451marpar[0],mghcommonslope]
-   ms0451maryfit_fixslope = linfit_fixedslope_mc(sciall(wonms0451).logmstar-10.,sciall(wonms0451).feh,$
-                               proball(wonms0451).dfeharr,proball(wonms0451).probfeh,ms0451marpar_fixslope,$
+   ms0451maryfit_fixslope = linfit_fixedslope_mc(sciall(wonms0451).logmstar-10.,sciall(wonms0451).ah,$
+                               proball(wonms0451).daharr,proball(wonms0451).probdah,ms0451marpar_fixslope,$
                                ms0451marerr_fixslope,chisq=ms0451marchi_fixslope)
    sdssmzrchi_fixslope = sdssmzrchi_fixslope/cwonsdss
    sdssmarchi_fixslope = sdssmarchi_fixslope/cwonsdss
@@ -371,6 +478,56 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+pro ancova,sciall,proball,fileancova=fileancova
+   won = where(sciall.goodsn eq 1,nobjs)
+   ;fit linear regression with monte carlo technique 
+   ;setting up all the neccesary parameters
+   feh  = sciall[won].feh
+   dfeh = proball[won].dfeharr
+   probdfeh = proball[won].probfeh
+
+   mgh = sciall[won].ah
+   dmgh = proball[won].daharr
+   probdmgh = proball[won].probdah
+
+   mass = sciall[won].logmstar-10.
+
+   redshift = sciall[won].zfit
+   cl = fltarr(cwon)
+   ms = fltarr(cwon)
+   woncl = where(redshift gt 0.35 and redshift lt 0.42,cwoncl)
+   wonms = where(redshift gt 0.48 and redshift lt 0.65,cwonms)
+   cl(woncl) = 1
+   ms(wonms) = 1
+
+   m_cl = cl*mass
+   m_ms = ms*mass
+
+   ;first with the simple model (no interaction terms)
+   x = [transpose(mass),transpose(cl),transpose(ms)]
+   df1_mo1 = 3
+   df2_mo1 = nobjs-df1_mo1-1
+   coeff_feh_mo1 = regress_mc(x,feh,dfeh,probdfeh,const=const_feh_mo1,sigmacoeff=sigma_feh_mo1,$
+                      rsq=rsq_feh_mo1,stderror=stderror_feh_mo1,adj_rsq=adjrsq_feh_mo1)
+   coeff_mgh_mo1 = regress_mc(x,mgh,dmgh,probdmgh,const=const_mgh_mo1,sigmacoeff=sigma_mgh_mo1,$
+                      rsq=rsq_mgh_mo1,stderror=stderror_mgh_mo1,adj_rsq=adjrsq_mgh_mo1)
+   x = [transpose(mass),transpose(cl),transpose(ms),transpose(m_cl),transpose(m_ms)]
+   df1_mo2 = 5
+   df2_mo2 = nobjs-df1_mo2-1
+   coeff_feh_mo2 = regress_mc(x,feh,dfeh,probdfeh,const=const_feh_mo2,sigmacoeff=sigma_feh_mo2,$
+                      rsq=rsq_feh_mo2,stderror=stderror_feh_mo2,adj_rsq=adjrsq_feh_mo2)
+   coeff_mgh_mo2 = regress_mc(x,mgh,dmgh,probdmgh,const=const_mgh_mo2,sigmacoeff=sigma_mgh_mo2,$
+                      rsq=rsq_mgh_mo2,stderror=stderror_mgh_mo2,adj_rsq=adjrsq_mgh_mo2)
+ 
+   save, coeff_feh_mo1,const_feh_mo1,sigma_feh_mo1,rsq_feh_mo1,stderror_feh_mo1,adjrsq_feh_mo1,$
+         coeff_feh_mo2,const_feh_mo2,sigma_feh_mo2,rsq_feh_mo2,stderror_feh_mo2,adjrsq_feh_mo2,$
+         coeff_mgh_mo1,const_mgh_mo1,sigma_mgh_mo1,rsq_mgh_mo1,stderror_mgh_mo1,adjrsq_mgh_mo1,$
+         coeff_mgh_mo2,const_mgh_mo2,sigma_mgh_mo2,rsq_mgh_mo2,stderror_mgh_mo2,adjrsq_mgh_mo2,$
+         df1_mo1,df2_mo2,df1_mo2,df2_mo2,filename=fileancova
+end
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 pro anova_massbin,sciall,proball,prefix=prefix,fileanova=fileanova
    minmass = 10.
@@ -378,7 +535,7 @@ pro anova_massbin,sciall,proball,prefix=prefix,fileanova=fileanova
    mbin = 0.3 ;mass bin in logmass
    nbins = floor((maxmass-minmass)/mbin)
    outstr_feh = replicate({mbinmin:0d,mbinmax:0d,f_anova:0d,dof_ssb:0,dof_ssw:0,$
-                           SSW:0d,SSB:0d,TSS:0d},nbins)
+                           SSW:0d,SSB:0d,TSS:0d,metal_mean:[0.,0.,0.],metal_sigmas:[0.,0.,0.]},nbins)
    outstr_mgh = outstr_feh
 
    separate_cluster,sciall,wonsdss,woncl0024,wonms0451,cwonsdss,cwoncl0024,cwonms0451
@@ -395,13 +552,13 @@ pro anova_massbin,sciall,proball,prefix=prefix,fileanova=fileanova
       imaxmass = minmass+(i+1.)*mbin
       goodsdss = where(sdss.logmstar ge iminmass and sdss.logmstar lt imaxmass, cgoodsdss)
       sdssnow = sdss(goodsdss)
-      probsdnow = probsdss(goodsdss)
+      probsdnow = probsd(goodsdss)
 
       goodcl0024 = where(cl0024.logmstar ge iminmass and cl0024.logmstar lt imaxmass, cgoodcl0024)
       cl0024now = cl0024(goodcl0024)
       probclnow = probcl(goodcl0024)
 
-      goodms0451 = where(ms0451.logmstar ge and iminmass ms0451.logmstar lt imaxmass, cgoodms0451)
+      goodms0451 = where(ms0451.logmstar ge iminmass and ms0451.logmstar lt imaxmass, cgoodms0451)
       ms0451now = ms0451(goodms0451)
       probmsnow = probms(goodms0451)
 
@@ -410,13 +567,13 @@ pro anova_massbin,sciall,proball,prefix=prefix,fileanova=fileanova
 
       ;FEH ANOVA
       meanmc,sdssnow.feh,probsdnow.dfeharr,probsdnow.probfeh,sdss_meanfeh,fehsigmam,$
-             fehsigmad,fehsigmas
-      meanmc,cl0024now.feh,probsdnow.dfeharr,probsdnow.probfeh,cl0024_meanfeh,fehsigmam,$
-             fehsigmad,fehsigmas
-      meanmc,ms0451now.feh,probsdnow.dfeharr,probsdnow.probfeh,ms0451_meanfeh,fehsigmam,$
-             fehsigmad,fehsigmas
+             fehsigmad,fehsigmas_sd
+      meanmc,cl0024now.feh,probclnow.dfeharr,probclnow.probfeh,cl0024_meanfeh,fehsigmam,$
+             fehsigmad,fehsigmas_cl
+      meanmc,ms0451now.feh,probmsnow.dfeharr,probmsnow.probfeh,ms0451_meanfeh,fehsigmam,$
+             fehsigmad,fehsigmas_ms
       meanmc,allnow.feh,proballnow.dfeharr,proballnow.probfeh,all_meanfeh,fehsigmam,$
-             fehsigmad,fehsigmas
+             fehsigmad,fehsigmas_all
 
       SSW = total((sdssnow.feh-sdss_meanfeh)^2)+total((cl0024now.feh-cl0024_meanfeh)^2)+$
             total((ms0451now.feh-ms0451_meanfeh)^2)  ;sum of squares within group 
@@ -435,14 +592,15 @@ pro anova_massbin,sciall,proball,prefix=prefix,fileanova=fileanova
       outstr_feh[i].SSW = SSW
       outstr_feh[i].SSB = SSB
       outstr_feh[i].TSS = TSS
-
+      outstr_feh[i].metal_mean = [sdss_meanfeh,cl0024_meanfeh,ms0451_meanfeh]
+      outstr_feh[i].metal_sigmas = [fehsigmas_sd,fehsigmas_cl,fehsigmas_ms]
       ;MgH ANOVA
       meanmc,sdssnow.ah,probsdnow.daharr,probsdnow.probdah,sdss_meanah,ahsigmam,$
-             ahsigmad,ahsigmas
-      meanmc,cl0024now.ah,probsdnow.daharr,probsdnow.probdah,cl0024_meanah,ahsigmam,$
-             ahsigmad,ahsigmas
-      meanmc,ms0451now.ah,probsdnow.daharr,probsdnow.probdah,ms0451_meanah,ahsigmam,$
-             ahsigmad,ahsigmas
+             ahsigmad,ahsigmas_sd
+      meanmc,cl0024now.ah,probclnow.daharr,probclnow.probdah,cl0024_meanah,ahsigmam,$
+             ahsigmad,ahsigmas_cl
+      meanmc,ms0451now.ah,probmsnow.daharr,probmsnow.probdah,ms0451_meanah,ahsigmam,$
+             ahsigmad,ahsigmas_ms
       meanmc,allnow.ah,proballnow.daharr,proballnow.probdah,all_meanah,ahsigmam,$
              ahsigmad,ahsigmas
 
@@ -462,7 +620,8 @@ pro anova_massbin,sciall,proball,prefix=prefix,fileanova=fileanova
       outstr_mgh[i].SSW = SSW
       outstr_mgh[i].SSB = SSB
       outstr_mgh[i].TSS = TSS
-
+      outstr_mgh[i].metal_mean = [sdss_meanah,cl0024_meanah,ms0451_meanah]
+      outstr_mgh[i].metal_sigmas = [ahsigmas_sd,ahsigmas_cl,ahsigmas_ms]
    endfor
    mwrfits,outstr_feh,fileanova,/create,/silent
    mwrfits,outstr_mgh,fileanova,/silent
@@ -471,7 +630,7 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 pro average_mzr,sciall,proball,prefix=prefix
-common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file
+common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file,fileanova,deviationparam_file
    ;set values for each sample set (clusters)
    zmin = [0.,0.35,0.48]
    zmax = [0.15,0.42,0.6]
@@ -528,11 +687,142 @@ common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file
    endfor
    save, sdss_avestr,cl0024_avestr,ms0451_avestr,filename=aveparam_file
 end
+
+pro deviation_fromz0line,sciall,proball
+common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file,fileanova,deviationparam_file
+;calculate deviation as a function of formation age
+   restore,linfitparam_fixslope_file
+   restore, linfitparam_file
+
+   sdss_fixslope_pars= sdssmzrpar_fixslope
+   fehideal = sdss_fixslope_pars[0]+(sciall.logmstar-10.)*sdss_fixslope_pars[1]
+   x=sciall.ageform
+   y=sciall.feh-fehideal
+   dx = 0.5*(sciall.ageupper-sciall.agelower)
+   dy = 0.5*(sciall.fehupper-sciall.fehlower)
+   dxarr = -1.*proball.dagearr ;since x axis is ageuni-agegal
+   dyarr = proball.dfeharr
+   probdxdyarr = transpose(proball.probfehage,[1,0,2]) ;age feh nobjs
+  
+   feh_dev_par = linfitprobgrid_general(x,y,dxarr,dyarr,probdxdyarr,feh_dev_par_all,$
+                   outfitfile='all_prob_deltafeh_age.fits',outepsfile='all_plot_deltafeh_age.eps',$
+                   fitrange=[0,11.5],/plot,initial_guess=[-0.4,0.06],stepsize=[0.0005,0.0005],$
+                   nstep=3000)
+
+   mc_feh_dev_par = linfitprobgrid_mc(x,y,dxarr,dyarr,probdxdyarr,mc_feh_dev_par_err)
+
+   good = where(x gt 0.)
+   simple_feh_dev_par = linfit(x(good),y(good),sigma=feh_dev_par_err)
+
+   ;MAR
+   sdssmarpar = sdssmarpar_fixslope
+   ahideal = sdssmarpar[0]+(sciall.logmstar-10.)*sdssmarpar[1]
+   x=sciall.ageform
+   y=sciall.ah-ahideal
+
+   good = where(y gt -0.5)
+   simple_mgh_dev_par = linfit(x(good),y(good),sigma=simple_mgh_dev_par_err)
+   ;mc fit
+   y1 = sciall(good).feh
+   y2 = sciall(good).alphafe
+   dxarr = -1.*proball(good).dagearr ;since x axis is ageuni-agegal
+   dy1arr = proball(good).dfeharr
+   dy2arr = proball(good).dalphaarr
+   probcube = transpose(proball(good).cubeprob,[1,0,2,3])
+   mc_mgh_dev_par = linfitprobgrid_mc_mgh(x(good),y1,y2,dxarr,dy1arr,dy2arr,probcube,mc_mgh_dev_par_err)
+
+   save, feh_dev_par,feh_dev_par_all,mc_feh_dev_par,mc_feh_dev_par_err,simple_feh_dev_par,$
+         feh_dev_par_err,mc_mgh_dev_par,mc_mgh_dev_par_err,simple_mgh_dev_par,$
+         simple_mgh_dev_par_err,fehideal,ahideal,filename=deviationparam_file
+end
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-pro doplot_masshist,sciall
-common color_pallete, zcol
+pro plot_deviation_fromz0line,sciall
+common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file,fileanova,deviationparam_file
+common color_pallete, clustercolor, shadecolor, meancolor
+
+   restore,deviationparam_file
+
+   psname='FEH_deviation_fromz0line.eps'
+
+   xfitrange = [0,13]
+   yfitrange = [-0.4,0.4]
+;   reduceimage,'all_prob_deltafeh_age.fits',xfitrange,yfitrange,img,ximg,yimg
+   plotposition=[0.15,0.18,0.95,0.87]
+;   set_plot,'x'
+;   loadct,60
+;   cgdisplay,/pixmap
+;   cgimage,img_sdss,position=plotposition
+;   bgimage = cgsnapshot()
+;   wdelete
+
+   set_plot,'ps'
+   device, filename = psname,xsize = 15,ysize = 10,decomposed=1,color=1, $
+              xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated;
+;      loadct,54
+;      good = where(finite(img),cgood,complement=bad)
+;      img(bad) = min(img(good))
+;      loadct,55
+;      cgimage,img,position=plotposition
+;      cgimage,img,transparent=50,alphabackgroundimage=bgimage,alphafgposition=plotposition
+      plot,sciall.ageform,sciall.feh-fehideal,psym=1,xtitle='Age of the universe at galaxy formation',ytitle=delta+'[Fe/H]',xrange=xfitrange,xstyle=9,yrange=yfitrange,/nodata,position=plotposition,/noerase
+
+      axis,xaxis=1,xticks=4,xtickv=[1.513,3.223, 5.747,8.422 ,12.161],xtickn=['4','2','1','0.5','0.1'],xtitle='z'
+
+      sdss = where(sciall.zspec lt 0.3 and sciall.goodsn eq 1)
+      cgplot,sciall(sdss).ageform,sciall(sdss).feh-fehideal(sdss),psym=16,/overplot,symsize=0.5,color='skyblue'
+      cl0024 = where(sciall.zspec gt 0.3 and sciall.zspec lt 0.45 and sciall.goodsn eq 1)
+      cgplot,sciall(cl0024).ageform,sciall(cl0024).feh-fehideal(cl0024),psym=16,/overplot,symsize=0.5,color='goldenrod'
+      ms0451 = where(sciall.zspec gt 0.45 and sciall.goodsn eq 1)
+      cgplot,sciall(ms0451).ageform,sciall(ms0451).feh-fehideal(ms0451),psym=16,/overplot,symsize=0.5,color='tomato'
+;      bad = where(sciall.goodsn eq 0)
+;      cgplot,sciall(bad).ageform,sciall(ms0451).feh-fehideal(ms0451),psym=16,/overplot,symsize=0.5,color='gray'
+
+;      oplot,[0,14],feh_dev_par(0)+feh_dev_par(1)*[0,14],thick=1,linestyle=2
+      oplot,[0,14],mc_feh_dev_par(0)+mc_feh_dev_par(1)*[0,14],thick=1,linestyle=2;,color=fsc_color('red') 
+
+      xyouts,1,-0.38,'older galaxies',charsize=0.8
+      xyouts,9.4,-0.38,'younger galaxies',charsize=0.8
+      arrow,0.9,-0.37,0.3,-0.37,/data
+      arrow,12.1,-0.37,12.7,-0.37,/data
+   device,/close
+
+
+   set_plot,'ps'
+   psname = 'mgh_deviation_fromz0line.eps'
+   device, filename = psname,xsize = 15,ysize = 10,decomposed=1,color=1, $
+              xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated;
+      yfitrange=[-0.5,0.6]
+      plot,sciall.ageform,sciall.ah-ahideal,psym=1,xtitle='Age of the universe at galaxy formation',ytitle=delta+'[Mg/H]',xrange=xfitrange,xstyle=9,yrange=yfitrange,/nodata,position=plotposition,/noerase,ystyle=1
+
+      axis,xaxis=1,xticks=4,xtickv=[1.513,3.223, 5.747,8.422 ,12.161],xtickn=['4','2','1','0.5','0.1'],xtitle='z'
+
+      sdss = where(sciall.zspec lt 0.3 and sciall.goodsn eq 1)
+      cgplot,sciall(sdss).ageform,sciall(sdss).ah-ahideal(sdss),psym=16,/overplot,symsize=0.5,color='skyblue'
+      cl0024 = where(sciall.zspec gt 0.3 and sciall.zspec lt 0.45 and sciall.goodsn eq 1)
+      cgplot,sciall(cl0024).ageform,sciall(cl0024).ah-ahideal(cl0024),psym=16,/overplot,symsize=0.5,color='goldenrod'
+      ms0451 = where(sciall.zspec gt 0.45 and sciall.goodsn eq 1)
+      cgplot,sciall(ms0451).ageform,sciall(ms0451).ah-ahideal(ms0451),psym=16,/overplot,symsize=0.5,color='tomato'
+      bad = where(sciall.goodsn eq 0)
+;      cgplot,sciall(bad).ageform,sciall(ms0451).ah-ahideal(ms0451),psym=16,/overplot,symsize=0.5,color='gray'
+
+      oplot,[0,14],simple_mgh_dev_par(0)+simple_mgh_dev_par(1)*[0,14],thick=1,linestyle=2
+      ;oplot,[0,14],mc_mgh_dev_par(0)+mc_mgh_dev_par(1)*[0,14],thick=1,linestyle=2
+      ;oplot,[0,14],ah_dev_par_sdss(0)+ah_dev_par_sdss(1)*[0,14],thick=2,linestyle=2,color=fsc_color('blu5')
+      ;oplot,[0,14],ah_dev_par_cl(0)+ah_dev_par_cl(1)*[0,14],thick=2,linestyle=2,color=fsc_color('org6')
+
+      xyouts,1,-0.48,'older galaxies',charsize=0.8
+      xyouts,9.4,-0.48,'younger galaxies',charsize=0.8
+      arrow,0.9,-0.37,0.3,-0.37,/data
+      arrow,12.1,-0.37,12.7,-0.37,/data
+   device,/close
+end
+
+
+pro plot_masshist,sciall
+common color_pallete, clustercolor, shadecolor, meancolor
 
    set_plot,'ps'
    !p.multi = [0,1,1]
@@ -555,23 +845,420 @@ common color_pallete, zcol
 
    device,/close
 end
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+pro plot_mzr,sciall,prefix=prefix
+common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file,fileanova,deviationparam_file
+common color_pallete, clustercolor, shadecolor, meancolor
+   set_plot,'ps'
+   !p.multi = [0,1,1]
+   !p.font = 0
+   !p.charsize = 1.5
+   sunsym = sunsymbol()
+   Delta = '!9'+string("104B)+'!x'
+   alpha = '!9'+string("141B)+'!x'
 
+   restore, aveparam_file  
+;     output: sdss_avestr,cl0024_avestr,ms0451_avestr
+;             = {galperbin:nperbin,massbins:massbins_now,ave_mass:ave_mass_now,$
+;                ave_mass_dev:ave_mass_dev_now,ave_feh:ave_feh_now,$
+;                ave_feh_dev:ave_feh_dev_now,hifeh:hifeh_now,lofeh:lofeh_now,$
+;                ave_mgh:ave_mgh_now,ave_mgh_dev:ave_mgh_dev_now,himgh:himgh_now,lomgh:lomgh_now}
+   restore,linfitparam_fixslope_file
+;         tconst_sdcl_feh,tconst_sdcl_mgh,tconst_sdms_feh,$
+;         tconst_sdms_mgh,tconst_clms_feh,tconst_clms_mgh,$
+;         tslope_sdcl_feh,tslope_sdcl_mgh,tslope_sdms_feh,$
+;         tslope_sdms_mgh,tslope_clms_feh,tslope_clms_mgh,$
+;         fehcommonslope,fehcommonslope_err,fehcommonslope_stdev,$
+;         mghcommonslope,mghcommonslope_err,mghcommonslope_stdev,$
+;         sdssmzrpar_fixslope,cl0024mzrpar_fixslope,ms0451mzrpar_fixslope,$
+;         sdssmzrerr_fixslope,cl0024mzrerr_fixslope,ms0451mzrerr_fixslope,$
+;         sdssmzrchi_fixslope,cl0024mzrchi_fixslope,ms0451mzrchi_fixslope,$
+;         sdssmarpar_fixslope,cl0024marpar_fixslope,ms0451marpar_fixslope,$
+;         sdssmarerr_fixslope,cl0024marerr_fixslope,ms0451marerr_fixslope,$
+;         sdssmarchi_fixslope,cl0024marchi_fixslope,ms0451marchi_fixslope,$
+
+   restore, linfitparam_file
+;        allmzrpar,allmarpar,sdssmzrpar,sdssmarpar,cl0024mzrpar,cl0024marpar,ms0451mzrpar,ms0451marpar,$
+;        allmzrerr,allmarerr,sdssmzrerr,sdssmarerr,cl0024mzrerr,cl0024marerr,ms0451mzrerr,ms0451marerr,$
+;        chiallmzr,chiallmar,chisdssmzr,chisdssmar,chicl0024mzr,chicl0024mar,chims0451mzr,chims0451mar,$
+
+   anova_feh = mrdfits(fileanova,1)
+   anova_mgh = mrdfits(fileanova,2)
+;        outstr_feh = replicate({mbinmin:0d,mbinmax:0d,f_anova:0d,dof_ssb:0,dof_ssw:0,$
+;                           SSW:0d,SSB:0d,TSS:0d,metal_mean:[0.,0.,0.],metal_sigmas:[0.,0.,0.]},nbins)
+
+   goodfit = where(sciall.goodsn eq 1,cgoodfit,complement=badfit,ncomplement=cbadfit)
+   symsizepar = [0.7,1.5/(max(sciall(goodfit).snfit)-min(sciall(goodfit).snfit))]
+   symsize = symsizepar[1]*(sciall.snfit-min(sciall(goodfit).snfit))+symsizepar[0]
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
+   psname= 'MZR_'+prefix+'.eps'
+   device, filename = psname,xsize = 15,ysize = 10, $
+                xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
+      xrange = [9.,12]
+      yrange = [-1.,0.3]
+      plot,sciall.logmstar,sciall.feh,/nodata,xrange=xrange,xstyle=5,yrange=yrange,ystyle=5
+
+;      polyfill,[sdss_avestr.massbins,reverse(sdss_avestr.massbins)],$
+;          [sdss_avestr.hifeh,sdss_avestr.lofeh],color=fsc_color(shadecolor[0])
+;      polyfill,[cl0024_avestr.massbins,reverse(cl0024_avestr.massbins)],$
+;          [cl0024_avestr.hifeh,cl0024_avestr.lofeh],color=fsc_color(shadecolor[1])
+;      polyfill,[ms0451_avestr.massbins,reverse(ms0451_avestr.massbins)],$
+;          [ms0451_avestr.hifeh,ms0451_avestr.lofeh],color=fsc_color(shadecolor[2])
+
+
+      for i=0,n_elements(sciall)-1 do begin
+        if sciall[i].zspec lt 0.3 then symcol = clustercolor[0]
+        if sciall[i].zspec gt 0.3 and sciall[i].zspec lt 0.5 then symcol = clustercolor[1] 
+        if sciall[i].zspec gt 0.5 and sciall[i].zspec lt 0.6 then symcol = clustercolor[2]
+
+        if sciall[i].goodsn eq 1 then symnum = 46 else symnum = 16
+        if sciall[i].goodsn eq 1 then begin   
+            cgerrplot,[sciall[i].logmstar],[sciall[i].fehlower],[sciall[i].fehupper],color=symcol,$
+               thick=0.5
+        endif
+        cgPlot,[sciall[i].logmstar],[sciall[i].feh], Color=symcol, PSym=symnum, SymColor=symcol, $
+           SymSize=symsize[i],/overplot
+;        oplot,[sciall[i].logmstar],[sciall[i].feh],psym=cgsymcat(46),color=fsc_Color(symcol),$
+;              symsize=symsize[i]
+      endfor
+      ;overplot with linear fit
+      oplot,!x.crange,(!x.crange-10.)*sdssmzrpar[1]+sdssmzrpar[0],linestyle=2,$
+            thick=2,color=fsc_color(meancolor[0])
+      oplot,!x.crange,(!x.crange-10.)*cl0024mzrpar[1]+cl0024mzrpar[0],linestyle=2,$
+            thick=2,color=fsc_color(meancolor[1])
+      oplot,!x.crange,(!x.crange-10.)*ms0451mzrpar[1]+ms0451mzrpar[0],linestyle=2,$
+            thick=2,color=fsc_color(meancolor[2])
+
+      oplot,!x.crange,(!x.crange-10.)*sdssmzrpar_fixslope[1]+sdssmzrpar_fixslope[0],$
+            thick=2,color=fsc_color(meancolor[0])
+      oplot,!x.crange,(!x.crange-10.)*cl0024mzrpar_fixslope[1]+cl0024mzrpar_fixslope[0],$
+            thick=2,color=fsc_color(meancolor[1])
+      oplot,!x.crange,(!x.crange-10.)*ms0451mzrpar_fixslope[1]+ms0451mzrpar_fixslope[0],$
+            thick=2,color=fsc_color(meancolor[2])
+
+      ;overplot with means used in anova
+      for i=0,2 do begin
+         cgerrplot,anova_feh.metal_mean[i],anova_feh.mbinmin,anova_feh.mbinmax,/horizontal,color=meancolor[i]
+         cgerrplot,(anova_feh.mbinmin+anova_feh.mbinmax)*0.5,anova_feh.metal_mean[i]-anova_feh.metal_sigmas[i],$
+                   anova_feh.metal_mean[i]+anova_feh.metal_sigmas[i],color=meancolor[i]
+         cgplot,(anova_feh.mbinmin+anova_feh.mbinmax)*0.5,anova_feh.metal_mean[i],psym=14,$
+                symcolor=meancolor[i],/overplot,symsize=3
+      endfor
+
+      axis,xaxis=0,xrange=xrange,xstyle=1,xtitle='Log(M/M'+sunsym+')'
+      axis,yaxis=0,yrange=yrange,ystyle=1,ytitle='[Fe/H]'
+      axis,xaxis=1,xrange=xrange,xstyle=1,xtickformat='(A1)'
+      axis,yaxis=1,yrange=yrange,ystyle=1,ytickformat='(A1)'
+
+      al_legend,['z~0 SDSS','z~0.4 Cl0024','z~0.55 MS0451'],psym=cgsymcat(46),$
+                 box=0,colors=['skyblue','goldenrod','tomato'],$
+                 /bottom,/right,charsize=1,symsize=2
+   device,/close
+
+   psname= 'MMgR_'+prefix+'.eps'
+   device, filename = psname,xsize = 15,ysize = 10, $
+                xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
+      xrange = [9.,12]
+      yrange = [-1.,0.5]
+      plot,sciall.logmstar,sciall.ah,/nodata,xrange=xrange,xstyle=5,yrange=yrange,ystyle=5
+
+;      polyfill,[sdss_avestr.massbins,reverse(sdss_avestr.massbins)],$
+;          [sdss_avestr.himgh,sdss_avestr.lomgh],color=fsc_color(shadecolor[0])
+;      polyfill,[cl0024_avestr.massbins,reverse(cl0024_avestr.massbins)],$
+;          [cl0024_avestr.himgh,cl0024_avestr.lomgh],color=fsc_color(shadecolor[1])
+;      polyfill,[ms0451_avestr.massbins,reverse(ms0451_avestr.massbins)],$
+;          [ms0451_avestr.himgh,ms0451_avestr.lomgh],color=fsc_color(shadecolor[2])
+
+      for i=0,n_elements(sciall)-1 do begin
+        if sciall[i].zspec lt 0.3 then symcol = clustercolor[0]
+        if sciall[i].zspec gt 0.3 and sciall[i].zspec lt 0.5 then symcol = clustercolor[1] 
+        if sciall[i].zspec gt 0.5 and sciall[i].zspec lt 0.6 then symcol = clustercolor[2]
+
+        if sciall[i].goodsn eq 1 then symnum = 46 else symnum = 16
+        if sciall[i].goodsn eq 1 then begin   
+            cgerrplot,[sciall[i].logmstar],[sciall[i].ahlower],[sciall[i].ahupper],$
+            color=symcol,thick=0.5
+        endif
+        cgPlot,[sciall[i].logmstar],[sciall[i].ah], Color=symcol, PSym=symnum, SymColor=symcol, $
+           SymSize=symsize[i],/overplot
+;        oplot,[sciall[i].logmstar],[sciall[i].ah],psym=cgsymcat(46),color=fsc_Color(symcol),$
+;              symsize=symsize[i]
+      endfor
+      ;overplot with linear fit
+      oplot,!x.crange,(!x.crange-10.)*sdssmarpar[1]+sdssmarpar[0],linestyle=2,$
+            thick=2,color=fsc_color(meancolor[0])
+      oplot,!x.crange,(!x.crange-10.)*cl0024marpar[1]+cl0024marpar[0],linestyle=2,$
+            thick=2,color=fsc_color(meancolor[1])
+      oplot,!x.crange,(!x.crange-10.)*ms0451marpar[1]+ms0451marpar[0],linestyle=2,$
+            thick=2,color=fsc_color(meancolor[2])
+
+      oplot,!x.crange,(!x.crange-10.)*sdssmarpar_fixslope[1]+sdssmarpar_fixslope[0],$
+            thick=2,color=fsc_color(meancolor[0])
+      oplot,!x.crange,(!x.crange-10.)*cl0024marpar_fixslope[1]+cl0024marpar_fixslope[0],$
+            thick=2,color=fsc_color(meancolor[1])
+      oplot,!x.crange,(!x.crange-10.)*ms0451marpar_fixslope[1]+ms0451marpar_fixslope[0],$
+            thick=2,color=fsc_color(meancolor[2])
+
+      ;overplot with means used in anova
+      for i=0,2 do begin
+         cgerrplot,anova_mgh.metal_mean[i],anova_mgh.mbinmin,anova_mgh.mbinmax,/horizontal,color=meancolor[i]
+         cgerrplot,(anova_mgh.mbinmin+anova_mgh.mbinmax)*0.5,anova_mgh.metal_mean[i]-anova_mgh.metal_sigmas[i],$
+                   anova_mgh.metal_mean[i]+anova_mgh.metal_sigmas[i],color=meancolor[i]
+         cgplot,(anova_mgh.mbinmin+anova_mgh.mbinmax)*0.5,anova_mgh.metal_mean[i],psym=14,$
+                symcolor=meancolor[i],/overplot,symsize=3
+      endfor
+
+      axis,xaxis=0,xrange=xrange,xstyle=1,xtitle='Log(M/M'+sunsym+')'
+      axis,yaxis=0,yrange=yrange,ystyle=1,ytitle='[Mg/H]'
+      axis,xaxis=1,xrange=xrange,xstyle=1,xtickformat='(A1)'
+      axis,yaxis=1,yrange=yrange,ystyle=1,ytickformat='(A1)'
+
+      al_legend,['z~0 SDSS','z~0.4 Cl0024','z~0.55 MS0451'],psym=cgsymcat(46),$
+                 box=0,colors=['skyblue','goldenrod','tomato'],$
+                 /bottom,/right,charsize=1,symsize=2
+   device,/close
+end
+
+pro plot_byage,sciall,prefix=prefix
+common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file,fileanova,deviationparam_file
+common color_pallete, clustercolor, shadecolor, meancolor
+
+   restore, linfitparam_file
+   restore,linfitparam_fixslope_file
+   choi = get_refvalue(5,/choi14)
+   choi14z01 = choi[where(choi.zlow eq 0.1)]
+   choi14z04 = choi[where(choi.zlow eq 0.4)]
+   
+   plotfixslope = 0
+   if plotfixslope then begin
+     sdssmzrpar = sdssmzrpar_fixslope
+     cl0024mzrpar = cl0024mzrpar_fixslope
+     cl0024mzrpar[0] = cl0024mzrpar[0]-0.02
+     ms0451mzrpar = ms0451mzrpar_fixslope
+     sdssmarpar = sdssmarpar_fixslope
+     cl0024marpar = cl0024marpar_fixslope
+     ms0451marpar = ms0451marpar_fixslope
+   endif
+
+     cl0024marpar = cl0024marpar_fixslope
+   set_plot,'ps'
+   !p.multi = [0,1,1]
+   !p.font = 0
+   !p.charsize = 1.5
+   sunsym = sunsymbol()
+   Delta = '!9'+string("104B)+'!x'
+   alpha = '!9'+string("141B)+'!x'
+   agerange = [0,13,0,2.,4.,6.,8.,13.]  
+   for n=0,1 do begin 
+;   for n=0,n_Elements(agerange)-2 do begin
+     inrange = where(sciall.ageform ge agerange(n) and sciall.ageform lt agerange(n+1),cinrange)
+     if cinrange eq 0 then continue
+     sci = sciall(inrange)
+     goodness =sciall(inrange).goodsn
+     goodfit = where(goodness eq 1,cgoodfit, complement=badfit,ncomplement=cbadfit)
+     name = 'univage_'+strtrim(string(agerange(n),format='(I)'),2)+'_'+strtrim(string(agerange(n+1),format='(I)'),2) 
+     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
+      psname= name+'_feh_mass.eps'
+      device, filename = psname,xsize = 15,ysize = 10, $
+                   xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
+         xrange=[9.,12]
+         yrange=[-1.,0.3]
+         plot,sci.logmstar,sci.feh,/nodata,xrange=xrange,xstyle=5,yrange=yrange,ystyle=5
+         ;draw axis
+         axis,xaxis=0,xrange=xrange,xstyle=1,xtitle='Log(M/M'+sunsym+')'
+         axis,yaxis=0,yrange=yrange,ystyle=1,ytitle='[Fe/H]'
+         axis,xaxis=1,xrange=xrange,xstyle=1,xtickformat='(A1)'
+         axis,yaxis=1,yrange=yrange,ystyle=1,ytickformat='(A1)'
+   
+;         cgerrplot,sci(goodfit).logmstar,sci(goodfit).fehlower,sci(goodfit).fehupper,color='tomato',thick=0.5
+;         if cbadfit gt 0 then oplot,sci(badfit).logmstar,sci(badfit).feh,psym=cgsymcat(16),color=fsc_Color('darkgray'),symsize=0.7
+         goodsymsize = 1.5/(max(sci(goodfit).snfit)-min(sci(goodfit).snfit))*sci(goodfit).snfit+0.7
+         for i=0,cgoodfit-1 do begin
+           if sci(goodfit[i]).zspec lt 0.3 then symcol = 'skyblue'
+           if sci(goodfit[i]).zspec gt 0.3 and sci(goodfit[i]).zspec lt 0.5 then symcol = 'goldenrod'
+           if sci(goodfit[i]).zspec gt 0.5 and sci(goodfit[i]).zspec lt 0.6 then symcol = 'tomato'
+
+           oplot,[sci(goodfit[i]).logmstar],[sci(goodfit[i]).feh],psym=cgsymcat(46),color=fsc_Color(symcol),symsize=goodsymsize[i]
+         endfor
+         oplot,!x.crange,(!x.crange-10.)*sdssmzrpar[1]+sdssmzrpar[0],linestyle=0,thick=2,color=fsc_color('navyblue')
+         oplot,!x.crange,(!x.crange-10.)*cl0024mzrpar[1]+cl0024mzrpar[0],linestyle=0,thick=2,color=fsc_color('peru')
+         oplot,!x.crange,(!x.crange-10.)*ms0451mzrpar[1]+ms0451mzrpar[0],linestyle=0,thick=2,color=fsc_color('indianred')
+         ;xyouts,11.3,-0.8,strtrim(string(agerange(n),format='(I)'),2)+'-'+strtrim(string(agerange(n+1),format='(I)'),2)+'Gyr'
+
+         ;typical error bars
+         locsdss = where(goodness eq 1 and sci.zspec lt 0.3)
+         uppersdss = median(sci(locsdss).fehupper-sci(locsdss).feh)
+         lowersdss = median(sci(locsdss).feh-sci(locsdss).fehlower)
+         loccl0024 = where(goodness eq 1 and sci.zspec gt 0.3 and sci.zspec lt 0.5)
+         uppercl0024 = median(sci(loccl0024).fehupper-sci(loccl0024).feh)
+         lowercl0024 = median(sci(loccl0024).feh-sci(loccl0024).fehlower)
+         locms0451 = where(goodness eq 1 and sci.zspec gt 0.5)
+         upperms0451 = median(sci(locms0451).fehupper-sci(locms0451).feh)
+         lowerms0451 = median(sci(locms0451).feh-sci(locms0451).fehlower)
+         ;labelling
+         ylab = -0.85
+         xlab = 9.6
+         cgplot,[xlab],[ylab],err_xhigh=[0.1],err_xlow=[0.1],err_yhigh=uppersdss,err_ylow=lowersdss,$
+                color='skyblue',psym=46,symsize=2,/overplot
+         xyouts,xlab+0.15,ylab-0.025,'z~0.05',charsize=1
+         xlab = 10.4
+         cgplot,[xlab],[ylab],err_xhigh=[0.1],err_xlow=[0.1],err_yhigh=uppercl0024,err_ylow=lowercl0024,$
+                color='goldenrod',psym=46,symsize=2,/overplot
+         xyouts,xlab+0.15,ylab-0.025,'z~0.39',charsize=1
+         xlab = 11.2
+         cgplot,[xlab],[ylab],err_xhigh=[0.1],err_xlow=[0.1],err_yhigh=upperms0451,err_ylow=lowerms0451,$
+                color='tomato',psym=46,symsize=2,/overplot
+         xyouts,xlab+0.15,ylab-0.025,'z~0.55',charsize=1
+         ;label
+;         al_legend,['z~0 SDSS','z~0.4 Cl0024','z~0.55 MS0451'],psym=cgsymcat(46),box=0,colors=['skyblue','goldenrod','tomato'],$
+;                   charsize=1,symsize=2,position=[10.6,-0.6]
+
+      device,/close
+   
+      psname=name+'_feh_alpha.eps'
+      device, filename = psname,xsize = 15,ysize = 10, $
+                   xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
+         xrange=[-1.,0.3]
+         yrange=[-0.5,0.9]
+         plot,sci.feh,sci.alphafe,/nodata,xrange=xrange,xstyle=5,yrange=yrange,ystyle=5
+         ;draw axis
+         axis,xaxis=0,xrange=xrange,xstyle=1,xtitle='[Fe/H]'
+         axis,yaxis=0,yrange=yrange,ystyle=1,ytitle='[Mg/Fe]'
+         axis,xaxis=1,xrange=xrange,xstyle=1,xtickformat='(A1)'
+         axis,yaxis=1,yrange=yrange,ystyle=1,ytickformat='(A1)'
+   
+   ;      cgerrplot,sci(goodfit).alphafe,sci(goodfit).alphafelower,sci(goodfit).alphafeupper,$
+   ;                color='tomato',thick=0.5
+   ;      cgerrplot,sci(goodfit).feh,sci(goodfit).fehlower,sci(goodfit).fehupper,$
+   ;                color='tomato',thick=0.5,/horizontal
+;         if cbadfit gt 0 then oplot,sci(badfit).feh,sci(badfit).alphafe,psym=cgsymcat(16),color=fsc_Color('darkgray'),symsize=0.7
+         goodsymsize = 1.5/(max(sci(goodfit).snfit)-min(sci(goodfit).snfit))*sci(goodfit).snfit+0.7
+         for i=0,cgoodfit-1 do begin
+           if sci(goodfit[i]).zspec lt 0.3 then symcol = 'skyblue'
+           if sci(goodfit[i]).zspec gt 0.3 and sci(goodfit[i]).zspec lt 0.5 then symcol = 'goldenrod'
+           if sci(goodfit[i]).zspec gt 0.5 and sci(goodfit[i]).zspec lt 0.6 then symcol = 'tomato'
+
+           oplot,[sci(goodfit[i]).feh],[sci(goodfit[i]).alphafe],psym=cgsymcat(46),color=fsc_Color(symcol),symsize=goodsymsize[i]
+         endfor
+         xyouts,-0.9,-0.4,strtrim(string(agerange(n),format='(I)'),2)+'-'+strtrim(string(agerange(n+1),format='(I)'),2)+'Gyr'
+      device,/close
+   
+      psname = name+'_alpha_mass.eps'
+      device,filename = psname,xsize = 15,ysize = 10, $
+                   xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
+         xrange=[9.,12]
+         yrange=[-1.,0.9]
+         plot,sci.logmstar,sci.ah,/nodata,xrange=xrange,xstyle=5,yrange=yrange,ystyle=5
+         axis,xaxis=0,xrange=xrange,xstyle=1,xtitle='Log(M!L*!N/M'+sunsym+')'
+         axis,yaxis=0,yrange=yrange,ystyle=1,ytitle='[Mg/H]'
+         axis,xaxis=1,xrange=xrange,xstyle=1,xtickformat='(A1)'
+         axis,yaxis=1,yrange=yrange,ystyle=1,ytickformat='(A1)'
+         goodsymsize = 1.5/(max(sci(goodfit).snfit)-min(sci(goodfit).snfit))*sci(goodfit).snfit+0.7
+  ;       for i=0,cgoodfit-1 do begin
+  ;         oplot,[sci(goodfit[i]).logmstar],[sci(goodfit[i]).feh],psym=cgsymcat(46),color=fsc_Color('lightgray'),symsize=goodsymsize[i]
+  ;       endfor
+   
+  ;       if cbadfit gt 0 then oplot,sci(badfit).logmstar,sci(badfit).ah,psym=cgsymcat(46),color=fsc_Color('darkgray'),symsize=0.7
+         for i=0,cgoodfit-1 do begin
+           if sci(goodfit[i]).zspec lt 0.3 then symcol = 'skyblue'
+           if sci(goodfit[i]).zspec gt 0.3 and sci(goodfit[i]).zspec lt 0.5 then symcol = 'goldenrod'
+           if sci(goodfit[i]).zspec gt 0.5 and sci(goodfit[i]).zspec lt 0.6 then symcol = 'tomato'
+           oplot,[sci(goodfit[i]).logmstar],[sci(goodfit[i]).ah],psym=cgsymcat(46),color=fsc_Color(symcol),symsize=goodsymsize[i]
+         endfor
+         ;Add Choi's data
+   ;      oploterror,choi14z01.mass,choi14z01.feh+choi14z01.mgfe,sqrt(choi14z01.feherr^2+choi14z01.mgfe^2),color=fsc_color('ygb5'),linethick=2,errcolor=fsc_color('ygb5')
+   ;      oplot,choi14z01.mass,choi14z01.feh+choi14z01.mgfe,psym=cgsymcat(16),color=fsc_color('ygb5'),symsize=1.5
+ 
+   ;      oploterror,choi14z04.mass,choi14z04.feh+choi14z04.mgfe,sqrt(choi14z04.feherr^2+choi14z04.mgfe^2),color=fsc_color('darkgoldenrod'),linethick=2,errcolor=fsc_color('darkgoldenrod')
+   ;      oplot,choi14z04.mass,choi14z04.feh+choi14z04.mgfe,psym=cgsymcat(16),color=fsc_color('darkgoldenrod'),symsize=1.5
+         ;add best fit lines
+         oplot,!x.crange,(!x.crange-10.)*sdssmarpar[1]+sdssmarpar[0],linestyle=0,thick=2,color=fsc_color('navyblue')
+         oplot,!x.crange,(!x.crange-10.)*cl0024marpar[1]+cl0024marpar[0],linestyle=0,thick=2,color=fsc_color('peru')
+         oplot,!x.crange,(!x.crange-10.)*ms0451marpar[1]+ms0451marpar[0],linestyle=0,thick=2,color=fsc_color('indianred')
+;         al_legend,['z~0','z~0.39','z~0.55'],psym=cgsymcat(46),box=0,symsize=2,$
+;                colors=['skyblue','goldenrod','tomato'],charsize=1.1,position=[11.1,-0.4]
+;         al_legend,['Choi+2014'],psym=cgsymcat(16),box=0,symsize=1.5,colors=['darkgray'],charsize=1.1,position=[11.1,-0.8]
+;         xyouts,11.5,-0.4,'Observed Redshift',alignment=0.5,charsize=1.1
+         ;typical error bars
+         uppersdss = median(sci(locsdss).ahupper-sci(locsdss).ah)
+         lowersdss = median(sci(locsdss).ah-sci(locsdss).ahlower)
+         uppercl0024 = median(sci(loccl0024).ahupper-sci(loccl0024).ah)
+         lowercl0024 = median(sci(loccl0024).ah-sci(loccl0024).ahlower)
+         upperms0451 = median(sci(locms0451).ahupper-sci(locms0451).ah)
+         lowerms0451 = median(sci(locms0451).ah-sci(locms0451).ahlower)
+         ;labelling
+         ylab = -0.7
+         xlab = 9.6
+         cgplot,[xlab],[ylab],err_xhigh=[0.1],err_xlow=[0.1],err_yhigh=uppersdss,err_ylow=lowersdss,$
+                color='skyblue',psym=46,symsize=2,/overplot
+         xyouts,xlab+0.15,ylab-0.025,'z~0.05',charsize=1
+         xlab = 10.4
+         cgplot,[xlab],[ylab],err_xhigh=[0.1],err_xlow=[0.1],err_yhigh=uppercl0024,err_ylow=lowercl0024,$
+                color='goldenrod',psym=46,symsize=2,/overplot
+         xyouts,xlab+0.15,ylab-0.025,'z~0.39',charsize=1
+         xlab = 11.2
+         cgplot,[xlab],[ylab],err_xhigh=[0.1],err_xlow=[0.1],err_yhigh=upperms0451,err_ylow=lowerms0451,$
+                color='tomato',psym=46,symsize=2,/overplot
+         xyouts,xlab+0.15,ylab-0.025,'z~0.55',charsize=1
+
+
+      device,/close
+
+      psname=name+'_mass_alphafe.eps'
+      device, filename = psname,xsize = 15,ysize = 10, $
+                   xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
+         xrange=[9.5,12]
+         yrange=[-0.5,0.9]
+         plot,sci.logmstar,sci.alphafe,/nodata,xrange=xrange,xstyle=5,yrange=yrange,ystyle=5
+         ;draw axis
+         axis,xaxis=0,xrange=xrange,xstyle=1,xtitle='Log(M!L*!N/M'+sunsym+')'
+         axis,yaxis=0,yrange=yrange,ystyle=1,ytitle='[Mg/Fe]'
+         axis,xaxis=1,xrange=xrange,xstyle=1,xtickformat='(A1)'
+         axis,yaxis=1,yrange=yrange,ystyle=1,ytickformat='(A1)'
+
+   ;      cgerrplot,sci(goodfit).alphafe,sci(goodfit).alphafelower,sci(goodfit).alphafeupper,$
+   ;                color='tomato',thick=0.5
+   ;      cgerrplot,sci(goodfit).feh,sci(goodfit).fehlower,sci(goodfit).fehupper,$
+   ;                color='tomato',thick=0.5,/horizontal
+         if cbadfit gt 0 then oplot,sci(badfit).logmstar,sci(badfit).alphafe,psym=cgsymcat(16),color=fsc_Color('darkgray'),symsize=0.7
+         goodsymsize = 1.5/(max(sci(goodfit).snfit)-min(sci(goodfit).snfit))*sci(goodfit).snfit+0.7
+         for i=0,cgoodfit-1 do begin
+           if sci(goodfit[i]).zspec lt 0.3 then symcol = 'skyblue'
+           if sci(goodfit[i]).zspec gt 0.3 and sci(goodfit[i]).zspec lt 0.5 then symcol = 'goldenrod'
+           if sci(goodfit[i]).zspec gt 0.5 and sci(goodfit[i]).zspec lt 0.6 then symcol = 'tomato'
+
+           oplot,[sci(goodfit[i]).logmstar],[sci(goodfit[i]).alphafe],psym=cgsymcat(46),color=fsc_Color(symcol),symsize=goodsymsize[i]
+         endfor
+         xyouts,-0.9,-0.4,strtrim(string(agerange(n),format='(I)'),2)+'-'+strtrim(string(agerange(n+1),format='(I)'),2)+'Gyr'
+      device,/close
+   endfor
+stop
+end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;MAIN PROGRAM;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 pro all_alphaage_ana,domgo=domgo
-common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file
-common color_pallete, clustercolor
+common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file,fileanova,deviationparam_file
+common color_pallete, clustercolor, shadecolor, meancolor
    redodatamgn = 0
    redodatamgo = 0
    redoaverage = 0
    redolinearfit = 0
-   retest_evolution_regression = 0
-   redoanova = 1
+   retest_evolution_regression = 0 ;old method of ANCOVA
+   redoancova = 1
+   redoanova = 0
+   redodeviation_fromz0line = 0
 
    doplot_masshist = 0
+   doplot_mzr = 0
+   doplot_byage = 0
+   doplot_deviation = 0
 
    clustercolor = ['skyblue','goldenrod','tomato']
+   shadecolor = ['honeydew','wt3','red1']
+   meancolor=['navyblue','peru','indianred']
 ;set up
    if ~keyword_set(domgo) then begin
       domgn=1
@@ -593,6 +1280,9 @@ common color_pallete, clustercolor
    aveparam_file = 'aveparam_'+prefix+'.sav'
    linfitparam_file = 'linfitpar_'+prefix+'.sav'
    linfitparam_fixslope_file = 'linfitpar_fixslope_'+prefix+'.sav'
+   fileancova = 'ancova_outstr_'+prefix+'.fits'
+   fileanova = 'anova_evolution_outstr_'+prefix+'.fits'
+   deviationparam_file = 'deviationparam_'+prefix+'.sav'
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    ;;;PREP DATA;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -634,63 +1324,73 @@ common color_pallete, clustercolor
    ;redo the goodsn cut for cl0024
    newgood = where(sciall.zfit gt 0.3 and sciall.zfit lt 0.45 and sciall.snfit gt 5.5)
    sciall(newgood).goodsn = 1
-   sciall([185,213]).goodsn = 0
+;   sciall([185,213,178,195]).goodsn = 0
+   sciall([185,213,195]).goodsn = 0
 
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    ;average and get the highlight
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    if redoaverage eq 1 then average_mzr,sciall,proball,prefix=prefix
-   restore, aveparam_file  
-;     output: sdss_avestr,cl0024_avestr,ms0451_avestr
-;             = {galperbin:nperbin,massbins:massbins_now,ave_mass:ave_mass_now,$
-;                ave_mass_dev:ave_mass_dev_now,ave_feh:ave_feh_now,$
-;                ave_feh_dev:ave_feh_dev_now,hifeh:hifeh_now,lofeh:lofeh_now,$
-;                ave_mgh:ave_mgh_now,ave_mgh_dev:ave_mgh_dev_now,himgh:himgh_now,lomgh:lomgh_now}
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    ;linear fit to all data
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
    if redolinearfit eq 1 then linearfit_mzr,sciall,proball,prefix=prefix 
    restore,linfitparam_file 
-
+   print, ':::FITTING WITH LINEAR FUNCTION(MONTE CARLO):::'
    print, 'MZR PARAMETERS'
    print, 'cluster       intercept         slope         chisq'
-   print, 'ALL     '+string(allmzrpar[0],format='(f5.2)')+'+/-'+strtrim(string(allmzrerr[0],format='(f5.2)'),2)+$
-          '        '+string(allmzrpar[1],format='(f5.2)')+'+/-'+strtrim(string(allmzrerr[1],format='(f5.2)'),2)+$
+   print, 'ALL     '+string(allmzrpar[0],format='(f5.2)')+'+/-'+$
+                    strtrim(string(allmzrerr[0],format='(f5.2)'),2)+$
+          '        '+string(allmzrpar[1],format='(f5.2)')+'+/-'+$
+                    strtrim(string(allmzrerr[1],format='(f5.2)'),2)+$
           '        '+string(chiallmzr,format='(f5.2)')
-   print, 'SDSS    '+string(sdssmzrpar[0],format='(f5.2)')+'+/-'+strtrim(string(sdssmzrerr[0],format='(f5.2)'),2)+$
-          '        '+string(sdssmzrpar[1],format='(f5.2)')+'+/-'+strtrim(string(sdssmzrerr[1],format='(f5.2)'),2)+$
+   print, 'SDSS    '+string(sdssmzrpar[0],format='(f5.2)')+'+/-'+$
+                    strtrim(string(sdssmzrerr[0],format='(f5.2)'),2)+$
+          '        '+string(sdssmzrpar[1],format='(f5.2)')+'+/-'+$
+                    strtrim(string(sdssmzrerr[1],format='(f5.2)'),2)+$
           '        '+string(chisdssmzr,format='(f5.2)')
-   print, 'Cl0024  '+string(cl0024mzrpar[0],format='(f5.2)')+'+/-'+strtrim(string(cl0024mzrerr[0],format='(f5.2)'),2)+$
-          '        '+string(cl0024mzrpar[1],format='(f5.2)')+'+/-'+strtrim(string(cl0024mzrerr[1],format='(f5.2)'),2)+$
+   print, 'Cl0024  '+string(cl0024mzrpar[0],format='(f5.2)')+'+/-'+$
+                    strtrim(string(cl0024mzrerr[0],format='(f5.2)'),2)+$
+          '        '+string(cl0024mzrpar[1],format='(f5.2)')+'+/-'+$
+                    strtrim(string(cl0024mzrerr[1],format='(f5.2)'),2)+$
           '        '+string(chicl0024mzr,format='(f5.2)')
-   print, 'MS0451  '+string(ms0451mzrpar[0],format='(f5.2)')+'+/-'+strtrim(string(ms0451mzrerr[0],format='(f5.2)'),2)+$
-          '        '+string(ms0451mzrpar[1],format='(f5.2)')+'+/-'+strtrim(string(ms0451mzrerr[1],format='(f5.2)'),2)+$
+   print, 'MS0451  '+string(ms0451mzrpar[0],format='(f5.2)')+'+/-'+$
+                    strtrim(string(ms0451mzrerr[0],format='(f5.2)'),2)+$
+          '        '+string(ms0451mzrpar[1],format='(f5.2)')+'+/-'+$
+                    strtrim(string(ms0451mzrerr[1],format='(f5.2)'),2)+$
           '        '+string(chims0451mzr,format='(f5.2)')
-   print, 'MAR PARAMETERS'
+   print, 'MAR PARAMETERS ([Mg/H])'
    print, 'cluster       intercept         slope'
-   print, 'ALL     '+string(allmarpar[0],format='(f5.2)')+'+/-'+strtrim(string(allmarerr[0],format='(f5.2)'),2)+$
-          '        '+string(allmarpar[1],format='(f5.2)')+'+/-'+strtrim(string(allmarerr[1],format='(f5.2)'),2)+$
+   print, 'ALL     '+string(allmarpar[0],format='(f5.2)')+'+/-'+$
+                    strtrim(string(allmarerr[0],format='(f5.2)'),2)+$
+          '        '+string(allmarpar[1],format='(f5.2)')+'+/-'+$
+                    strtrim(string(allmarerr[1],format='(f5.2)'),2)+$
           '        '+string(chiallmar,format='(f5.2)')
-   print, 'SDSS    '+string(sdssmarpar[0],format='(f5.2)')+'+/-'+strtrim(string(sdssmarerr[0],format='(f5.2)'),2)+$
-          '        '+string(sdssmarpar[1],format='(f5.2)')+'+/-'+strtrim(string(sdssmarerr[1],format='(f5.2)'),2)+$
+   print, 'SDSS    '+string(sdssmarpar[0],format='(f5.2)')+'+/-'+$
+                    strtrim(string(sdssmarerr[0],format='(f5.2)'),2)+$
+          '        '+string(sdssmarpar[1],format='(f5.2)')+'+/-'+$
+                    strtrim(string(sdssmarerr[1],format='(f5.2)'),2)+$
           '        '+string(chisdssmar,format='(f5.2)')
-   print, 'Cl0024  '+string(cl0024marpar[0],format='(f5.2)')+'+/-'+strtrim(string(cl0024marerr[0],format='(f5.2)'),2)+$
-          '        '+string(cl0024marpar[1],format='(f5.2)')+'+/-'+strtrim(string(cl0024marerr[1],format='(f5.2)'),2)+$
+   print, 'Cl0024  '+string(cl0024marpar[0],format='(f5.2)')+'+/-'+$
+                    strtrim(string(cl0024marerr[0],format='(f5.2)'),2)+$
+          '        '+string(cl0024marpar[1],format='(f5.2)')+'+/-'+$
+                    strtrim(string(cl0024marerr[1],format='(f5.2)'),2)+$
           '        '+string(chicl0024mar,format='(f5.2)')
-   print, 'MS0451  '+string(ms0451marpar[0],format='(f5.2)')+'+/-'+strtrim(string(ms0451marerr[0],format='(f5.2)'),2)+$
-          '        '+string(ms0451marpar[1],format='(f5.2)')+'+/-'+strtrim(string(ms0451marerr[1],format='(f5.2)'),2)+$
+   print, 'MS0451  '+string(ms0451marpar[0],format='(f5.2)')+'+/-'+$
+                    strtrim(string(ms0451marerr[0],format='(f5.2)'),2)+$
+          '        '+string(ms0451marpar[1],format='(f5.2)')+'+/-'+$
+                    strtrim(string(ms0451marerr[1],format='(f5.2)'),2)+$
           '        '+string(chims0451mar,format='(f5.2)')
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
    ;TEST EVOLUTION;;;;;;;;;;;;;;;;
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
-
- 
    ;FIRST, TEST WITH REGRESSION
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    if retest_evolution_regression eq 1 then test_evolution_regression,sciall,proball,prefix=prefix 
    restore,linfitparam_fixslope_file
    print, ';;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;'
+   print, ':::TEST EVOLUTION WITH ANCOVA (OLD METHOD):::'
    print, 'FEH:'
    print, 'normal t value for slope of SDSS and Cl0024 =',tslope_sdcl_feh
    print, 'normal t value for slope of SDSS and MS0451 =',tslope_sdms_feh
@@ -741,371 +1441,78 @@ common color_pallete, clustercolor
    print, 'normal t value for intercept of SDSS and MS0451 =',tconst_sdms_mgh
    print, 'normal t value for intercept of Cl0024 and MS0451 =',tconst_clms_mgh
 
+   ;ALSO TEST WITH THE FULL METHOD OF ANCOVA
+   print, ';;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;'
+   print, ':::TEST EVOLUTION WITH ANCOVA (FULL METHOD):::'
+   if redoancova then ancova,sciall,proball,fileancova=fileancova
+   restore, fileancova
+   fchange1_feh = (rsq_feh_mo1/df1_mo1(1.-rsq_feh_mo1)
+   print, ';;;;;;;;;;;;;;;[Fe/H];;;;;;;;;;;;;;;;;;;;;;;;;;'
+   print, 'model    R^2     adjusted R^2      std. error of the estimate'
+   print, '1  ',rsq_feh_mo1,adjrsq_feh_mo1,stderror_feh_mo1
+   print, '2  ',rsq_feh_mo2,adjrsq_feh_mo2,stderror_feh_mo2
+   print, '        Change Statistics'
+   print, 'model    R^2 change    F change    df1    df2      Sig F change'
+   print, '1  ',rsq_feh_mo1,
+
+
+coeff_feh_mo1,const_feh_mo1,sigma_feh_mo1,rsq_feh_mo1,stderror_feh_mo1,adjrsq_feh_mo1,$
+         coeff_feh_mo2,const_feh_mo2,sigma_feh_mo2,rsq_feh_mo2,stderror_feh_mo2,adjrsq_feh_mo2,$
+         coeff_mgh_mo1,const_mgh_mo1,sigma_mgh_mo1,rsq_mgh_mo1,stderror_mgh_mo1,adjrsq_mgh_mo1,$
+         coeff_mgh_mo2,const_mgh_mo2,sigma_mgh_mo2,rsq_mgh_mo2,stderror_mgh_mo2,adjrsq_mgh_mo2,$
+         filename=fileancova
    ;SECOND, TEST WITH ANOVA FOR EACH MASS BIN
    ;group into mass bins then compare the three redshifts from each mass bin with ANOVA
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   fileanova = 'anova_evolution_outstr.fits'
    if redoanova then anova_massbin,sciall,proball,prefix=prefix,fileanova=fileanova
    anova_feh = mrdfits(fileanova,1)
    anova_mgh = mrdfits(fileanova,2)
   
    for i=0,n_elements(anova_feh)-1 do begin
       if anova_feh[i].mbinmin ne anova_mgh[i].mbinmin then stop, 'might have to redo anova, STOPPED'
-      print, 'mass bin',anova_feh.mbinmin,anova_feh.mbinmax
+      print, 'mass bin',anova_feh[i].mbinmin,anova_feh[i].mbinmax
       print, 'FeH ANOVA'
       print, 'TSS  =   SSB    +     SSW'
-      print, anova_feh[i].TTS,'=?',anova_feh[i].SSB,'+',anova_feh[i].SSW
-      print, anova_feh[i].TTS,'=?',anova_feh[i].SSB+anova_feh[i].SSW
+      print, anova_feh[i].TSS,'=?',anova_feh[i].SSB,'+',anova_feh[i].SSW
+      print, anova_feh[i].TSS,'=?',anova_feh[i].SSB+anova_feh[i].SSW
       print, 'f('+strtrim(anova_feh[i].dof_ssb,2)+','+strtrim(anova_feh[i].dof_ssw,2)+$
              ') = ',anova_feh[i].f_anova
       print, 'MgH ANOVA'
       print, 'TSS  =   SSB    +     SSW'
-      print, anova_mgh[i].TTS,'=?',anova_mgh[i].SSB,'+',anova_mgh[i].SSW
-      print, anova_mgh[i].TTS,'=?',anova_mgh[i].SSB+anova_mgh[i].SSW
+      print, anova_mgh[i].TSS,'=?',anova_mgh[i].SSB,'+',anova_mgh[i].SSW
+      print, anova_mgh[i].TSS,'=?',anova_mgh[i].SSB+anova_mgh[i].SSW
       print, 'f('+strtrim(anova_mgh[i].dof_ssb,2)+','+strtrim(anova_mgh[i].dof_ssw,2)+$
              ') = ',anova_mgh[i].f_anova
       print, ';;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;'
    endfor
-   stop 
-   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
-   ;REFERENCE VALUES FOR PLOTTING
-   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   restore,'/scr2/nichal/workspace4/ana/ms0451/leetho18a_avevals.sav'
-   hifeh_cl0024 = hifeh
-   lofeh_cl0024 = lofeh
-   bndry_mass_cl0024 = bndry_mass
 
-   ;Get the average values measured in Gallazzi05
-   g05_mass = [9.00,9.11,9.31,9.51,9.72,9.91,10.11,10.31,10.51,10.72,10.91,11.11,11.31,11.5];the first mass is actually 8.91
-   g05_feh  = [-0.6,-0.61,-0.65,-0.61,-0.52,-0.41,-0.23,-0.11,-0.01,0.04,0.07,0.10,0.12,0.13]
-   ;below are the stars in the figure 8 of Gallazzi05
-   g05_feherr = [0.62,0.56,0.59,0.55,0.47,0.43,0.35,0.31,0.27,0.25,0.22,0.21,0.2,0.2]/2.
-   g05_fehlo = g05_feh-g05_feherr
-   g05_fehhi = g05_feh+g05_feherr
-   toolow = where(g05_fehlo lt -1.,ctoolow)
-   if ctoolow gt 0 then g05_fehlo(toolow) = -1
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+   ;DEVIATION FROM Z0 LINE
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+   if redodeviation_fromz0line then deviation_fromz0line,sciall,proball
+   restore,deviationparam_file
+   print,';;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;'
+   print,'DEVIATION FROM Z0 LINE'
+   print,'FeH:'
+   print,'intercept, slope'
+   print,'probgrid fit:',feh_dev_par_all
+   print,'mc fit',mc_feh_dev_par,mc_feh_dev_par_err
+   print,'simple fit',simple_feh_dev_par,simple_mgh_dev_par_err
 
-   ;Choi's Data
-   Choi14z01 = {zlow:0.1,zhigh:0.2,mass:[9.9,10.2,10.4,10.7,11.0],Feh:[-0.05,-0.06,-0.01,-0.03,0.02],Feherr:[0.04,0.02,0.01,0.01,0.01],mgfe:[0.04,0.13,0.16,0.21,0.23],mgfeerr:[0.05,0.03,0.01,0.01,0.02]}
-   Choi14z02 = {zlow:0.2,zhigh:0.3,mass:[10.2,10.5,10.7,11.0,11.3],Feh:[-0.08,-0.06,-0.03,-0.01,-0.05],Feherr:[0.04,0.02,0.01,0.01,0.02],mgfe:[0.17,0.19,0.20,0.22,0.23],mgfeerr:[0.06,0.02,0.01,0.02,0.04]}
-   Choi14z03 = {zlow:0.3,zhigh:0.4,mass:[10.5,10.8,11.0,11.3],Feh:[-0.11,-0.05,-0.02,-0.03],Feherr:[0.03,0.01,0.01,0.02],mgfe:[0.18,0.22,0.21,0.29],mgfeerr:[0.04,0.02,0.01,0.03]}
-   Choi14z04 = {zlow:0.4,zhigh:0.55,mass:[10.8,11.1,11.3],Feh:[-0.07,-0.04,-0.05],Feherr:[0.02,0.01,0.02],mgfe:[0.23,0.23,0.30],mgfeerr:[0.04,0.02,0.03]}
-   Choi14z06 = {zlow:0.55,zhigh:0.7,mass:[10.9,11.0,11.3],Feh:[-0.15,-0.02,-0.05],Feherr:[0.07,0.03,0.03],mgfe:[0.05,0.09,0.19],mgfeerr:[0.13,0.05,0.04]}
-
-   conroy = {mass:[9.63,9.75,9.80,10.08,10.55,10.70,11.07],Feh:[-0.07,-0.05,-0.04,-0.03,-0.01,-0.02,0.],$
-             MgFe:[.05,0.08,0.09,0.12,0.15,0.20,0.22]}
-
-   ;Xiangcheng's FIRE data
-   readcol,'/scr2/nichal/workspace2/catalogs/xiangcheng_ma/mzr_z0pt8.txt',xma_mass08,xma_feh08
-   readcol,'/scr2/nichal/workspace2/catalogs/xiangcheng_ma/mzr_z0.txt',xma_mass0,xma_feh0
-   xma_feh08 = xma_feh08-0.2
-   xma_feh0 = xma_feh0-0.2
-   
-   ;De Rossi 2017 (EAGLE)
-   ;read off from Figure 5
-   DeRossi_z0={mass:[9.15,9.48,9.81,10.15,10.5,10.72],feh:[-0.17,-0.08,0.05,0.12,0.17,0.31],feherr:[0.075,0.08,0.07,0.07,0.07,0.03]}
-   DeRossi_z1={mass:[9.18,9.47,9.85,10.15,10.55],feh:[-0.39,-0.28,-0.09,0.08,0.17],feherr:[0.06,0.06,0.08,0.07,0.085]}
-   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   ;Sybilska et al 2017 (hELENa, IFU from Sauron data)
-   aa=read_csv('/scr2/nichal/workspace2/catalogs/sybilska.csv',n_table_header=1,header=header)
-   Syb_z0 = {mass:aa.field1,feh:aa.field2}
-   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   ;Lu 2014
-   Lu_z0 = {mass:[8.21,8.61,9.0,9.41,9.8,10.2,10.61,11],feh:[-0.53,-0.43,-0.35,-0.26,-0.16,-0.098,-0.075,-0.09],$
-            feherr:[0.13,0.12,0.11,0.12,0.11,0.10,0.095,0.095]}
-   Lu_z1 = {mass:[8.21,8.61,9,9.4,9.8,10.2,10.6,11],feh:[-0.56,-0.44,-0.35,-0.25,-0.18,-0.13,-0.11,-0.11],$
-             feherr:[0.14,0.13,0.11,0.11,0.11,0.10,0.10,0.09]}
-   Lu_somerville_z0 = {mass:[8.25,8.65,9.05,9.45,9.85,10.25,10.64],feh:[-1.00,-0.82,-0.64,-0.46,-0.33,-0.15,-0.03],$
-                      feherr:[0.06,0.1,0.1,0.1,0.1,0.10,0.095]}
-   Lu_lu_z0 = {mass:[8.73,8.95,9.18,9.47,9.76,10.09,10.46,10.88],feh:[-.99,-0.84,-0.70,-0.52,-0.31,-0.06,0.18],$
-              feherr:[0.1,0.1,0.1,0.1,0.1,0.1,0.10,0.095]}
+   print,'MgH:'      
+   print,'intercept, slope'
+   print,'mc fit',mc_mgh_dev_par,mc_mgh_dev_par_err
+   print,'simple fit',simple_mgh_dev_par,simple_mgh_dev_par_err
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   if doplot_masshist then doplot_masshist,sciall
-
-stop
-   set_plot,'ps'
-   !p.multi = [0,1,1]
-   !p.font = 0
-   !p.charsize = 1.5
-   sunsym = sunsymbol()
-   Delta = '!9'+string("104B)+'!x'
-   alpha = '!9'+string("141B)+'!x'
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   agerange = [0,13,0,2.,4.,6.,8.,13.]  
-   for n=0,1 do begin 
-;   for n=0,n_Elements(agerange)-2 do begin
-     inrange = where(sciall.ageform ge agerange(n) and sciall.ageform lt agerange(n+1),cinrange)
-     if cinrange eq 0 then continue
-     sci = sciall(inrange)
-     goodness =sciall(inrange).goodsn
-     goodfit = where(goodness eq 1,cgoodfit, complement=badfit,ncomplement=cbadfit)
-     name = 'univage_'+strtrim(string(agerange(n),format='(I)'),2)+'_'+strtrim(string(agerange(n+1),format='(I)'),2) 
-     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
-      psname= name+'_alpha_feh_mass.eps'
-      device, filename = psname,xsize = 15,ysize = 10, $
-                   xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
-         xrange=[9.,12]
-         yrange=[-1.,0.3]
-         plot,sci.logmstar,sci.feh,/nodata,xrange=xrange,xstyle=5,yrange=yrange,ystyle=5
-         ;draw axis
-         axis,xaxis=0,xrange=xrange,xstyle=1,xtitle='Log(M/M'+sunsym+')'
-         axis,yaxis=0,yrange=yrange,ystyle=1,ytitle='[Fe/H]'
-         axis,xaxis=1,xrange=xrange,xstyle=1,xtickformat='(A1)'
-         axis,yaxis=1,yrange=yrange,ystyle=1,ytickformat='(A1)'
-   
-;         cgerrplot,sci(goodfit).logmstar,sci(goodfit).fehlower,sci(goodfit).fehupper,color='tomato',thick=0.5
-         if cbadfit gt 0 then oplot,sci(badfit).logmstar,sci(badfit).feh,psym=cgsymcat(16),color=fsc_Color('darkgray'),symsize=0.7
-         goodsymsize = 1.5/(max(sci(goodfit).snfit)-min(sci(goodfit).snfit))*sci(goodfit).snfit+0.7
-         for i=0,cgoodfit-1 do begin
-           if sci(goodfit[i]).zspec lt 0.3 then symcol = 'skyblue'
-           if sci(goodfit[i]).zspec gt 0.3 and sci(goodfit[i]).zspec lt 0.5 then symcol = 'goldenrod'
-           if sci(goodfit[i]).zspec gt 0.5 and sci(goodfit[i]).zspec lt 0.6 then symcol = 'tomato'
 
-           oplot,[sci(goodfit[i]).logmstar],[sci(goodfit[i]).feh],psym=cgsymcat(46),color=fsc_Color(symcol),symsize=goodsymsize[i]
-         endfor
-         oplot,!x.crange,(!x.crange-10.)*sdssmzrpar[1]+sdssmzrpar[0],linestyle=2,thick=2,color=fsc_color('navyblue')
-         oplot,!x.crange,(!x.crange-10.)*cl0024mzrpar[1]+cl0024mzrpar[0],linestyle=2,thick=2,color=fsc_color('peru')
-         oplot,!x.crange,(!x.crange-10.)*ms0451mzrpar[1]+ms0451mzrpar[0],linestyle=2,thick=2,color=fsc_color('indianred')
-         ;xyouts,11.3,-0.8,strtrim(string(agerange(n),format='(I)'),2)+'-'+strtrim(string(agerange(n+1),format='(I)'),2)+'Gyr'
-         al_legend,['z~0 SDSS','z~0.4 Cl0024','z~0.55 MS0451'],psym=cgsymcat(46),box=0,colors=['skyblue','goldenrod','tomato'],$
-                    /bottom,/right,charsize=1,symsize=2
-      device,/close
-   
-      psname=name+'_alpha_feh_alpha.eps'
-      device, filename = psname,xsize = 15,ysize = 10, $
-                   xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
-         xrange=[-1.,0.3]
-         yrange=[-0.5,0.9]
-         plot,sci.feh,sci.alphafe,/nodata,xrange=xrange,xstyle=5,yrange=yrange,ystyle=5
-         ;draw axis
-         axis,xaxis=0,xrange=xrange,xstyle=1,xtitle='[Fe/H]'
-         axis,yaxis=0,yrange=yrange,ystyle=1,ytitle='[Mg/Fe]'
-         axis,xaxis=1,xrange=xrange,xstyle=1,xtickformat='(A1)'
-         axis,yaxis=1,yrange=yrange,ystyle=1,ytickformat='(A1)'
-   
-   ;      cgerrplot,sci(goodfit).alphafe,sci(goodfit).alphafelower,sci(goodfit).alphafeupper,$
-   ;                color='tomato',thick=0.5
-   ;      cgerrplot,sci(goodfit).feh,sci(goodfit).fehlower,sci(goodfit).fehupper,$
-   ;                color='tomato',thick=0.5,/horizontal
-         if cbadfit gt 0 then oplot,sci(badfit).feh,sci(badfit).alphafe,psym=cgsymcat(16),color=fsc_Color('darkgray'),symsize=0.7
-         goodsymsize = 1.5/(max(sci(goodfit).snfit)-min(sci(goodfit).snfit))*sci(goodfit).snfit+0.7
-         for i=0,cgoodfit-1 do begin
-           if sci(goodfit[i]).zspec lt 0.3 then symcol = 'skyblue'
-           if sci(goodfit[i]).zspec gt 0.3 and sci(goodfit[i]).zspec lt 0.5 then symcol = 'goldenrod'
-           if sci(goodfit[i]).zspec gt 0.5 and sci(goodfit[i]).zspec lt 0.6 then symcol = 'tomato'
+   if doplot_masshist then plot_masshist,sciall
+   if doplot_mzr then plot_mzr,sciall,prefix=prefix
+   if doplot_byage then plot_byage,sciall,prefix=prefix
+   if doplot_deviation then plot_deviation_fromz0line,sciall
 
-           oplot,[sci(goodfit[i]).feh],[sci(goodfit[i]).alphafe],psym=cgsymcat(46),color=fsc_Color(symcol),symsize=goodsymsize[i]
-         endfor
-         xyouts,-0.9,-0.4,strtrim(string(agerange(n),format='(I)'),2)+'-'+strtrim(string(agerange(n+1),format='(I)'),2)+'Gyr'
-      device,/close
-   
-      psname = name+'_alpha_alpha_mass.eps'
-      device,filename = psname,xsize = 15,ysize = 10, $
-                   xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
-         xrange=[9.5,12]
-         yrange=[-1.,0.9]
-         plot,sci.logmstar,sci.ah,/nodata,xrange=xrange,xstyle=5,yrange=yrange,ystyle=5
-         axis,xaxis=0,xrange=xrange,xstyle=1,xtitle='Log(M!L*!N/M'+sunsym+')'
-         axis,yaxis=0,yrange=yrange,ystyle=1,ytitle='[Mg/H]'
-         axis,xaxis=1,xrange=xrange,xstyle=1,xtickformat='(A1)'
-         axis,yaxis=1,yrange=yrange,ystyle=1,ytickformat='(A1)'
-         goodsymsize = 1.5/(max(sci(goodfit).snfit)-min(sci(goodfit).snfit))*sci(goodfit).snfit+0.7
-  ;       for i=0,cgoodfit-1 do begin
-  ;         oplot,[sci(goodfit[i]).logmstar],[sci(goodfit[i]).feh],psym=cgsymcat(46),color=fsc_Color('lightgray'),symsize=goodsymsize[i]
-  ;       endfor
-   
-         if cbadfit gt 0 then oplot,sci(badfit).logmstar,sci(badfit).ah,psym=cgsymcat(46),color=fsc_Color('darkgray'),symsize=0.7
-         for i=0,cgoodfit-1 do begin
-           if sci(goodfit[i]).zspec lt 0.3 then symcol = 'skyblue'
-           if sci(goodfit[i]).zspec gt 0.3 and sci(goodfit[i]).zspec lt 0.5 then symcol = 'goldenrod'
-           if sci(goodfit[i]).zspec gt 0.5 and sci(goodfit[i]).zspec lt 0.6 then symcol = 'tomato'
-           oplot,[sci(goodfit[i]).logmstar],[sci(goodfit[i]).ah],psym=cgsymcat(46),color=fsc_Color(symcol),symsize=goodsymsize[i]
-         endfor
-         ;Add Choi's data
-         oploterror,choi14z01.mass,choi14z01.feh+choi14z01.mgfe,sqrt(choi14z01.feherr^2+choi14z01.mgfe^2),color=fsc_color('ygb5'),linethick=2,errcolor=fsc_color('ygb5')
-         oplot,choi14z01.mass,choi14z01.feh+choi14z01.mgfe,psym=cgsymcat(16),color=fsc_color('ygb5'),symsize=1.5
- 
-         oploterror,choi14z04.mass,choi14z04.feh+choi14z04.mgfe,sqrt(choi14z04.feherr^2+choi14z04.mgfe^2),color=fsc_color('darkgoldenrod'),linethick=2,errcolor=fsc_color('darkgoldenrod')
-         oplot,choi14z04.mass,choi14z04.feh+choi14z04.mgfe,psym=cgsymcat(16),color=fsc_color('darkgoldenrod'),symsize=1.5
-         ;add best fit lines
-         oplot,!x.crange,(!x.crange-10.)*sdssmarpar[1]+sdssmarpar[0],linestyle=0,thick=2,color=fsc_color('navyblue')
-         oplot,!x.crange,(!x.crange-10.)*cl0024marpar[1]+cl0024marpar[0],linestyle=0,thick=2,color=fsc_color('peru')
-         oplot,!x.crange,(!x.crange-10.)*ms0451marpar[1]+ms0451marpar[0],linestyle=0,thick=2,color=fsc_color('indianred')
-         al_legend,['z~0','z~0.39','z~0.55'],psym=cgsymcat(46),box=0,symsize=2,$
-                colors=['skyblue','goldenrod','tomato'],charsize=1.1,position=[11.1,-0.4]
-         al_legend,['Choi+2014'],psym=cgsymcat(16),box=0,symsize=1.5,colors=['darkgray'],charsize=1.1,position=[11.1,-0.8]
-         xyouts,11.5,-0.4,'Observed Redshift',alignment=0.5,charsize=1.1
-      device,/close
 
-      psname=name+'_alpha_mass_alphafe.eps'
-      device, filename = psname,xsize = 15,ysize = 10, $
-                   xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
-         xrange=[9.5,12]
-         yrange=[-0.5,0.9]
-         plot,sci.logmstar,sci.alphafe,/nodata,xrange=xrange,xstyle=5,yrange=yrange,ystyle=5
-         ;draw axis
-         axis,xaxis=0,xrange=xrange,xstyle=1,xtitle='Log(M!L*!N/M'+sunsym+')'
-         axis,yaxis=0,yrange=yrange,ystyle=1,ytitle='[Mg/Fe]'
-         axis,xaxis=1,xrange=xrange,xstyle=1,xtickformat='(A1)'
-         axis,yaxis=1,yrange=yrange,ystyle=1,ytickformat='(A1)'
-
-   ;      cgerrplot,sci(goodfit).alphafe,sci(goodfit).alphafelower,sci(goodfit).alphafeupper,$
-   ;                color='tomato',thick=0.5
-   ;      cgerrplot,sci(goodfit).feh,sci(goodfit).fehlower,sci(goodfit).fehupper,$
-   ;                color='tomato',thick=0.5,/horizontal
-         if cbadfit gt 0 then oplot,sci(badfit).logmstar,sci(badfit).alphafe,psym=cgsymcat(16),color=fsc_Color('darkgray'),symsize=0.7
-         goodsymsize = 1.5/(max(sci(goodfit).snfit)-min(sci(goodfit).snfit))*sci(goodfit).snfit+0.7
-         for i=0,cgoodfit-1 do begin
-           if sci(goodfit[i]).zspec lt 0.3 then symcol = 'skyblue'
-           if sci(goodfit[i]).zspec gt 0.3 and sci(goodfit[i]).zspec lt 0.5 then symcol = 'goldenrod'
-           if sci(goodfit[i]).zspec gt 0.5 and sci(goodfit[i]).zspec lt 0.6 then symcol = 'tomato'
-
-           oplot,[sci(goodfit[i]).logmstar],[sci(goodfit[i]).alphafe],psym=cgsymcat(46),color=fsc_Color(symcol),symsize=goodsymsize[i]
-         endfor
-         xyouts,-0.9,-0.4,strtrim(string(agerange(n),format='(I)'),2)+'-'+strtrim(string(agerange(n+1),format='(I)'),2)+'Gyr'
-      device,/close
-   endfor
-stop
-   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   ;plot deviation as a function of formation age
-   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   psname='FEH_deviation_fromz0line.eps'
-   sdss_fixslope_pars= sdssmzrpar
-   fehideal = sdss_fixslope_pars[0]+(sciall.logmstar-10.)*sdss_fixslope_pars[1]
-   x=sciall.ageform
-   y=sciall.feh-fehideal
-   dx = 0.5*(sciall.ageupper-sciall.agelower)
-   dy = 0.5*(sciall.fehupper-sciall.fehlower)
-   dxarr = -1.*proball.dagearr ;since x axis is ageuni-agegal
-   dyarr = proball.dfeharr
-   probdxdyarr = transpose(proball.probfehage,[1,0,2]) ;age feh nobjs
-   redolinfit = 1
-   if redolinfit eq 1 then begin
-     feh_dev_par = linfitprobgrid_general(x,y,dxarr,dyarr,probdxdyarr,sigma_a_b,$
-                   outfitfile='all_prob_deltafeh_age.fits',outepsfile='all_plot_deltafeh_age.eps',$
-                   fitrange=[0,11.5],/plot,initial_guess=[-0.4,0.06],stepsize=[0.0005,0.0005],$
-                   badid=[34,248],nstep=3000)
-
-      save, feh_dev_par,sigma_a_b,filename='linfitprobgrid_param_all.sav'
-   endif else begin
-      restore,'linfitprobgrid_param_all.sav'
-      feh_dev_par = sigma_a_b[1,*]
-   endelse
-   redolinfitmc = 1
-   if redolinfitmc eq 1 then begin
-      mcpar = linfitprobgrid_mc(x,y,dxarr,dyarr,probdxdyarr,sigmamc)
-      save, mcpar,sigmamc,filename='linfitmc_param_all.sav'
-   endif else begin
-      restore,'linfitmc_param_all.sav'
-   endelse
-
-   print,'feh deviation (intercept, slope)'
-   print,'probgrid fit',sigma_a_b
-   print,'mc fit',mcpar,sigmamc
-   ;stupid linfit
-   good = where(x gt 0.)
-   simplepar = linfit(x(good),y(good),sigma=simpleparerr)
-   print,'simple fit',simplepar,simpleparerr      
-
-   xfitrange = [0,13]
-   yfitrange = [-0.4,0.4]
-;   reduceimage,'all_prob_deltafeh_age.fits',xfitrange,yfitrange,img,ximg,yimg
-   plotposition=[0.15,0.18,0.95,0.87]
-;   set_plot,'x'
-;   loadct,60
-;   cgdisplay,/pixmap
-;   cgimage,img_sdss,position=plotposition
-;   bgimage = cgsnapshot()
-;   wdelete
-
-   set_plot,'ps'
-   device, filename = psname,xsize = 15,ysize = 10,decomposed=1,color=1, $
-              xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated;
-;      loadct,54
-;      good = where(finite(img),cgood,complement=bad)
-;      img(bad) = min(img(good))
-;      loadct,55
-;      cgimage,img,position=plotposition
-;      cgimage,img,transparent=50,alphabackgroundimage=bgimage,alphafgposition=plotposition
-      plot,sciall.ageform,sciall.feh-fehideal,psym=1,xtitle='Age of the universe at galaxy formation',ytitle=delta+'[Fe/H]',xrange=xfitrange,xstyle=9,yrange=yfitrange,/nodata,position=plotposition,/noerase
-
-      axis,xaxis=1,xticks=4,xtickv=[1.513,3.223, 5.747,8.422 ,12.161],xtickn=['4','2','1','0.5','0.1'],xtitle='z'
-
-      sdss = where(sciall.zspec lt 0.3)
-      cgplot,sciall(sdss).ageform,sciall(sdss).feh-fehideal(sdss),psym=16,/overplot,symsize=0.5,color='skyblue'
-      cl0024 = where(sciall.zspec gt 0.3 and sciall.zspec lt 0.45)
-      cgplot,sciall(cl0024).ageform,sciall(cl0024).feh-fehideal(cl0024),psym=16,/overplot,symsize=0.5,color='goldenrod'
-      ms0451 = where(sciall.zspec gt 0.45)
-      cgplot,sciall(ms0451).ageform,sciall(ms0451).feh-fehideal(ms0451),psym=16,/overplot,symsize=0.5,color='tomato'
-      bad = where(sciall.goodsn eq 0)
-      cgplot,sciall(bad).ageform,sciall(ms0451).feh-fehideal(ms0451),psym=16,/overplot,symsize=0.5,color='gray'
-
-;      oplot,[0,14],feh_dev_par(0)+feh_dev_par(1)*[0,14],thick=1,linestyle=2
-      oplot,[0,14],mcpar(0)+mcpar(1)*[0,14],thick=1,linestyle=2;,color=fsc_color('red') 
-      ;oplot,[0,14],feh_dev_par_sdss(0)+feh_dev_par_sdss(1)*[0,14],thick=2,linestyle=2,color=fsc_color('blu5')
-      ;oplot,[0,14],feh_dev_par_cl(0)+feh_dev_par_cl(1)*[0,14],thick=2,linestyle=2,color=fsc_color('org6')
-
-  ;    xyouts,0.5,0.32,'(c) real observations',charsize=1.2
-      xyouts,1,-0.38,'older galaxies',charsize=0.8
-      xyouts,9.4,-0.38,'younger galaxies',charsize=0.8
-      arrow,0.9,-0.37,0.3,-0.37,/data
-      arrow,12.1,-0.37,12.7,-0.37,/data
-   device,/close
-
-   ahideal = sdssmarpar[0]+(sciall.logmstar-10.)*sdssmarpar[1]
-   x=sciall.ageform
-   y=sciall.ah-ahideal
-   ;stupid linfit
-   good = where(y gt -0.5)
-   simplepar = linfit(x(good),y(good),sigma=simpleparerr)
-   ;mc fit
-   redolinfitmc = 1
-   if redolinfitmc eq 1 then begin
-      good = where(y gt -0.5)
-      y1 = sciall(good).feh
-      y2 = sciall(good).alphafe
-      dxarr = -1.*proball(good).dagearr ;since x axis is ageuni-agegal
-      dy1arr = proball(good).dfeharr
-      dy2arr = proball(good).dalphaarr
-      probcube = transpose(proball(good).cubeprob,[1,0,2,3])
-      mcpar = linfitprobgrid_mc_mgh(x(good),y1,y2,dxarr,dy1arr,dy2arr,probcube,sigmamc)
-      save, mcpar,sigmamc,filename='linfitmc_mghparam_all.sav'
-   endif else begin
-      restore,'linfitmc_mghparam_all.sav'
-   endelse
-
-   print,'delta Mg'
-   print,'simple fit',simplepar,simpleparerr
-   print,'mc fit',mcpar,sigmamc
-   set_plot,'ps'
-   psname = 'mgh_deviation_fromz0line.eps'
-   device, filename = psname,xsize = 15,ysize = 10,decomposed=1,color=1, $
-              xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated;
-      yfitrange=[-0.5,0.6]
-      plot,sciall.ageform,sciall.ah-ahideal,psym=1,xtitle='Age of the universe at galaxy formation',ytitle=delta+'[Mg/H]',xrange=xfitrange,xstyle=9,yrange=yfitrange,/nodata,position=plotposition,/noerase,ystyle=1
-
-      axis,xaxis=1,xticks=4,xtickv=[1.513,3.223, 5.747,8.422 ,12.161],xtickn=['4','2','1','0.5','0.1'],xtitle='z'
-
-      sdss = where(sciall.zspec lt 0.3)
-      cgplot,sciall(sdss).ageform,sciall(sdss).ah-ahideal(sdss),psym=16,/overplot,symsize=0.5,color='skyblue'
-      cl0024 = where(sciall.zspec gt 0.3 and sciall.zspec lt 0.45)
-      cgplot,sciall(cl0024).ageform,sciall(cl0024).ah-ahideal(cl0024),psym=16,/overplot,symsize=0.5,color='goldenrod'
-      ms0451 = where(sciall.zspec gt 0.45)
-      cgplot,sciall(ms0451).ageform,sciall(ms0451).ah-ahideal(ms0451),psym=16,/overplot,symsize=0.5,color='tomato'
-      bad = where(sciall.goodsn eq 0)
-      cgplot,sciall(bad).ageform,sciall(ms0451).ah-ahideal(ms0451),psym=16,/overplot,symsize=0.5,color='gray'
-
-      oplot,[0,14],simplepar(0)+simplepar(1)*[0,14],thick=1,linestyle=2
-      ;oplot,[0,14],ah_dev_par_sdss(0)+ah_dev_par_sdss(1)*[0,14],thick=2,linestyle=2,color=fsc_color('blu5')
-      ;oplot,[0,14],ah_dev_par_cl(0)+ah_dev_par_cl(1)*[0,14],thick=2,linestyle=2,color=fsc_color('org6')
-
-  ;    xyouts,0.5,0.32,'(c) real observations',charsize=1.2
-      xyouts,1,-0.48,'older galaxies',charsize=0.8
-      xyouts,9.4,-0.48,'younger galaxies',charsize=0.8
-      arrow,0.9,-0.37,0.3,-0.37,/data
-      arrow,12.1,-0.37,12.7,-0.37,/data
-   device,/close
 
 stop
 end

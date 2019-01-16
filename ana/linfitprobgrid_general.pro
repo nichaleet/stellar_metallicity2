@@ -23,6 +23,7 @@ function linfitprobgrid_general,x,y,dxarr,dyarr,probdxdyarr,sigmaout,outfitfile=
 ;       /gridsearch = set if you want to do grid search instead of mcmc. if so, you gotta specify p0range and 
 ;                     p1range for intercept and slope range accordingly. The resolution of grid is 25x25 
 ;       outepsfile = output best fit param plots
+;OUTPUT:: sigmaout = [[intercept16,intercept50,intercept84],[slope16,slope50,slope84]] 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
    dimen = size(probdxdyarr,/dimensions)

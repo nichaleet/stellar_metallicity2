@@ -279,7 +279,7 @@ pro sps_fit::fitomg, science, noredraw=noredraw, nostatusbar=nostatusbar
     if ~keyword_set(nostatusbar) then widget_control, widget_info(self.base, find_by_uname='status'), set_value='Fitting 5 parameters ...'
     widget_control, widget_info(self.base, find_by_uname='keepoldfit'), get_value=keepoldfit
     oldchisq = science.chisq
-    element= ['Mg','O']
+    element= ['Mg','N']
     znow = science.zspec
     if znow le 0. then znow = science.z
     if znow le 0. then stop
@@ -296,7 +296,7 @@ pro sps_fit::fitomg, science, noredraw=noredraw, nostatusbar=nostatusbar
        dlam_all(baddlam) = interpol(dlam_all(gooddlam),reallambda(gooddlam),reallambda(baddlam))
     endif
     pi = replicate({value:0d, fixed:0, limited:[1,1], limits:[0.D,0.D], parname:'', mpprint:0, mpformat:'', step:0d, tied:''}, 6)
-    pi[0].limits = [-0.6,0.19] ;this is just for initial parameters
+    pi[0].limits = [-0.6,-0.1] ;this is just for initial parameters
     pi[1].limits = [min(spsage),(galage(znow,1000)/1.e9)<max(spsage)]
     pi[3].limits = [-0.3,0.3]+znow
     pi[4].limits = [-0.4,0.4]
@@ -314,7 +314,7 @@ pro sps_fit::fitomg, science, noredraw=noredraw, nostatusbar=nostatusbar
     ;fix the limits back
     firstguess = pi.value
     pi[0].limits = minmax(spsz) ;fix the limit of [Fe/H] back
-    pi[0].limits[1] = 0.2
+    pi[0].limits[1] = 0.19
     pi[1].limits = [min(spsage),(galage(znow,1000)/1.e9)<max(spsage)]
     pi[4].limits =[-0.4,0.8]
     pi.step = double([0.1, 0.5, 25.0,0.002,0.1,0.1])
@@ -344,7 +344,7 @@ pro sps_fit::fitomg, science, noredraw=noredraw, nostatusbar=nostatusbar
     widget_control, widget_info(self.base, find_by_uname='maxnloop'), get_value=maxnloop
     maxnloop = fix(maxnloop[0])
     if maxnloop eq 0 then maxnloop = 150
-    maxnloop = 100
+    ;maxnloop = 50
     print, 'maxnloop ', maxnloop
     print, '* * * * * * * * * * * * * * * * * * * *'
     print, strtrim(science.objname, 2)+'  ('+strtrim(string(self.i+1, format='(I3)'), 2)+' / '+strtrim(string(self.nspec, format='(I3)'), 2)+')'
@@ -1166,7 +1166,7 @@ pro sps_fit::fit_all,alpha=alpha,omg=omg,glorious=glorious
     widget_control, widget_info(self.base, find_by_uname='keepoldfit'), get_value=keepoldfit
     scienceall = *self.science
     curi = self.i
-  for nwalker=0,2 do begin
+  for nwalker=0,1 do begin
     nreplace = 0
     if nwalker ge 1 then keepoldfit=0
     for i=0,self.nspec-1 do begin

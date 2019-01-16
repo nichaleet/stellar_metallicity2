@@ -523,7 +523,7 @@ pro sps_fit::fitomg, science, noredraw=noredraw, nostatusbar=nostatusbar
     if ~keyword_set(nostatusbar) then widget_control, widget_info(self.base, find_by_uname='status'), set_value='Fitting 5 parameters ...'
     widget_control, widget_info(self.base, find_by_uname='keepoldfit'), get_value=keepoldfit
     oldchisq = science.chisq
-    element= ['Mg','O']
+    element= ['Mg','N']
     znow = science.zspec
     if znow le 0. then znow = science.z
     if znow le 0. then stop
@@ -540,7 +540,7 @@ pro sps_fit::fitomg, science, noredraw=noredraw, nostatusbar=nostatusbar
        dlam_all(baddlam) = interpol(dlam_all(gooddlam),reallambda(gooddlam),reallambda(baddlam))
     endif
     pi = replicate({value:0d, fixed:0, limited:[1,1], limits:[0.D,0.D], parname:'', mpprint:0, mpformat:'', step:0d, tied:''}, 6)
-    pi[0].limits = [-0.6,0.19] ;this is just for initial parameters
+    pi[0].limits = [-0.6,0.] ;this is just for initial parameters
     pi[1].limits = [min(spsage),(galage(znow,1000)/1.e9)<max(spsage)]
     pi[3].limits = [-0.3,0.3]+znow
     pi[4].limits = [-0.4,0.4]
@@ -559,7 +559,7 @@ pro sps_fit::fitomg, science, noredraw=noredraw, nostatusbar=nostatusbar
     ;change the limits back to full range
     firstguess = pi.value
     pi[0].limits = minmax(spsz) ;fix the limit of [Fe/H] back
-   ; pi[0].limits[1]=0.4
+  ;  pi[0].limits[1]=0.0
 
     pi[1].limits = [min(spsage),(galage(znow,1000)/1.e9)<max(spsage)]
     pi[4].limits =[-0.4,0.8]
@@ -1069,7 +1069,7 @@ end
 
 pro sps_fit::cal_uncertainties_alpha, science
    common mask_in, mask_in, copynum
-  ; widget_control, widget_info(self.base, find_by_uname='status'), set_value='Calculating uncertainties ...'
+   widget_control, widget_info(self.base, find_by_uname='status'), set_value='Calculating uncertainties ...'
    grid_file = *self.degen_file   ;nage
    grid_feh = *self.degen_fehgrid ;nfeh x nage x nalpha
    grid_age = *self.degen_agegrid ;nfeh x nage x nalpha
