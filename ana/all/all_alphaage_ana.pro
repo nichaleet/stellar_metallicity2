@@ -337,7 +337,8 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 pro linearfit_mzr,sciall,proball,prefix=prefix
-common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file,fileanova,deviationparam_file
+common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file,fileanova,$
+                 fileancova,deviationparam_file
    won = where(sciall.goodsn eq 1,cwon)
    
    allmzrpar = linfitmc(sciall[won].logmstar-10.,sciall[won].feh,proball[won].dfeharr,proball[won].probfeh,$
@@ -376,7 +377,8 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 pro test_evolution_regression,sciall,proball,prefix=prefix
-common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file,fileanova,deviationparam_file
+common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file,fileanova,$
+                 fileancova,deviationparam_file
    ;read the linfit param
    restore, linfitparam_file
 
@@ -479,9 +481,10 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 pro ancova,sciall,proball,fileancova=fileancova
-   won = where(sciall.goodsn eq 1,nobjs)
+   won = where(sciall.goodsn eq 1,cwon)
    ;fit linear regression with monte carlo technique 
    ;setting up all the neccesary parameters
+   nobjs = cwon
    feh  = sciall[won].feh
    dfeh = proball[won].dfeharr
    probdfeh = proball[won].probfeh
@@ -507,23 +510,32 @@ pro ancova,sciall,proball,fileancova=fileancova
    x = [transpose(mass),transpose(cl),transpose(ms)]
    df1_mo1 = 3
    df2_mo1 = nobjs-df1_mo1-1
+   mo1_pname = ['mass    ','cl0024  ','ms0451  '] 
    coeff_feh_mo1 = regress_mc(x,feh,dfeh,probdfeh,const=const_feh_mo1,sigmacoeff=sigma_feh_mo1,$
-                      rsq=rsq_feh_mo1,stderror=stderror_feh_mo1,adj_rsq=adjrsq_feh_mo1)
+                      sigmaconst=consterr_feh_mo1,rsq=rsq_feh_mo1,stderror=stderror_feh_mo1,$
+                      adj_rsq=adjrsq_feh_mo1)
    coeff_mgh_mo1 = regress_mc(x,mgh,dmgh,probdmgh,const=const_mgh_mo1,sigmacoeff=sigma_mgh_mo1,$
-                      rsq=rsq_mgh_mo1,stderror=stderror_mgh_mo1,adj_rsq=adjrsq_mgh_mo1)
+                      sigmaconst=consterr_mgh_mo1,rsq=rsq_mgh_mo1,stderror=stderror_mgh_mo1,$
+                      adj_rsq=adjrsq_mgh_mo1)
    x = [transpose(mass),transpose(cl),transpose(ms),transpose(m_cl),transpose(m_ms)]
    df1_mo2 = 5
    df2_mo2 = nobjs-df1_mo2-1
+   mo2_pname = ['mass      ','cl0024    ','ms0451    ','mass*cl0024','mass*ms0451'] 
    coeff_feh_mo2 = regress_mc(x,feh,dfeh,probdfeh,const=const_feh_mo2,sigmacoeff=sigma_feh_mo2,$
-                      rsq=rsq_feh_mo2,stderror=stderror_feh_mo2,adj_rsq=adjrsq_feh_mo2)
+                      sigmaconst=consterr_feh_mo2,rsq=rsq_feh_mo2,stderror=stderror_feh_mo2,$
+                      adj_rsq=adjrsq_feh_mo2)
    coeff_mgh_mo2 = regress_mc(x,mgh,dmgh,probdmgh,const=const_mgh_mo2,sigmacoeff=sigma_mgh_mo2,$
-                      rsq=rsq_mgh_mo2,stderror=stderror_mgh_mo2,adj_rsq=adjrsq_mgh_mo2)
- 
+                      sigmaconst=consterr_mgh_mo2,rsq=rsq_mgh_mo2,stderror=stderror_mgh_mo2,$
+                      adj_rsq=adjrsq_mgh_mo2)
    save, coeff_feh_mo1,const_feh_mo1,sigma_feh_mo1,rsq_feh_mo1,stderror_feh_mo1,adjrsq_feh_mo1,$
+         consterr_feh_mo1,$
          coeff_feh_mo2,const_feh_mo2,sigma_feh_mo2,rsq_feh_mo2,stderror_feh_mo2,adjrsq_feh_mo2,$
+         consterr_feh_mo2,$
          coeff_mgh_mo1,const_mgh_mo1,sigma_mgh_mo1,rsq_mgh_mo1,stderror_mgh_mo1,adjrsq_mgh_mo1,$
+         consterr_mgh_mo1,$
          coeff_mgh_mo2,const_mgh_mo2,sigma_mgh_mo2,rsq_mgh_mo2,stderror_mgh_mo2,adjrsq_mgh_mo2,$
-         df1_mo1,df2_mo2,df1_mo2,df2_mo2,filename=fileancova
+         consterr_mgh_mo2,$
+         df1_mo1,df2_mo1,df1_mo2,df2_mo2,mo1_pname,mo2_pname,filename=fileancova
 end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -630,7 +642,8 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 pro average_mzr,sciall,proball,prefix=prefix
-common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file,fileanova,deviationparam_file
+common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file,fileanova,$
+                 fileancova,deviationparam_file
    ;set values for each sample set (clusters)
    zmin = [0.,0.35,0.48]
    zmax = [0.15,0.42,0.6]
@@ -689,7 +702,8 @@ common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file,filea
 end
 
 pro deviation_fromz0line,sciall,proball
-common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file,fileanova,deviationparam_file
+common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file,fileanova,$
+                 fileancova,deviationparam_file
 ;calculate deviation as a function of formation age
    restore,linfitparam_fixslope_file
    restore, linfitparam_file
@@ -740,7 +754,8 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 pro plot_deviation_fromz0line,sciall
-common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file,fileanova,deviationparam_file
+common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file,fileanova,$
+                  fileancova,deviationparam_file
 common color_pallete, clustercolor, shadecolor, meancolor
 
    restore,deviationparam_file
@@ -849,7 +864,8 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 pro plot_mzr,sciall,prefix=prefix
-common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file,fileanova,deviationparam_file
+common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file,fileanova,$
+                fileancova,deviationparam_file
 common color_pallete, clustercolor, shadecolor, meancolor
    set_plot,'ps'
    !p.multi = [0,1,1]
@@ -1022,16 +1038,20 @@ common color_pallete, clustercolor, shadecolor, meancolor
 end
 
 pro plot_byage,sciall,prefix=prefix
-common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file,fileanova,deviationparam_file
+common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file,fileanova,$
+                  fileancova,deviationparam_file
 common color_pallete, clustercolor, shadecolor, meancolor
+
+   plotfixslope = 0
+   plotancova = 1
 
    restore, linfitparam_file
    restore,linfitparam_fixslope_file
+   restore, fileancova
    choi = get_refvalue(5,/choi14)
    choi14z01 = choi[where(choi.zlow eq 0.1)]
    choi14z04 = choi[where(choi.zlow eq 0.4)]
    
-   plotfixslope = 0
    if plotfixslope then begin
      sdssmzrpar = sdssmzrpar_fixslope
      cl0024mzrpar = cl0024mzrpar_fixslope
@@ -1041,8 +1061,15 @@ common color_pallete, clustercolor, shadecolor, meancolor
      cl0024marpar = cl0024marpar_fixslope
      ms0451marpar = ms0451marpar_fixslope
    endif
+   if plotancova then begin
+     sdssmzrpar = [const_feh_mo2,coeff_feh_mo2[0]]
+     cl0024mzrpar = [const_feh_mo2+coeff_feh_mo2[1],coeff_feh_mo2[0]+coeff_feh_mo2[3]]
+     ms0451mzrpar = [const_feh_mo2+coeff_feh_mo2[2],coeff_feh_mo2[0]+coeff_feh_mo2[4]]
+     sdssmarpar = [const_mgh_mo1,coeff_feh_mo1[0]]
+     cl0024marpar = [const_mgh_mo1,coeff_feh_mo1[0]]
+     ms0451marpar = [const_mgh_mo1,coeff_feh_mo1[0]]
+   endif
 
-     cl0024marpar = cl0024marpar_fixslope
    set_plot,'ps'
    !p.multi = [0,1,1]
    !p.font = 0
@@ -1177,6 +1204,7 @@ common color_pallete, clustercolor, shadecolor, meancolor
          oplot,!x.crange,(!x.crange-10.)*sdssmarpar[1]+sdssmarpar[0],linestyle=0,thick=2,color=fsc_color('navyblue')
          oplot,!x.crange,(!x.crange-10.)*cl0024marpar[1]+cl0024marpar[0],linestyle=0,thick=2,color=fsc_color('peru')
          oplot,!x.crange,(!x.crange-10.)*ms0451marpar[1]+ms0451marpar[0],linestyle=0,thick=2,color=fsc_color('indianred')
+         oplot,!x.crange,(!x.crange-10.)*sdssmarpar[1]+sdssmarpar[0],linestyle=0,thick=2,color=fsc_color('black') 
 ;         al_legend,['z~0','z~0.39','z~0.55'],psym=cgsymcat(46),box=0,symsize=2,$
 ;                colors=['skyblue','goldenrod','tomato'],charsize=1.1,position=[11.1,-0.4]
 ;         al_legend,['Choi+2014'],psym=cgsymcat(16),box=0,symsize=1.5,colors=['darkgray'],charsize=1.1,position=[11.1,-0.8]
@@ -1240,20 +1268,22 @@ end
 ;;;;;;;;;MAIN PROGRAM;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 pro all_alphaage_ana,domgo=domgo
-common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file,fileanova,deviationparam_file
+common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file,fileanova,$
+                fileancova,deviationparam_file
+
 common color_pallete, clustercolor, shadecolor, meancolor
    redodatamgn = 0
    redodatamgo = 0
    redoaverage = 0
    redolinearfit = 0
    retest_evolution_regression = 0 ;old method of ANCOVA
-   redoancova = 1
+   redoancova = 0
    redoanova = 0
    redodeviation_fromz0line = 0
 
    doplot_masshist = 0
    doplot_mzr = 0
-   doplot_byage = 0
+   doplot_byage = 1
    doplot_deviation = 0
 
    clustercolor = ['skyblue','goldenrod','tomato']
@@ -1446,21 +1476,60 @@ common color_pallete, clustercolor, shadecolor, meancolor
    print, ':::TEST EVOLUTION WITH ANCOVA (FULL METHOD):::'
    if redoancova then ancova,sciall,proball,fileancova=fileancova
    restore, fileancova
-   fchange1_feh = (rsq_feh_mo1/df1_mo1(1.-rsq_feh_mo1)
+   fchange_mo1_feh = (rsq_feh_mo1/df1_mo1)/((1.-rsq_feh_mo1)/df2_mo1)
+   fchange_mo2_feh = ((rsq_feh_mo2-rsq_feh_mo1)/(df1_mo2-df1_mo1))/((1.-rsq_feh_mo2)/df2_mo2)
+   dummy = mpftest(fchange_mo1_feh,df1_mo1,df2_mo1)
+   dummy = t_pdf(0.95,86)
    print, ';;;;;;;;;;;;;;;[Fe/H];;;;;;;;;;;;;;;;;;;;;;;;;;'
    print, 'model    R^2     adjusted R^2      std. error of the estimate'
-   print, '1  ',rsq_feh_mo1,adjrsq_feh_mo1,stderror_feh_mo1
-   print, '2  ',rsq_feh_mo2,adjrsq_feh_mo2,stderror_feh_mo2
+   print, '1    ',rsq_feh_mo1,adjrsq_feh_mo1,stderror_feh_mo1
+   print, '2    ',rsq_feh_mo2,adjrsq_feh_mo2,stderror_feh_mo2
+   print, ''
    print, '        Change Statistics'
    print, 'model    R^2 change    F change    df1    df2      Sig F change'
-   print, '1  ',rsq_feh_mo1,
+   print, '1    ',rsq_feh_mo1,fchange_mo1_feh,df1_mo1,df2_mo1,mpftest(fchange_mo1_feh,df1_mo1,df2_mo1)
+   print, '2    ',rsq_feh_mo2-rsq_feh_mo1,fchange_mo2_feh,df1_mo2-df1_mo1,df2_mo2,$
+                mpftest(fchange_mo2_feh,df1_mo2-df1_mo1,df2_mo2)
+   print, ''
+   print, 'Model Parameters'
+   print, 'model  parameter     value     std.error      t      sig.'
+   print, '1    ','constant',const_feh_mo1,consterr_feh_mo1,const_feh_mo1/consterr_feh_mo1,$
+                           (1.-t_pdf(abs(const_feh_mo1/consterr_feh_mo1),df2_mo1)) 
+   for i=0,2 do $
+   print, '     ',mo1_pname[i],coeff_feh_mo1[i],sigma_feh_mo1[i],coeff_feh_mo1[i]/sigma_feh_mo1[i],$
+                (2*(1.-t_pdf(abs(coeff_feh_mo1[i]/sigma_feh_mo1[i]),df2_mo1)))
+   print, '2    ','constant   ',const_feh_mo2,consterr_feh_mo2,const_feh_mo2/consterr_feh_mo2,$
+                           (1.-t_pdf(abs(const_feh_mo2/consterr_feh_mo2),df2_mo2))
+   for i=0,4 do $
+   print, '     ',mo2_pname[i],coeff_feh_mo2[i],sigma_feh_mo2[i],coeff_feh_mo2[i]/sigma_feh_mo2[i],$
+                (1.-t_pdf(abs(coeff_feh_mo2[i]/sigma_feh_mo2[i]),df2_mo2))
+   ;one tail test (the effect is only 1 direction)
+   fchange_mo1_mgh = (rsq_mgh_mo1/df1_mo1)/((1.-rsq_mgh_mo1)/df2_mo1)
+   fchange_mo2_mgh = ((rsq_mgh_mo2-rsq_mgh_mo1)/(df1_mo2-df1_mo1))/((1.-rsq_mgh_mo2)/df2_mo2)
+   print, ';;;;;;;;;;;;;;;[Mg/H];;;;;;;;;;;;;;;;;;;;;;;;;;'
+   print, 'model    R^2     adjusted R^2      std. error of the estimate'
+   print, '1    ',rsq_mgh_mo1,adjrsq_mgh_mo1,stderror_mgh_mo1
+   print, '2    ',rsq_mgh_mo2,adjrsq_mgh_mo2,stderror_mgh_mo2
+   print, ''
+   print, '        Change Statistics'
+   print, 'model    R^2 change    F change    df1    df2      Sig F change'
+   print, '1    ',rsq_mgh_mo1,fchange_mo1_mgh,df1_mo1,df2_mo1,mpftest(fchange_mo1_mgh,df1_mo1,df2_mo1)
+   print, '2    ',rsq_mgh_mo2-rsq_mgh_mo1,fchange_mo2_mgh,df1_mo2-df1_mo1,df2_mo2,$
+                mpftest(fchange_mo2_mgh,df1_mo2-df1_mo1,df2_mo2)
+   print, ''
+   print, 'Model Parameters'
+   print, 'model  parameter     value     std.error      t      sig.'
+   print, '1    ','constant',const_mgh_mo1,consterr_mgh_mo1,const_mgh_mo1/consterr_mgh_mo1,$
+                           (1.-t_pdf(abs(const_mgh_mo1/consterr_mgh_mo1),df2_mo1))
+   for i=0,2 do $
+   print, '     ',mo1_pname[i],coeff_mgh_mo1[i],sigma_mgh_mo1[i],coeff_mgh_mo1[i]/sigma_mgh_mo1[i],$
+                (2*(1.-t_pdf(abs(coeff_mgh_mo1[i]/sigma_mgh_mo1[i]),df2_mo1)))
+   print, '2    ','constant  ',const_mgh_mo2,consterr_mgh_mo2,const_mgh_mo2/consterr_mgh_mo2,$
+                           (1.-t_pdf(abs(const_mgh_mo2/consterr_mgh_mo2),df2_mo2))
+   for i=0,4 do $
+   print, '     ',mo2_pname[i],coeff_mgh_mo2[i],sigma_mgh_mo2[i],coeff_mgh_mo2[i]/sigma_mgh_mo2[i],$
+                (1.-t_pdf(abs(coeff_mgh_mo2[i]/sigma_mgh_mo2[i]),df2_mo2))
 
-
-coeff_feh_mo1,const_feh_mo1,sigma_feh_mo1,rsq_feh_mo1,stderror_feh_mo1,adjrsq_feh_mo1,$
-         coeff_feh_mo2,const_feh_mo2,sigma_feh_mo2,rsq_feh_mo2,stderror_feh_mo2,adjrsq_feh_mo2,$
-         coeff_mgh_mo1,const_mgh_mo1,sigma_mgh_mo1,rsq_mgh_mo1,stderror_mgh_mo1,adjrsq_mgh_mo1,$
-         coeff_mgh_mo2,const_mgh_mo2,sigma_mgh_mo2,rsq_mgh_mo2,stderror_mgh_mo2,adjrsq_mgh_mo2,$
-         filename=fileancova
    ;SECOND, TEST WITH ANOVA FOR EACH MASS BIN
    ;group into mass bins then compare the three redshifts from each mass bin with ANOVA
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1468,6 +1537,8 @@ coeff_feh_mo1,const_feh_mo1,sigma_feh_mo1,rsq_feh_mo1,stderror_feh_mo1,adjrsq_fe
    anova_feh = mrdfits(fileanova,1)
    anova_mgh = mrdfits(fileanova,2)
   
+   print, ';;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;'
+   print, ':::TEST EVOLUTION IN EACH MASS BIN WITH ANOVA:::'
    for i=0,n_elements(anova_feh)-1 do begin
       if anova_feh[i].mbinmin ne anova_mgh[i].mbinmin then stop, 'might have to redo anova, STOPPED'
       print, 'mass bin',anova_feh[i].mbinmin,anova_feh[i].mbinmax
