@@ -1262,8 +1262,216 @@ common color_pallete, clustercolor, shadecolor, meancolor
          xyouts,-0.9,-0.4,strtrim(string(agerange(n),format='(I)'),2)+'-'+strtrim(string(agerange(n+1),format='(I)'),2)+'Gyr'
       device,/close
    endfor
+end
+
+pro calculate_nta_data, sciall,proball,coeff,coeff_err
+   ;set up
+   R = 0.46 ;return fraction
+   ;solar abundances from asplund2009 (number of atoms)
+   solarmgh = 10^(7.64-12.)*24. ;times 24 to convert number of atoms to mass. cause Mg is 24 mass number.
+   yieldmgh = 3.*solarmgh
+
+   ;prep data
+   won = where(sciall.goodsn eq 1,cwon)
+   sci = sciall[won]
+   prob = proball[won]
+   mghtest = solarmgh*10.^(sci.ah)
+   ntamghtest = (1.-R)*(yieldmgh/mghtest-1.)
+   ;take out outliers
+   outliers = where((ntamghtest lt 0.1 and sci.logmstar lt 10.2) or (ntamghtest lt 0.01),$
+                 coutliers,complement=good,ncomplement=nobjs)
+   print, 'there are', coutliers,'outliders'
+
+   ;get final data
+   sci = sci(good)
+   prob = prob(good)
+   mgh = sci.ah
+   dmgh = prob.daharr
+   probdmgh = prob.probdah
+   mass = sci.logmstar
+   ;calcualte for plotting
+   ;real data
+   mghreal = solarmgh*10.^(mgh)
+   ntamgh = (1.-R)*(yieldmgh/mghreal-1.)
+   goodsymsize = 1.5/(max(sci.snfit)-min(sci.snfit))*sci.snfit+0.7
+
+
+   ;functional form monte carlo
+   ;getting cumulative probability
+   dummy = size(dmgh,/dimensions)
+   ngrid = dummy[0]
+   cumprob = fltarr(ngrid,nobjs)
+   for i=0,nobjs-1 do begin
+      curyarr = dmgh[*,i]
+      curprob = probdmgh[*,i]
+      for j=1,ngrid-1 do cumprob[j,i] = int_tabulated(curyarr[0:j],curprob[0:j])
+   endfor
+
+   nmc = 1000
+   linparmc = fltarr(2,nmc)
+   for i = 0,nmc-1 do begin
+      logmghrdm = fltarr(nobjs)
+      randomarr = randomu(seed,nobjs)
+      for j=0,nobjs-1 do begin
+         logmghrdm(j) = mgh(j)+interpol(dmgh[*,j],cumprob[*,j],randomarr(j))
+      endfor
+
+      mghrdm = (solarmgh*10.^(logmghrdm))<(yieldmgh*0.999)
+      ntardm = alog10((1.-R)*(yieldmgh/mghrdm-1.))
+      linpar_rdm = linfit(mass-10.,ntardm)
+      linparmc[*,i] = linpar_rdm
+   endfor
+   linparmgh = mean(linparmc,dimension=2)
+   linparmgh_err = stddev(linparmc,dimension=2)
+   print, 'CALCULATING NTA FROM DATA DIRECTLY'
+   print, 'dependence of ntamgh on M [mean,stdev]:', linparmgh[1],linparmgh_err[1]
+
+   ;create high and low shading
+   nmass = 50.
+   massline = 9.05+findgen(nmass)/nmass*2.45
+   fitlogntamgh = (massline-10.)*linparmgh[1]+linparmgh[0]
+
+   scattermgh=0.2
+   logmghline = coeff[0]+coeff[1]*(massline-10.)
+   mghline = solarmgh*10.^(logmghline)
+   mghlinehi = solarmgh*10.^(logmghline+scattermgh)
+   mghlinelo = solarmgh*10.^(logmghline-scattermgh) ;assume intrinsic scatter=0.1
+   ntamghline = (1.-R)*(yieldmgh/mghline-1.)
+   ntamghlinehi = (1.-R)*(yieldmgh/mghlinelo-1.)
+   ntamghlinelo = (1.-R)*(yieldmgh/mghlinehi-1.)
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+   ;literature values
+   ;spitoni2010
+   spitoni_low = 0.11
+   spitoni_high = 5.4
+
+   ;upper limits from Lu2015
+   readcol,'lu2015_upperlim.dat',logmass_lu,logeta_lu,comment='#'
+   ;;;;;;;;;;;;;;;;;;
+   set_plot,'ps'
+   !p.font = 0
+   !p.charsize=1.5
+   ntaletter = "150B
+   proptoletter = "265B
+   proptoletter = "265B
+   pmsymbol = "261B
+   sunsym = sunsymbol()
+   psname='nta_mass_data.eps'
+   device, filename = psname,xsize = 15,ysize = 10, $
+        xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
+      xrange=[9,11.5]
+      yrange=[0.01,10.]
+      plot,mass,ntamgh,xtitle='Log(M/M'+sunsym+')',/ylog,/nodata,xstyle=5,ystyle=5,xrange=xrange,yrange=yrange
+      polyfill,[xrange,reverse(xrange)],[spitoni_high,spitoni_high,spitoni_low,spitoni_low],color=fsc_color('lightgray')
+      x=[massline,reverse(massline)]
+      y=[ntamghlinehi,reverse(ntamghlinelo)]
+      polyfill,x,y,color=fsc_color('pink')
+
+      for i=0,nobjs-1 do begin
+           if sci[i].zspec lt 0.3 then symcol = 'skyblue'
+           if sci[i].zspec gt 0.3 and sci[i].zspec lt 0.5 then symcol = 'goldenrod'
+           if sci[i].zspec gt 0.5 and sci[i].zspec lt 0.6 then symcol = 'tomato'
+           oplot,[mass[i]],[ntamgh[i]],psym=cgsymcat(46),color=fsc_Color(symcol),symsize=goodsymsize[i]
+      endfor
+
+      oplot,massline,10.^fitlogntamgh,color=fsc_color('darkred')
+      oplot,logmass_lu, 10.^logeta_lu,color=fsc_color('darkgreen'),linestyle=2
+      xyouts,9.1,0.02,'!9'+string(ntaletter)+' !9'+string(proptoletter)+' !xM!D*!N!E'+sigfig(linparmgh(1),2)+string(pmsymbol)+sigfig(linparmgh_err(1),1)
+      axis,xaxis=0,xrange=xrange,xtitle='Log(M/M'+sunsym+')'
+      axis,xaxis=1,xrange=xrange,xtickformat='(A1)'
+      axis,yaxis=0,yrange=yrange,ytitle='!9'+string(ntaletter)+'!x'
+      axis,yaxis=1,yrange=yrange,ytickformat='(A1)'
+   device,/close
 stop
 end
+
+pro calculate_nta_function, coeff, coefferr
+;input: coeff = [intercept, slope] of the Mg-mass relation
+
+;calculate nta as a fn of mass based on Lu+2015 and functional form of MZR from NL18
+   solarfeh = 0.02
+   R = 0.46 ;return fraction
+   yield = 0.07 ;kinda high but follow Lu+2015
+
+   ;solar abundances from asplund2009 (number of atoms)
+   solarfeh = 10^(7.54-12.)*55.
+   solarmgh = 10^(7.64-12.)*24.
+   yieldfeh = 3.*solarfeh
+   yieldmgh = 3.*solarmgh
+
+   nmass = 50.
+   mass = 9.05+findgen(nmass)/nmass*2.45
+
+   logmgh = coeff[0]+coeff[1]*(mass-10.) ;mgh
+   scattermgh = 0.2 ;mgh
+   mgh = solarmgh*10.^(logmgh)
+   mghhi = solarmgh*10.^(logmgh+scattermgh)
+   mghlo = solarmgh*10.^(logmgh-scattermgh) ;assume intrinsic scatter=0.1
+   ntamgh = (1.-R)*(yieldmgh/mgh-1.)
+   ntamghhi = (1.-R)*(yieldmgh/mghlo-1.)
+   ntamghlo = (1.-R)*(yieldmgh/mghhi-1.)
+
+   ;functional form monte carlo
+   nmc = 1000
+   linparmc = fltarr(2,nmc)
+   scatter = 0.2
+   for i = 0,nmc-1 do begin
+      coeffrdm = randomn(seed,2)*coefferr+coeff
+      massrdm = randomu(seed,180)*2.5+9.
+      logmghrdm = coeffrdm[0]+coeffrdm[1]*(massrdm-10.)+randomn(seed,nmc)*scatter
+      mghrdm = (solarmgh*10.^(logmghrdm))<(yieldmgh*0.999)
+      ntardm = alog10((1.-R)*(yieldmgh/mghrdm-1.))
+      linpar_rdm = linfit(massrdm-10.,ntardm)
+      linparmc[*,i] = linpar_rdm
+   endfor
+   linparmgh = mean(linparmc,dimension=2)
+   linparmgh_err = stddev(linparmc,dimension=2)
+   fitlogntamgh = mass*linparmgh[1]+linparmgh[0]
+   print, 'CALCULATING NTA FROM LINEAR MZR'
+   print, 'dependence of ntamgh on M [mean,stdev]:', linparmgh[1],linparmgh_err[1]
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+   spitoni_low = 0.11
+   spitoni_high = 5.4
+   set_plot,'ps'
+   !p.font = 0
+   ntaletter = "150B
+   proptoletter = "265B
+   sunsym = sunsymbol()
+   psname='nta_mass_function.eps'
+   device, filename = psname,xsize = 15,ysize = 10, $
+        xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
+      xrange=[9,11.5]
+      yrange=[0.01,10.]
+      ;plot,mass,ntamgh,xtitle='Log(M/M'+sunsym+')',ytitle='!9'+string(ntaletter)+'!x',/ylog,/nodata,xrange=xrange,yrange=[0.01,10.],xstyle=5,ystyle=5
+      plot,mass,ntamgh,xtitle='Log(M/M'+sunsym+')',/ylog,/nodata,xstyle=5,ystyle=5,xrange=xrange,yrange=yrange
+      polyfill,[xrange,reverse(xrange)],[spitoni_high,spitoni_high,spitoni_low,spitoni_low],color=fsc_color('lightgray')
+      x=[mass,reverse(mass)]
+      y=[ntamghhi,reverse(ntamghlo)]
+      polyfill,x,y,color=fsc_color('salmon')
+      oplot,mass,ntamgh
+      oplot,mass,10.^fitlogntamgh,color=fsc_color('darkred'),linestyle=5
+      xyouts,10.9,4,'!9'+string(ntaletter)+' !9'+string(proptoletter)+' !xM!D*!N!E'+sigfig(linparmgh(1),2),charsize=1.5
+      axis,xaxis=0,xrange=xrange,xtitle='Log(M/M'+sunsym+')'
+      axis,xaxis=1,xrange=xrange,xtickformat='(A1)'
+      axis,yaxis=0,yrange=yrange,ytitle='!9'+string(ntaletter)+'!x'
+      axis,yaxis=1,yrange=yrange,ytickformat='(A1)'
+   device,/close
+
+   psname='nta_mass_function_hayward.eps'
+   device, filename = psname,xsize = 15,ysize = 10, $
+        xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
+      plot,mass,ntamgh,xtitle='Log(M/M'+sunsym+')',ytitle='!9'+string(ntaletter)+'!x',/ylog,/nodata,xrange=[6,12],xstyle=1,yrange=[0.01,500],ystyle=1
+      x=[mass,reverse(mass)]
+      ymg=[ntamghhi,reverse(ntamghlo)]
+      polyfill,x,ymg,color=fsc_color('salmon')
+
+      oplot,mass,ntamgh
+      oplot,mass,10.^fitlogntamgh,color=fsc_color('darkred'),linestyle=5
+   device,/close
+
+end
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;MAIN PROGRAM;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1280,6 +1488,7 @@ common color_pallete, clustercolor, shadecolor, meancolor
    redoancova = 0
    redoanova = 0
    redodeviation_fromz0line = 0
+   redocalculate_nta = 1   
 
    doplot_masshist = 0
    doplot_mzr = 0
@@ -1574,6 +1783,16 @@ common color_pallete, clustercolor, shadecolor, meancolor
    print,'intercept, slope'
    print,'mc fit',mc_mgh_dev_par,mc_mgh_dev_par_err
    print,'simple fit',simple_mgh_dev_par,simple_mgh_dev_par_err
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+   ;CALCULATE MASS LOADING FACTOR
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+   if redocalculate_nta then begin
+       coeff = [const_mgh_mo1,coeff_mgh_mo1[0]]
+       coefferr = [consterr_mgh_mo1,sigma_mgh_mo1[0]]
+       calculate_nta_function,coeff,coefferr
+       calculate_nta_data,sciall,proball,coeff,coefferr
+   endif
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
