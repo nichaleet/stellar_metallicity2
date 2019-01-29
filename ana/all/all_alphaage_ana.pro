@@ -1,5 +1,5 @@
 function get_refvalue,dummy,leetho18=leetho18,gallazzi05=gallazzi05,choi14=choi14,$
-              conroy14=conroy14,derossi17=derossi17,sybilska17=sybilska17
+              conroy14=conroy14,derossi17=derossi17,sybilska17=sybilska17,naiman18=naiman18
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
    ;REFERENCE VALUES FOR PLOTTING
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -47,9 +47,29 @@ function get_refvalue,dummy,leetho18=leetho18,gallazzi05=gallazzi05,choi14=choi1
                 MgFe:[.05,0.08,0.09,0.12,0.15,0.20,0.22]}
       return, conroy
    endif
-
+   if keyword_set(saracco19) then begin ;7 quiescent galaxy cluster members at z=1.22
+ 
+      return,saracco
+   endif
+   if keyword_set(naiman18) then begin
+       naiman = {mass_mgfe:[10.17,10.636,10.71,10.90,10.98,11.04],$
+                 mgfe:[0.31,0.31,0.32,0.32,0.33,0.33],$
+                 mass_feh:[10.30,10.37,10.44,10.83,10.90,10.97,11.03],$	
+                 feh:[0.02,0.05,0.04,0.04,0.02,0.04,0.04],$
+                 mass_mgh:fltarr(7),$
+                 mgh:fltarr(7),$
+                 mass_mgfe_contour:[10.1,10.1,10.3,10.3,10.6,10.6,10.9,10.9,$
+                                 11.0,11.0,11.1,11.1,10.9,10.9,10.1],$
+                 mgfe_contour:[0.30,0.31,0.31,0.34,0.34,0.36,0.36,0.38,$
+                           0.38,0.36,0.36,0.32,0.32,0.30,0.30],$
+                 mass_feh_contour:[10.27,10.27,10.40,10.40,10.53,10.53,10.67,10.67,10.87,10.87,10.93,10.93,11.07,11.07,11.00,11.00,11.07,11.07,11.01,11.01,10.94,10.94,10.81,10.81,10.73,10.73,10.54,10.54,10.47,10.47,10.40,10.40,10.34,10.34,10.27],$
+                 feh_contour:[0.0,0.06,0.06,0.08,0.08,0.11,0.04,0.10,0.10,0.08,0.08,0.09,0.09,0.08,0.08,0.06,0.06,0.02,0.02,-0.02,-0.02,0.00,0.00,-0.02,-0.02,0.0,0.0,0.0,0.02,0.02,0.0,0.0,0.02,0.02,0.00,0.00]}
+                 naiman.mgh = interpol(naiman.mgfe,naiman.mass_mgfe,naiman.mass_feh)+naiman.feh
+                 naiman.mass_mgh = naiman.mass_feh
+      return, naiman
+   endif
    if keyword_set(ma16) then begin
-   ;Xiangcheng's FIRE data
+      ;Xiangcheng's FIRE data
       readcol,'/scr2/nichal/workspace2/catalogs/xiangcheng_ma/mzr_z0pt8.txt',mass08,feh08
       readcol,'/scr2/nichal/workspace2/catalogs/xiangcheng_ma/mzr_z0.txt',mass0,feh0
       feh08 = feh08-0.2
@@ -517,6 +537,7 @@ pro ancova,sciall,proball,fileancova=fileancova
    coeff_mgh_mo1 = regress_mc(x,mgh,dmgh,probdmgh,const=const_mgh_mo1,sigmacoeff=sigma_mgh_mo1,$
                       sigmaconst=consterr_mgh_mo1,rsq=rsq_mgh_mo1,stderror=stderror_mgh_mo1,$
                       adj_rsq=adjrsq_mgh_mo1)
+   ;second with interaction terms
    x = [transpose(mass),transpose(cl),transpose(ms),transpose(m_cl),transpose(m_ms)]
    df1_mo2 = 5
    df2_mo2 = nobjs-df1_mo2-1
@@ -527,6 +548,15 @@ pro ancova,sciall,proball,fileancova=fileancova
    coeff_mgh_mo2 = regress_mc(x,mgh,dmgh,probdmgh,const=const_mgh_mo2,sigmacoeff=sigma_mgh_mo2,$
                       sigmaconst=consterr_mgh_mo2,rsq=rsq_mgh_mo2,stderror=stderror_mgh_mo2,$
                       adj_rsq=adjrsq_mgh_mo2)
+   ;for mgh, only: also do it with a super simple. no evolution terms
+   x = [transpose(mass)]
+   df1_mo3 = 1
+   df2_mo3 = nobjs-df1_mo3-1
+   mo3_pname = ['mass   ']
+   coeff_mgh_mo3 = regress_mc(x,mgh,dmgh,probdmgh,const=const_mgh_mo3,sigmacoeff=sigma_mgh_mo3,$
+                      sigmaconst=consterr_mgh_mo3,rsq=rsq_mgh_mo3,stderror=stderror_mgh_mo3,$
+                      adj_rsq=adjrsq_mgh_mo3)
+   ;save results
    save, coeff_feh_mo1,const_feh_mo1,sigma_feh_mo1,rsq_feh_mo1,stderror_feh_mo1,adjrsq_feh_mo1,$
          consterr_feh_mo1,$
          coeff_feh_mo2,const_feh_mo2,sigma_feh_mo2,rsq_feh_mo2,stderror_feh_mo2,adjrsq_feh_mo2,$
@@ -535,7 +565,9 @@ pro ancova,sciall,proball,fileancova=fileancova
          consterr_mgh_mo1,$
          coeff_mgh_mo2,const_mgh_mo2,sigma_mgh_mo2,rsq_mgh_mo2,stderror_mgh_mo2,adjrsq_mgh_mo2,$
          consterr_mgh_mo2,$
-         df1_mo1,df2_mo1,df1_mo2,df2_mo2,mo1_pname,mo2_pname,filename=fileancova
+         coeff_mgh_mo3,const_mgh_mo3,sigma_mgh_mo3,rsq_mgh_mo3,stderror_mgh_mo3,adjrsq_mgh_mo3,$
+         consterr_mgh_mo3,$
+         df1_mo1,df2_mo1,df1_mo2,df2_mo2,df1_mo3,df2_mo3,mo1_pname,mo2_pname,mo3_pname,filename=fileancova
 end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -701,22 +733,18 @@ common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file,filea
    save, sdss_avestr,cl0024_avestr,ms0451_avestr,filename=aveparam_file
 end
 
-pro deviation_fromz0line,sciall,proball
-common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file,fileanova,$
-                 fileancova,deviationparam_file
+pro deviation_fromz0line,sciall,proball,fehcoeff,mghcoeff,fileout=fileout
 ;calculate deviation as a function of formation age
-   restore,linfitparam_fixslope_file
-   restore, linfitparam_file
-
-   sdss_fixslope_pars= sdssmzrpar_fixslope
-   fehideal = sdss_fixslope_pars[0]+(sciall.logmstar-10.)*sdss_fixslope_pars[1]
-   x=sciall.ageform
-   y=sciall.feh-fehideal
-   dx = 0.5*(sciall.ageupper-sciall.agelower)
-   dy = 0.5*(sciall.fehupper-sciall.fehlower)
-   dxarr = -1.*proball.dagearr ;since x axis is ageuni-agegal
-   dyarr = proball.dfeharr
-   probdxdyarr = transpose(proball.probfehage,[1,0,2]) ;age feh nobjs
+   fehideal = fehcoeff[0]+(sciall.logmstar-10.)*fehcoeff[1]
+   good = where(sciall.ageform gt 0.5,cgood,complement=bad,ncomplement=cbad)
+   print,'number of outliers (feh deviation) is', cbad
+   x=sciall(good).ageform
+   y=sciall(good).feh-fehideal(good)
+   dx = 0.5*(sciall(good).ageupper-sciall(good).agelower)
+   dy = 0.5*(sciall(good).fehupper-sciall(good).fehlower)
+   dxarr = -1.*proball(good).dagearr ;since x axis is ageuni-agegal
+   dyarr = proball(good).dfeharr
+   probdxdyarr = transpose(proball(good).probfehage,[1,0,2]) ;age feh nobjs
   
    feh_dev_par = linfitprobgrid_general(x,y,dxarr,dyarr,probdxdyarr,feh_dev_par_all,$
                    outfitfile='all_prob_deltafeh_age.fits',outepsfile='all_plot_deltafeh_age.eps',$
@@ -725,16 +753,15 @@ common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file,filea
 
    mc_feh_dev_par = linfitprobgrid_mc(x,y,dxarr,dyarr,probdxdyarr,mc_feh_dev_par_err)
 
-   good = where(x gt 0.)
-   simple_feh_dev_par = linfit(x(good),y(good),sigma=feh_dev_par_err)
+   simple_feh_dev_par = linfit(x,y,sigma=feh_dev_par_err)
 
    ;MAR
-   sdssmarpar = sdssmarpar_fixslope
-   ahideal = sdssmarpar[0]+(sciall.logmstar-10.)*sdssmarpar[1]
+   ahideal = mghcoeff[0]+(sciall.logmstar-10.)*mghcoeff[1]
    x=sciall.ageform
    y=sciall.ah-ahideal
 
-   good = where(y gt -0.5)
+   good = where(y gt -0.5 and x gt 0.5,cgood,complement=bad,ncomplement=cbad)
+   print,'number of outliers (mgh deviation) is', cbad
    simple_mgh_dev_par = linfit(x(good),y(good),sigma=simple_mgh_dev_par_err)
    ;mc fit
    y1 = sciall(good).feh
@@ -747,7 +774,7 @@ common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file,filea
 
    save, feh_dev_par,feh_dev_par_all,mc_feh_dev_par,mc_feh_dev_par_err,simple_feh_dev_par,$
          feh_dev_par_err,mc_mgh_dev_par,mc_mgh_dev_par_err,simple_mgh_dev_par,$
-         simple_mgh_dev_par_err,fehideal,ahideal,filename=deviationparam_file
+         simple_mgh_dev_par_err,fehideal,ahideal,filename=fileout
 end
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -759,7 +786,8 @@ common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file,filea
 common color_pallete, clustercolor, shadecolor, meancolor
 
    restore,deviationparam_file
-
+   goodfit = where(sciall.goodsn eq 1)
+   symsize = 1.5/(max(sciall(goodfit).snfit)-min(sciall(goodfit).snfit))*sciall.snfit+0.7
    psname='FEH_deviation_fromz0line.eps'
 
    xfitrange = [0,13]
@@ -773,7 +801,13 @@ common color_pallete, clustercolor, shadecolor, meancolor
 ;   bgimage = cgsnapshot()
 ;   wdelete
 
+   ntaletter = "150B
+   deltaletter = "104B
+   sunsym = sunsymbol()
+
    set_plot,'ps'
+   !p.font=0
+   !p.charsize=1.4
    device, filename = psname,xsize = 15,ysize = 10,decomposed=1,color=1, $
               xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated;
 ;      loadct,54
@@ -782,20 +816,22 @@ common color_pallete, clustercolor, shadecolor, meancolor
 ;      loadct,55
 ;      cgimage,img,position=plotposition
 ;      cgimage,img,transparent=50,alphabackgroundimage=bgimage,alphafgposition=plotposition
-      plot,sciall.ageform,sciall.feh-fehideal,psym=1,xtitle='Age of the universe at galaxy formation',ytitle=delta+'[Fe/H]',xrange=xfitrange,xstyle=9,yrange=yfitrange,/nodata,position=plotposition,/noerase
+      plot,sciall.ageform,sciall.feh-fehideal,psym=1,xtitle='Age of the universe at galaxy formation',ytitle='!9'+string(deltaletter)+'!x[Fe/H]',xrange=xfitrange,xstyle=9,yrange=yfitrange,/nodata,position=plotposition,/noerase
 
       axis,xaxis=1,xticks=4,xtickv=[1.513,3.223, 5.747,8.422 ,12.161],xtickn=['4','2','1','0.5','0.1'],xtitle='z'
 
-      sdss = where(sciall.zspec lt 0.3 and sciall.goodsn eq 1)
-      cgplot,sciall(sdss).ageform,sciall(sdss).feh-fehideal(sdss),psym=16,/overplot,symsize=0.5,color='skyblue'
-      cl0024 = where(sciall.zspec gt 0.3 and sciall.zspec lt 0.45 and sciall.goodsn eq 1)
-      cgplot,sciall(cl0024).ageform,sciall(cl0024).feh-fehideal(cl0024),psym=16,/overplot,symsize=0.5,color='goldenrod'
-      ms0451 = where(sciall.zspec gt 0.45 and sciall.goodsn eq 1)
-      cgplot,sciall(ms0451).ageform,sciall(ms0451).feh-fehideal(ms0451),psym=16,/overplot,symsize=0.5,color='tomato'
+      for i=0,n_elements(sciall)-1 do begin
+          if sciall[i].goodsn eq 1 and sciall[i].ageform gt 0.5 then begin
+             if sciall[i].zspec lt 0.3 then colornow = 'skyblue'
+             if sciall[i].zspec gt 0.3 and sciall[i].zspec lt 0.45 then colornow = 'goldenrod'
+             if sciall[i].zspec gt 0.45 then colornow = 'crimson'
+             cgplot,[sciall[i].ageform],[sciall[i].feh-fehideal[i]],psym=46,/overplot,symsize=symsize[i],color=colornow
+          endif
+      endfor
 ;      bad = where(sciall.goodsn eq 0)
-;      cgplot,sciall(bad).ageform,sciall(ms0451).feh-fehideal(ms0451),psym=16,/overplot,symsize=0.5,color='gray'
+;      cgplot,sciall(bad).ageform,sciall(ms0451).feh-fehideal(ms0451),psym=16,/overplot,symsize=1,color='gray'
 
-;      oplot,[0,14],feh_dev_par(0)+feh_dev_par(1)*[0,14],thick=1,linestyle=2
+      oplot,[0,14],feh_dev_par(0)+feh_dev_par(1)*[0,14],thick=1,linestyle=1
       oplot,[0,14],mc_feh_dev_par(0)+mc_feh_dev_par(1)*[0,14],thick=1,linestyle=2;,color=fsc_color('red') 
 
       xyouts,1,-0.38,'older galaxies',charsize=0.8
@@ -810,21 +846,22 @@ common color_pallete, clustercolor, shadecolor, meancolor
    device, filename = psname,xsize = 15,ysize = 10,decomposed=1,color=1, $
               xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated;
       yfitrange=[-0.5,0.6]
-      plot,sciall.ageform,sciall.ah-ahideal,psym=1,xtitle='Age of the universe at galaxy formation',ytitle=delta+'[Mg/H]',xrange=xfitrange,xstyle=9,yrange=yfitrange,/nodata,position=plotposition,/noerase,ystyle=1
+      plot,sciall.ageform,sciall.ah-ahideal,psym=1,xtitle='Age of the universe at galaxy formation',ytitle='!9'+string(deltaletter)+'!x[Mg/H]',xrange=xfitrange,xstyle=9,yrange=yfitrange,/nodata,position=plotposition,/noerase,ystyle=1
 
       axis,xaxis=1,xticks=4,xtickv=[1.513,3.223, 5.747,8.422 ,12.161],xtickn=['4','2','1','0.5','0.1'],xtitle='z'
+      for i=0,n_elements(sciall)-1 do begin
+          if sciall[i].goodsn eq 1 and sciall[i].ageform gt 0.5 then begin
+             if sciall[i].zspec lt 0.3 then colornow = 'skyblue'
+             if sciall[i].zspec gt 0.3 and sciall[i].zspec lt 0.45 then colornow = 'goldenrod'
+             if sciall[i].zspec gt 0.45 then colornow = 'crimson'
+             cgplot,[sciall[i].ageform],[sciall[i].ah-ahideal[i]],psym=46,/overplot,symsize=symsize[i],color=colornow
+          endif
+      endfor
+;      bad = where(sciall.goodsn eq 0)
+;      cgplot,sciall(bad).ageform,sciall(ms0451).ah-ahideal(ms0451),psym=16,/overplot,symsize=1,color='gray'
 
-      sdss = where(sciall.zspec lt 0.3 and sciall.goodsn eq 1)
-      cgplot,sciall(sdss).ageform,sciall(sdss).ah-ahideal(sdss),psym=16,/overplot,symsize=0.5,color='skyblue'
-      cl0024 = where(sciall.zspec gt 0.3 and sciall.zspec lt 0.45 and sciall.goodsn eq 1)
-      cgplot,sciall(cl0024).ageform,sciall(cl0024).ah-ahideal(cl0024),psym=16,/overplot,symsize=0.5,color='goldenrod'
-      ms0451 = where(sciall.zspec gt 0.45 and sciall.goodsn eq 1)
-      cgplot,sciall(ms0451).ageform,sciall(ms0451).ah-ahideal(ms0451),psym=16,/overplot,symsize=0.5,color='tomato'
-      bad = where(sciall.goodsn eq 0)
-;      cgplot,sciall(bad).ageform,sciall(ms0451).ah-ahideal(ms0451),psym=16,/overplot,symsize=0.5,color='gray'
-
-      oplot,[0,14],simple_mgh_dev_par(0)+simple_mgh_dev_par(1)*[0,14],thick=1,linestyle=2
-      ;oplot,[0,14],mc_mgh_dev_par(0)+mc_mgh_dev_par(1)*[0,14],thick=1,linestyle=2
+      oplot,[0,14],simple_mgh_dev_par(0)+simple_mgh_dev_par(1)*[0,14],thick=1,linestyle=0
+      oplot,[0,14],mc_mgh_dev_par(0)+mc_mgh_dev_par(1)*[0,14],thick=1,linestyle=2
       ;oplot,[0,14],ah_dev_par_sdss(0)+ah_dev_par_sdss(1)*[0,14],thick=2,linestyle=2,color=fsc_color('blu5')
       ;oplot,[0,14],ah_dev_par_cl(0)+ah_dev_par_cl(1)*[0,14],thick=2,linestyle=2,color=fsc_color('org6')
 
@@ -969,7 +1006,7 @@ common color_pallete, clustercolor, shadecolor, meancolor
       axis,yaxis=1,yrange=yrange,ystyle=1,ytickformat='(A1)'
 
       al_legend,['z~0 SDSS','z~0.4 Cl0024','z~0.55 MS0451'],psym=cgsymcat(46),$
-                 box=0,colors=['skyblue','goldenrod','tomato'],$
+                 box=0,colors=['skyblue','goldenrod','crimson'],$
                  /bottom,/right,charsize=1,symsize=2
    device,/close
 
@@ -1032,7 +1069,7 @@ common color_pallete, clustercolor, shadecolor, meancolor
       axis,yaxis=1,yrange=yrange,ystyle=1,ytickformat='(A1)'
 
       al_legend,['z~0 SDSS','z~0.4 Cl0024','z~0.55 MS0451'],psym=cgsymcat(46),$
-                 box=0,colors=['skyblue','goldenrod','tomato'],$
+                 box=0,colors=['skyblue','goldenrod','crimson'],$
                  /bottom,/right,charsize=1,symsize=2
    device,/close
 end
@@ -1065,11 +1102,12 @@ common color_pallete, clustercolor, shadecolor, meancolor
      sdssmzrpar = [const_feh_mo2,coeff_feh_mo2[0]]
      cl0024mzrpar = [const_feh_mo2+coeff_feh_mo2[1],coeff_feh_mo2[0]+coeff_feh_mo2[3]]
      ms0451mzrpar = [const_feh_mo2+coeff_feh_mo2[2],coeff_feh_mo2[0]+coeff_feh_mo2[4]]
-     sdssmarpar = [const_mgh_mo1,coeff_feh_mo1[0]]
-     cl0024marpar = [const_mgh_mo1,coeff_feh_mo1[0]]
-     ms0451marpar = [const_mgh_mo1,coeff_feh_mo1[0]]
+     sdssmarpar = [const_mgh_mo3,coeff_mgh_mo3[0]]
+     cl0024marpar = [const_mgh_mo3,coeff_mgh_mo3[0]]
+     ms0451marpar = [const_mgh_mo3,coeff_mgh_mo3[0]]
    endif
 
+   naiman = get_refvalue(55,/naiman18)
    set_plot,'ps'
    !p.multi = [0,1,1]
    !p.font = 0
@@ -1094,24 +1132,29 @@ common color_pallete, clustercolor, shadecolor, meancolor
          yrange=[-1.,0.3]
          plot,sci.logmstar,sci.feh,/nodata,xrange=xrange,xstyle=5,yrange=yrange,ystyle=5
          ;draw axis
-         axis,xaxis=0,xrange=xrange,xstyle=1,xtitle='Log(M/M'+sunsym+')'
+         axis,xaxis=0,xrange=xrange,xstyle=1,xtitle='Log(M!L*!N/M'+sunsym+')'
          axis,yaxis=0,yrange=yrange,ystyle=1,ytitle='[Fe/H]'
          axis,xaxis=1,xrange=xrange,xstyle=1,xtickformat='(A1)'
          axis,yaxis=1,yrange=yrange,ystyle=1,ytickformat='(A1)'
    
-;         cgerrplot,sci(goodfit).logmstar,sci(goodfit).fehlower,sci(goodfit).fehupper,color='tomato',thick=0.5
+;         cgerrplot,sci(goodfit).logmstar,sci(goodfit).fehlower,sci(goodfit).fehupper,color='crimson',thick=0.5
 ;         if cbadfit gt 0 then oplot,sci(badfit).logmstar,sci(badfit).feh,psym=cgsymcat(16),color=fsc_Color('darkgray'),symsize=0.7
          goodsymsize = 1.5/(max(sci(goodfit).snfit)-min(sci(goodfit).snfit))*sci(goodfit).snfit+0.7
          for i=0,cgoodfit-1 do begin
            if sci(goodfit[i]).zspec lt 0.3 then symcol = 'skyblue'
            if sci(goodfit[i]).zspec gt 0.3 and sci(goodfit[i]).zspec lt 0.5 then symcol = 'goldenrod'
-           if sci(goodfit[i]).zspec gt 0.5 and sci(goodfit[i]).zspec lt 0.6 then symcol = 'tomato'
+           if sci(goodfit[i]).zspec gt 0.5 and sci(goodfit[i]).zspec lt 0.6 then symcol = 'crimson'
 
            oplot,[sci(goodfit[i]).logmstar],[sci(goodfit[i]).feh],psym=cgsymcat(46),color=fsc_Color(symcol),symsize=goodsymsize[i]
          endfor
          oplot,!x.crange,(!x.crange-10.)*sdssmzrpar[1]+sdssmzrpar[0],linestyle=0,thick=2,color=fsc_color('navyblue')
          oplot,!x.crange,(!x.crange-10.)*cl0024mzrpar[1]+cl0024mzrpar[0],linestyle=0,thick=2,color=fsc_color('peru')
-         oplot,!x.crange,(!x.crange-10.)*ms0451mzrpar[1]+ms0451mzrpar[0],linestyle=0,thick=2,color=fsc_color('indianred')
+         oplot,!x.crange,(!x.crange-10.)*ms0451mzrpar[1]+ms0451mzrpar[0],linestyle=0,thick=2,color=fsc_color('darkred')
+         oplot,naiman.mass_feh,naiman.feh,color=fsc_color('darkorchid'),thick=2      
+         oplot,choi14z01.mass,choi14z01.feh,psym=cgsymcat(16),color=fsc_color('ygb5'),symsize=1
+         ;oplot,choi14z01.mass,choi14z01.feh,color=fsc_color('ygb5'),linestyle=0
+         oplot,choi14z04.mass,choi14z04.feh,psym=cgsymcat(16),color=fsc_color('darkgoldenrod'),symsize=1
+         ;oplot,choi14z04.mass,choi14z04.feh,color=fsc_color('darkgoldenrod'),linestyle=0
          ;xyouts,11.3,-0.8,strtrim(string(agerange(n),format='(I)'),2)+'-'+strtrim(string(agerange(n+1),format='(I)'),2)+'Gyr'
 
          ;typical error bars
@@ -1136,10 +1179,10 @@ common color_pallete, clustercolor, shadecolor, meancolor
          xyouts,xlab+0.15,ylab-0.025,'z~0.39',charsize=1
          xlab = 11.2
          cgplot,[xlab],[ylab],err_xhigh=[0.1],err_xlow=[0.1],err_yhigh=upperms0451,err_ylow=lowerms0451,$
-                color='tomato',psym=46,symsize=2,/overplot
+                color='crimson',psym=46,symsize=2,/overplot
          xyouts,xlab+0.15,ylab-0.025,'z~0.55',charsize=1
          ;label
-;         al_legend,['z~0 SDSS','z~0.4 Cl0024','z~0.55 MS0451'],psym=cgsymcat(46),box=0,colors=['skyblue','goldenrod','tomato'],$
+;         al_legend,['z~0 SDSS','z~0.4 Cl0024','z~0.55 MS0451'],psym=cgsymcat(46),box=0,colors=['skyblue','goldenrod','crimson'],$
 ;                   charsize=1,symsize=2,position=[10.6,-0.6]
 
       device,/close
@@ -1157,15 +1200,15 @@ common color_pallete, clustercolor, shadecolor, meancolor
          axis,yaxis=1,yrange=yrange,ystyle=1,ytickformat='(A1)'
    
    ;      cgerrplot,sci(goodfit).alphafe,sci(goodfit).alphafelower,sci(goodfit).alphafeupper,$
-   ;                color='tomato',thick=0.5
+   ;                color='crimson',thick=0.5
    ;      cgerrplot,sci(goodfit).feh,sci(goodfit).fehlower,sci(goodfit).fehupper,$
-   ;                color='tomato',thick=0.5,/horizontal
+   ;                color='crimson',thick=0.5,/horizontal
 ;         if cbadfit gt 0 then oplot,sci(badfit).feh,sci(badfit).alphafe,psym=cgsymcat(16),color=fsc_Color('darkgray'),symsize=0.7
          goodsymsize = 1.5/(max(sci(goodfit).snfit)-min(sci(goodfit).snfit))*sci(goodfit).snfit+0.7
          for i=0,cgoodfit-1 do begin
            if sci(goodfit[i]).zspec lt 0.3 then symcol = 'skyblue'
            if sci(goodfit[i]).zspec gt 0.3 and sci(goodfit[i]).zspec lt 0.5 then symcol = 'goldenrod'
-           if sci(goodfit[i]).zspec gt 0.5 and sci(goodfit[i]).zspec lt 0.6 then symcol = 'tomato'
+           if sci(goodfit[i]).zspec gt 0.5 and sci(goodfit[i]).zspec lt 0.6 then symcol = 'crimson'
 
            oplot,[sci(goodfit[i]).feh],[sci(goodfit[i]).alphafe],psym=cgsymcat(46),color=fsc_Color(symcol),symsize=goodsymsize[i]
          endfor
@@ -1191,22 +1234,24 @@ common color_pallete, clustercolor, shadecolor, meancolor
          for i=0,cgoodfit-1 do begin
            if sci(goodfit[i]).zspec lt 0.3 then symcol = 'skyblue'
            if sci(goodfit[i]).zspec gt 0.3 and sci(goodfit[i]).zspec lt 0.5 then symcol = 'goldenrod'
-           if sci(goodfit[i]).zspec gt 0.5 and sci(goodfit[i]).zspec lt 0.6 then symcol = 'tomato'
+           if sci(goodfit[i]).zspec gt 0.5 and sci(goodfit[i]).zspec lt 0.6 then symcol = 'crimson'
            oplot,[sci(goodfit[i]).logmstar],[sci(goodfit[i]).ah],psym=cgsymcat(46),color=fsc_Color(symcol),symsize=goodsymsize[i]
          endfor
          ;Add Choi's data
    ;      oploterror,choi14z01.mass,choi14z01.feh+choi14z01.mgfe,sqrt(choi14z01.feherr^2+choi14z01.mgfe^2),color=fsc_color('ygb5'),linethick=2,errcolor=fsc_color('ygb5')
-   ;      oplot,choi14z01.mass,choi14z01.feh+choi14z01.mgfe,psym=cgsymcat(16),color=fsc_color('ygb5'),symsize=1.5
+         oplot,choi14z01.mass,choi14z01.feh+choi14z01.mgfe,psym=cgsymcat(16),color=fsc_color('ygb5'),symsize=1.
  
    ;      oploterror,choi14z04.mass,choi14z04.feh+choi14z04.mgfe,sqrt(choi14z04.feherr^2+choi14z04.mgfe^2),color=fsc_color('darkgoldenrod'),linethick=2,errcolor=fsc_color('darkgoldenrod')
-   ;      oplot,choi14z04.mass,choi14z04.feh+choi14z04.mgfe,psym=cgsymcat(16),color=fsc_color('darkgoldenrod'),symsize=1.5
+         oplot,choi14z04.mass,choi14z04.feh+choi14z04.mgfe,psym=cgsymcat(16),color=fsc_color('darkgoldenrod'),symsize=1.
+
+         oplot,naiman.mass_mgh,naiman.mgh,color=fsc_color('darkorchid'),thick=2      
          ;add best fit lines
          oplot,!x.crange,(!x.crange-10.)*sdssmarpar[1]+sdssmarpar[0],linestyle=0,thick=2,color=fsc_color('navyblue')
          oplot,!x.crange,(!x.crange-10.)*cl0024marpar[1]+cl0024marpar[0],linestyle=0,thick=2,color=fsc_color('peru')
          oplot,!x.crange,(!x.crange-10.)*ms0451marpar[1]+ms0451marpar[0],linestyle=0,thick=2,color=fsc_color('indianred')
          oplot,!x.crange,(!x.crange-10.)*sdssmarpar[1]+sdssmarpar[0],linestyle=0,thick=2,color=fsc_color('black') 
 ;         al_legend,['z~0','z~0.39','z~0.55'],psym=cgsymcat(46),box=0,symsize=2,$
-;                colors=['skyblue','goldenrod','tomato'],charsize=1.1,position=[11.1,-0.4]
+;                colors=['skyblue','goldenrod','crimson'],charsize=1.1,position=[11.1,-0.4]
 ;         al_legend,['Choi+2014'],psym=cgsymcat(16),box=0,symsize=1.5,colors=['darkgray'],charsize=1.1,position=[11.1,-0.8]
 ;         xyouts,11.5,-0.4,'Observed Redshift',alignment=0.5,charsize=1.1
          ;typical error bars
@@ -1228,7 +1273,7 @@ common color_pallete, clustercolor, shadecolor, meancolor
          xyouts,xlab+0.15,ylab-0.025,'z~0.39',charsize=1
          xlab = 11.2
          cgplot,[xlab],[ylab],err_xhigh=[0.1],err_xlow=[0.1],err_yhigh=upperms0451,err_ylow=lowerms0451,$
-                color='tomato',psym=46,symsize=2,/overplot
+                color='crimson',psym=46,symsize=2,/overplot
          xyouts,xlab+0.15,ylab-0.025,'z~0.55',charsize=1
 
 
@@ -1247,15 +1292,15 @@ common color_pallete, clustercolor, shadecolor, meancolor
          axis,yaxis=1,yrange=yrange,ystyle=1,ytickformat='(A1)'
 
    ;      cgerrplot,sci(goodfit).alphafe,sci(goodfit).alphafelower,sci(goodfit).alphafeupper,$
-   ;                color='tomato',thick=0.5
+   ;                color='crimson',thick=0.5
    ;      cgerrplot,sci(goodfit).feh,sci(goodfit).fehlower,sci(goodfit).fehupper,$
-   ;                color='tomato',thick=0.5,/horizontal
+   ;                color='crimson',thick=0.5,/horizontal
          if cbadfit gt 0 then oplot,sci(badfit).logmstar,sci(badfit).alphafe,psym=cgsymcat(16),color=fsc_Color('darkgray'),symsize=0.7
          goodsymsize = 1.5/(max(sci(goodfit).snfit)-min(sci(goodfit).snfit))*sci(goodfit).snfit+0.7
          for i=0,cgoodfit-1 do begin
            if sci(goodfit[i]).zspec lt 0.3 then symcol = 'skyblue'
            if sci(goodfit[i]).zspec gt 0.3 and sci(goodfit[i]).zspec lt 0.5 then symcol = 'goldenrod'
-           if sci(goodfit[i]).zspec gt 0.5 and sci(goodfit[i]).zspec lt 0.6 then symcol = 'tomato'
+           if sci(goodfit[i]).zspec gt 0.5 and sci(goodfit[i]).zspec lt 0.6 then symcol = 'crimson'
 
            oplot,[sci(goodfit[i]).logmstar],[sci(goodfit[i]).alphafe],psym=cgsymcat(46),color=fsc_Color(symcol),symsize=goodsymsize[i]
          endfor
@@ -1348,10 +1393,22 @@ pro calculate_nta_data, sciall,proball,coeff,coeff_err
 
    ;upper limits from Lu2015
    readcol,'lu2015_upperlim.dat',logmass_lu,logeta_lu,comment='#'
+   ;Chrisholm 2017
+   mass_jc = [9.3,9.5,10.1,10.3,10.7]
+   nta_jc = [0.91,2,1.2,0.23,0.54]
+   ntaerr_jc = [0.33,0.57,0.51,0.08,0.18]
+   ;Muratov2015
+   mass_muratov = [9.,9.5,10.,10.5,11.,11.5]
+   nta_muratov = 3.6*(10.^(-0.35*(mass_muratov-10.)))
+   ;bulatto2013
+   mass_bulatto = [9.4]
+   nta_bulatto = [3.2]
+   ntaupper_bulatto = [10.7]
+   ntalower_bulatto = [1.1]
    ;;;;;;;;;;;;;;;;;;
    set_plot,'ps'
    !p.font = 0
-   !p.charsize=1.5
+   !p.charsize=1.2
    ntaletter = "150B
    proptoletter = "265B
    proptoletter = "265B
@@ -1362,7 +1419,7 @@ pro calculate_nta_data, sciall,proball,coeff,coeff_err
         xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
       xrange=[9,11.5]
       yrange=[0.01,10.]
-      plot,mass,ntamgh,xtitle='Log(M/M'+sunsym+')',/ylog,/nodata,xstyle=5,ystyle=5,xrange=xrange,yrange=yrange
+      plot,mass,ntamgh,/ylog,/nodata,xstyle=5,ystyle=5,xrange=xrange,yrange=yrange
       polyfill,[xrange,reverse(xrange)],[spitoni_high,spitoni_high,spitoni_low,spitoni_low],color=fsc_color('lightgray')
       x=[massline,reverse(massline)]
       y=[ntamghlinehi,reverse(ntamghlinelo)]
@@ -1371,19 +1428,22 @@ pro calculate_nta_data, sciall,proball,coeff,coeff_err
       for i=0,nobjs-1 do begin
            if sci[i].zspec lt 0.3 then symcol = 'skyblue'
            if sci[i].zspec gt 0.3 and sci[i].zspec lt 0.5 then symcol = 'goldenrod'
-           if sci[i].zspec gt 0.5 and sci[i].zspec lt 0.6 then symcol = 'tomato'
+           if sci[i].zspec gt 0.5 and sci[i].zspec lt 0.6 then symcol = 'crimson'
            oplot,[mass[i]],[ntamgh[i]],psym=cgsymcat(46),color=fsc_Color(symcol),symsize=goodsymsize[i]
       endfor
 
       oplot,massline,10.^fitlogntamgh,color=fsc_color('darkred')
-      oplot,logmass_lu, 10.^logeta_lu,color=fsc_color('darkgreen'),linestyle=2
-      xyouts,9.1,0.02,'!9'+string(ntaletter)+' !9'+string(proptoletter)+' !xM!D*!N!E'+sigfig(linparmgh(1),2)+string(pmsymbol)+sigfig(linparmgh_err(1),1)
-      axis,xaxis=0,xrange=xrange,xtitle='Log(M/M'+sunsym+')'
+      oplot,logmass_lu, 10.^logeta_lu,linestyle=2,color=fsc_color('navy')
+      oplot,mass_muratov,nta_muratov,psym=0,linestyle=1
+      oploterror,mass_jc,nta_jc,ntaerr_jc,psym=1,color=fsc_color('navy')
+      cgplot,mass_jc,nta_jc,psym=16,color=fsc_color('navy'),/overplot
+      xyouts,9.1,0.02,'!9'+string(ntaletter)+' !9'+string(proptoletter)+' !xM!D*!N!E'+sigfig(linparmgh(1),2)+string(pmsymbol)+sigfig(linparmgh_err(1),1),charsize=1.5
+      axis,xaxis=0,xrange=xrange,xtitle='Log(M!L*!N/M'+sunsym+')'
       axis,xaxis=1,xrange=xrange,xtickformat='(A1)'
       axis,yaxis=0,yrange=yrange,ytitle='!9'+string(ntaletter)+'!x'
       axis,yaxis=1,yrange=yrange,ytickformat='(A1)'
    device,/close
-stop
+;stop
 end
 
 pro calculate_nta_function, coeff, coefferr
@@ -1488,14 +1548,14 @@ common color_pallete, clustercolor, shadecolor, meancolor
    redoancova = 0
    redoanova = 0
    redodeviation_fromz0line = 0
-   redocalculate_nta = 1   
+   redocalculate_nta = 0
 
    doplot_masshist = 0
    doplot_mzr = 0
-   doplot_byage = 1
+   doplot_byage = 0
    doplot_deviation = 0
 
-   clustercolor = ['skyblue','goldenrod','tomato']
+   clustercolor = ['skyblue','goldenrod','crimson']
    shadecolor = ['honeydew','wt3','red1']
    meancolor=['navyblue','peru','indianred']
 ;set up
@@ -1715,16 +1775,21 @@ common color_pallete, clustercolor, shadecolor, meancolor
    ;one tail test (the effect is only 1 direction)
    fchange_mo1_mgh = (rsq_mgh_mo1/df1_mo1)/((1.-rsq_mgh_mo1)/df2_mo1)
    fchange_mo2_mgh = ((rsq_mgh_mo2-rsq_mgh_mo1)/(df1_mo2-df1_mo1))/((1.-rsq_mgh_mo2)/df2_mo2)
+   fchange_mo3_mgh = ((rsq_mgh_mo1-rsq_mgh_mo3)/(df1_mo1-df1_mo3))/((1.-rsq_mgh_mo1)/df2_mo1)
    print, ';;;;;;;;;;;;;;;[Mg/H];;;;;;;;;;;;;;;;;;;;;;;;;;'
    print, 'model    R^2     adjusted R^2      std. error of the estimate'
    print, '1    ',rsq_mgh_mo1,adjrsq_mgh_mo1,stderror_mgh_mo1
    print, '2    ',rsq_mgh_mo2,adjrsq_mgh_mo2,stderror_mgh_mo2
+   print, '3    ',rsq_mgh_mo3,adjrsq_mgh_mo3,stderror_mgh_mo3
+   
    print, ''
    print, '        Change Statistics'
-   print, 'model    R^2 change    F change    df1    df2      Sig F change'
-   print, '1    ',rsq_mgh_mo1,fchange_mo1_mgh,df1_mo1,df2_mo1,mpftest(fchange_mo1_mgh,df1_mo1,df2_mo1)
-   print, '2    ',rsq_mgh_mo2-rsq_mgh_mo1,fchange_mo2_mgh,df1_mo2-df1_mo1,df2_mo2,$
+   print, 'model         R^2 change    F change    df1    df2      Sig F change'
+   print, '1 to none',rsq_mgh_mo1,fchange_mo1_mgh,df1_mo1,df2_mo1,mpftest(fchange_mo1_mgh,df1_mo1,df2_mo1)
+   print, '2 to 1   ',rsq_mgh_mo2-rsq_mgh_mo1,fchange_mo2_mgh,df1_mo2-df1_mo1,df2_mo2,$
                 mpftest(fchange_mo2_mgh,df1_mo2-df1_mo1,df2_mo2)
+   print, '1 to 3   ',rsq_mgh_mo1-rsq_mgh_mo3,fchange_mo3_mgh,df1_mo1-df1_mo3,df2_mo1,$
+                mpftest(fchange_mo3_mgh,df1_mo1-df1_mo3,df2_mo1)
    print, ''
    print, 'Model Parameters'
    print, 'model  parameter     value     std.error      t      sig.'
@@ -1738,7 +1803,10 @@ common color_pallete, clustercolor, shadecolor, meancolor
    for i=0,4 do $
    print, '     ',mo2_pname[i],coeff_mgh_mo2[i],sigma_mgh_mo2[i],coeff_mgh_mo2[i]/sigma_mgh_mo2[i],$
                 (1.-t_pdf(abs(coeff_mgh_mo2[i]/sigma_mgh_mo2[i]),df2_mo2))
-
+   print, '3    ','constant  ',const_mgh_mo3,consterr_mgh_mo3,const_mgh_mo3/consterr_mgh_mo3,$
+                           (1.-t_pdf(abs(const_mgh_mo3/consterr_mgh_mo3),df2_mo3))
+   print, '     ',mo3_pname[0],coeff_mgh_mo3[0],sigma_mgh_mo3[0],coeff_mgh_mo3[0]/sigma_mgh_mo3[0],$
+                (1.-t_pdf(abs(coeff_mgh_mo3[0]/sigma_mgh_mo3[0]),df2_mo3))
    ;SECOND, TEST WITH ANOVA FOR EACH MASS BIN
    ;group into mass bins then compare the three redshifts from each mass bin with ANOVA
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1769,7 +1837,10 @@ common color_pallete, clustercolor, shadecolor, meancolor
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    ;DEVIATION FROM Z0 LINE
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   if redodeviation_fromz0line then deviation_fromz0line,sciall,proball
+   fehcoeff = [const_feh_mo2,coeff_feh_mo2[0]]
+   mghcoeff = [const_mgh_mo3,coeff_mgh_mo3[0]]
+   if redodeviation_fromz0line then deviation_fromz0line,sciall,proball,fehcoeff,$
+                                    mghcoeff,fileout=deviationparam_file
    restore,deviationparam_file
    print,';;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;'
    print,'DEVIATION FROM Z0 LINE'
@@ -1784,12 +1855,23 @@ common color_pallete, clustercolor, shadecolor, meancolor
    print,'mc fit',mc_mgh_dev_par,mc_mgh_dev_par_err
    print,'simple fit',simple_mgh_dev_par,simple_mgh_dev_par_err
 
+   wonsdss = where(sciall.zfit lt 0.3 and sciall.goodsn eq 1 and sciall.ageform gt 0.5)
+   woncl0024 = where(sciall.zfit gt 0.3 and sciall.zfit lt 0.45 and sciall.goodsn eq 1 and sciall.ageform gt 0.5)
+   wonms0451 = where(sciall.zfit gt 0.45 and sciall.goodsn eq 1 and sciall.ageform gt 0.5)
+   meanage_sdss = mean(sciall(wonsdss).age)
+   meanage_cl0024 = mean(sciall(woncl0024).age)
+   meanage_ms0451 = mean(sciall(wonms0451).age)
+   print, 'sample          mean age          (mean age-SDSS age)*Feh_slope     (meanage-SDSS)*Mgh slope'
+   print, 'SDSS',meanage_sdss
+   print, 'Cl0024',meanage_cl0024,(meanage_cl0024-meanage_sdss)*mc_feh_dev_par[1],(meanage_cl0024-meanage_sdss)*simple_mgh_dev_par[1]
+   print, 'MS0451',meanage_ms0451,(meanage_ms0451-meanage_sdss)*mc_feh_dev_par[1],(meanage_ms0451-meanage_sdss)*simple_mgh_dev_par[1]
+
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    ;CALCULATE MASS LOADING FACTOR
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    if redocalculate_nta then begin
-       coeff = [const_mgh_mo1,coeff_mgh_mo1[0]]
-       coefferr = [consterr_mgh_mo1,sigma_mgh_mo1[0]]
+       coeff = [const_mgh_mo3,coeff_mgh_mo3[0]]
+       coefferr = [consterr_mgh_mo3,sigma_mgh_mo3[0]]
        calculate_nta_function,coeff,coefferr
        calculate_nta_data,sciall,proball,coeff,coefferr
    endif
@@ -1801,8 +1883,6 @@ common color_pallete, clustercolor, shadecolor, meancolor
    if doplot_mzr then plot_mzr,sciall,prefix=prefix
    if doplot_byage then plot_byage,sciall,prefix=prefix
    if doplot_deviation then plot_deviation_fromz0line,sciall
-
-
 
 stop
 end
