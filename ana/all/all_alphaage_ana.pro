@@ -1,5 +1,6 @@
 function get_refvalue,dummy,leetho18=leetho18,gallazzi05=gallazzi05,choi14=choi14,$
-              conroy14=conroy14,derossi17=derossi17,sybilska17=sybilska17,naiman18=naiman18
+              conroy14=conroy14,derossi17=derossi17,sybilska17=sybilska17,$
+              naiman18=naiman18,saracco19=saracco19,vincenzo18=vincenzo18
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
    ;REFERENCE VALUES FOR PLOTTING
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -48,7 +49,14 @@ function get_refvalue,dummy,leetho18=leetho18,gallazzi05=gallazzi05,choi14=choi1
       return, conroy
    endif
    if keyword_set(saracco19) then begin ;7 quiescent galaxy cluster members at z=1.22
- 
+      saracco = {mass:[10.94,10.54,11.5,10.08,10.8,10.75,11.2],$
+                 zh:[0.09,0.16,0.21,-0.27,-0.18,-0.13,0.05],$
+                 zh_upper:[0.13,0.06,0.01,0.49,0.44,0.39,0.17],$
+                 zh_lower:[-0.42,-0.16,-0.21,-0.12,-0.21,-0.26,-0.05],$,
+                 have_em:[0,0,0,0,1,1,0],$
+                 age:[2.7,3.4,2.3,1.3,1.7,1.2,1.7]} 
+      saracco.zh_upper = saracco.zh+saracco.zh_upper
+      saracco.zh_lower = saracco.zh+saracco.zh_lower
       return,saracco
    endif
    if keyword_set(naiman18) then begin
@@ -92,6 +100,9 @@ function get_refvalue,dummy,leetho18=leetho18,gallazzi05=gallazzi05,choi14=choi1
       Syb_z0 = {mass:aa.field1,feh:aa.field2}
       return, syb_z0
    endif
+   if keyword_set(sybilska17_2) then begin
+
+   endif
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    ;Lu 2014
    if keyword_set(lu14) then begin
@@ -108,6 +119,14 @@ function get_refvalue,dummy,leetho18=leetho18,gallazzi05=gallazzi05,choi14=choi1
                  feh:[-.99,-0.84,-0.70,-0.52,-0.31,-0.06,0.18],$
                  feherr:[0.1,0.1,0.1,0.1,0.1,0.1,0.10,0.095]}
       return,[lu_z0,Lu_z1,Lu_somerville_z0,Lu_lu_z0]
+   endif
+   ;Vincenzo2018
+   if keyword_set(vincenzo18) then begin
+      vincenzo = {feh:[-1.0,-0.75,-0.49,-0.40,-0.32,-0.26,-0.20,-0.12,-0.06,0.01,$
+                       0.07,0.13,0.19,0.25,0.32,0.40,0.64],$
+                  mgfe:[0.35,0.33,0.30,0.28,0.26,0.25,0.23,0.21,0.19,$
+                        0.17,0.15,0.13,0.11,0.09,0.07,0.047,-0.04]}
+      return, vincenzo
    endif
 end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1108,6 +1127,7 @@ common color_pallete, clustercolor, shadecolor, meancolor
    endif
 
    naiman = get_refvalue(55,/naiman18)
+   saracco = get_refvalue(55,/saracco19)
    set_plot,'ps'
    !p.multi = [0,1,1]
    !p.font = 0
@@ -1152,9 +1172,11 @@ common color_pallete, clustercolor, shadecolor, meancolor
          oplot,!x.crange,(!x.crange-10.)*ms0451mzrpar[1]+ms0451mzrpar[0],linestyle=0,thick=2,color=fsc_color('darkred')
          oplot,naiman.mass_feh,naiman.feh,color=fsc_color('darkorchid'),thick=2      
          oplot,choi14z01.mass,choi14z01.feh,psym=cgsymcat(16),color=fsc_color('ygb5'),symsize=1
-         ;oplot,choi14z01.mass,choi14z01.feh,color=fsc_color('ygb5'),linestyle=0
          oplot,choi14z04.mass,choi14z04.feh,psym=cgsymcat(16),color=fsc_color('darkgoldenrod'),symsize=1
          ;oplot,choi14z04.mass,choi14z04.feh,color=fsc_color('darkgoldenrod'),linestyle=0
+;         cgerrplot,saracco.mass,saracco.zh_lower,saracco.zh_upper,color='darkred',psym=16
+;         oplot,saracco.mass,saracco.zh,psym=cgsymcat(16),color=fsc_color('darkred'),symsize=1
+            
          ;xyouts,11.3,-0.8,strtrim(string(agerange(n),format='(I)'),2)+'-'+strtrim(string(agerange(n+1),format='(I)'),2)+'Gyr'
 
          ;typical error bars
@@ -1186,11 +1208,11 @@ common color_pallete, clustercolor, shadecolor, meancolor
 ;                   charsize=1,symsize=2,position=[10.6,-0.6]
 
       device,/close
-   
+      vincenzo = get_refvalue(55,/vincenzo18) 
       psname=name+'_feh_alpha.eps'
       device, filename = psname,xsize = 15,ysize = 10, $
                    xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
-         xrange=[-1.,0.3]
+         xrange=[-0.6,0.3]
          yrange=[-0.5,0.9]
          plot,sci.feh,sci.alphafe,/nodata,xrange=xrange,xstyle=5,yrange=yrange,ystyle=5
          ;draw axis
@@ -1212,7 +1234,12 @@ common color_pallete, clustercolor, shadecolor, meancolor
 
            oplot,[sci(goodfit[i]).feh],[sci(goodfit[i]).alphafe],psym=cgsymcat(46),color=fsc_Color(symcol),symsize=goodsymsize[i]
          endfor
-         xyouts,-0.9,-0.4,strtrim(string(agerange(n),format='(I)'),2)+'-'+strtrim(string(agerange(n+1),format='(I)'),2)+'Gyr'
+         oplot,vincenzo.feh,vincenzo.mgfe,linestyle=0,color=fsc_color('darkorchid'),thick=4
+         ;add Kriek2016
+         oploterror,[-0.25],[0.59],[0.11],[0.11],color=fsc_color('firebrick'),psym=16,symsize=1.5
+         oplot,choi14z01.feh,choi14z01.mgfe,psym=cgsymcat(16),color=fsc_color('ygb5'),symsize=1.5
+         oplot,choi14z04.feh,choi14z04.mgfe,psym=cgsymcat(16),color=fsc_color('darkgoldenrod'),symsize=1.5
+;         xyouts,-0.9,-0.4,strtrim(string(agerange(n),format='(I)'),2)+'-'+strtrim(string(agerange(n+1),format='(I)'),2)+'Gyr'
       device,/close
    
       psname = name+'_alpha_mass.eps'
@@ -1306,7 +1333,82 @@ common color_pallete, clustercolor, shadecolor, meancolor
          endfor
          xyouts,-0.9,-0.4,strtrim(string(agerange(n),format='(I)'),2)+'-'+strtrim(string(agerange(n+1),format='(I)'),2)+'Gyr'
       device,/close
+
+      psname=name+'_age_alphafe.eps'
+      device, filename = psname,xsize = 15,ysize = 10, $
+                   xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
+         xrange=[0,13]
+         yrange=[-0.5,0.9]
+         plot,sci.age,sci.alphafe,/nodata,xrange=xrange,xstyle=5,yrange=yrange,ystyle=5
+         ;draw axis
+         axis,xaxis=0,xrange=xrange,xstyle=1,xtitle='Age(Gyr)'
+         axis,yaxis=0,yrange=yrange,ystyle=1,ytitle='[Mg/Fe]'
+         axis,xaxis=1,xrange=xrange,xstyle=1,xtickformat='(A1)'
+         axis,yaxis=1,yrange=yrange,ystyle=1,ytickformat='(A1)'
+
+         goodsymsize = 1.5/(max(sci(goodfit).snfit)-min(sci(goodfit).snfit))*sci(goodfit).snfit+0.7
+         for i=0,cgoodfit-1 do begin
+           if sci(goodfit[i]).zspec lt 0.3 then symcol = 'skyblue'
+           if sci(goodfit[i]).zspec gt 0.3 and sci(goodfit[i]).zspec lt 0.5 then symcol = 'goldenrod'
+           if sci(goodfit[i]).zspec gt 0.5 and sci(goodfit[i]).zspec lt 0.6 then symcol = 'crimson'
+
+           oplot,[sci(goodfit[i]).age],[sci(goodfit[i]).alphafe],psym=cgsymcat(46),color=fsc_Color(symcol),symsize=goodsymsize[i]
+         endfor
+         ;overplot with walcher 2016
+         oplot,[0,9],[0,9]*0.009-0.01,thick=2
+         oplot,[9,13],[9,13]*0.031-0.199,thick=2
+      device,/close
    endfor
+end
+
+pro plot_feh_alpha_byage,sciall
+   agerange = [0.5,2.,4.,6.,8.,13.]
+   colors = ['slateblue','thistle','gold','coral','firebrick']
+   vincenzo = get_refvalue(55,/vincenzo18) 
+
+   set_plot,'ps'
+   !p.multi = [0,1,1]
+   !p.font = 0
+   !p.charsize = 1.5
+   sunsym = sunsymbol()
+
+   psname='feh_alpha_byage.eps'
+   device, filename = psname,xsize = 15,ysize = 10, $
+                   xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
+   xrange=[-0.6,0.3]
+   yrange=[-0.5,0.9]
+   firstplot = 0
+   
+   goodall = where(sciall.ageform gt 0.5 and sciall.goodsn eq 1)
+   symsize = 1.5/(max(sciall(goodall).snfit)-min(sciall(goodall).snfit))*sciall.snfit+0.7   
+
+   for n=n_Elements(agerange)-2,0,-1 do begin
+      inrange = where(sciall.ageform ge agerange(n) and sciall.ageform lt agerange(n+1)$
+                      and sciall.goodsn eq 1,cinrange)
+      if cinrange eq 0 then continue
+      sci = sciall(inrange)
+      symsizenow = symsize(inrange)
+      if firstplot eq 0 then begin
+         plot,sci.feh,sci.alphafe,/nodata,xrange=xrange,xstyle=5,yrange=yrange,ystyle=5
+         ;draw axis
+         axis,xaxis=0,xrange=xrange,xstyle=1,xtitle='[Fe/H]'
+         axis,yaxis=0,yrange=yrange,ystyle=1,ytitle='[Mg/Fe]'
+         axis,xaxis=1,xrange=xrange,xstyle=1,xtickformat='(A1)'
+         axis,yaxis=1,yrange=yrange,ystyle=1,ytickformat='(A1)'
+         firstplot = 99
+      endif
+
+      for i=0,cinrange-1 do begin
+        if sci[i].zspec lt 0.3 then symnum = 6
+        if sci[i].zspec gt 0.3 and sci[i].zspec lt 0.5 then symnum = 5
+        if sci[i].zspec gt 0.5 and sci[i].zspec lt 0.6 then symnum = 4
+
+        oplot,[sci[i].feh],[sci[i].alphafe],psym=cgsymcat(symnum),color=fsc_Color(colors[n]),symsize=symsizenow[i]
+      endfor
+    endfor
+    oplot,vincenzo.feh,vincenzo.mgfe,linestyle=0,color=fsc_color('darkorchid'),thick=4
+    device,/close
+stop
 end
 
 pro calculate_nta_data, sciall,proball,coeff,coeff_err
@@ -1552,8 +1654,9 @@ common color_pallete, clustercolor, shadecolor, meancolor
 
    doplot_masshist = 0
    doplot_mzr = 0
-   doplot_byage = 0
+   doplot_byage = 1
    doplot_deviation = 0
+   doplot_alphafe = 0
 
    clustercolor = ['skyblue','goldenrod','crimson']
    shadecolor = ['honeydew','wt3','red1']
@@ -1858,13 +1961,13 @@ common color_pallete, clustercolor, shadecolor, meancolor
    wonsdss = where(sciall.zfit lt 0.3 and sciall.goodsn eq 1 and sciall.ageform gt 0.5)
    woncl0024 = where(sciall.zfit gt 0.3 and sciall.zfit lt 0.45 and sciall.goodsn eq 1 and sciall.ageform gt 0.5)
    wonms0451 = where(sciall.zfit gt 0.45 and sciall.goodsn eq 1 and sciall.ageform gt 0.5)
-   meanage_sdss = mean(sciall(wonsdss).age)
-   meanage_cl0024 = mean(sciall(woncl0024).age)
-   meanage_ms0451 = mean(sciall(wonms0451).age)
+   meanage_sdss = mean(sciall(wonsdss).ageform)
+   meanage_cl0024 = mean(sciall(woncl0024).ageform)
+   meanage_ms0451 = mean(sciall(wonms0451).ageform)
    print, 'sample          mean age          (mean age-SDSS age)*Feh_slope     (meanage-SDSS)*Mgh slope'
    print, 'SDSS',meanage_sdss
-   print, 'Cl0024',meanage_cl0024,(meanage_cl0024-meanage_sdss)*mc_feh_dev_par[1],(meanage_cl0024-meanage_sdss)*simple_mgh_dev_par[1]
-   print, 'MS0451',meanage_ms0451,(meanage_ms0451-meanage_sdss)*mc_feh_dev_par[1],(meanage_ms0451-meanage_sdss)*simple_mgh_dev_par[1]
+   print, 'Cl0024',meanage_cl0024,(meanage_cl0024-meanage_sdss)*feh_dev_par[1],(meanage_cl0024-meanage_sdss)*simple_mgh_dev_par[1]
+   print, 'MS0451',meanage_ms0451,(meanage_ms0451-meanage_sdss)*feh_dev_par[1],(meanage_ms0451-meanage_sdss)*simple_mgh_dev_par[1]
 
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    ;CALCULATE MASS LOADING FACTOR
@@ -1883,6 +1986,6 @@ common color_pallete, clustercolor, shadecolor, meancolor
    if doplot_mzr then plot_mzr,sciall,prefix=prefix
    if doplot_byage then plot_byage,sciall,prefix=prefix
    if doplot_deviation then plot_deviation_fromz0line,sciall
-
+   if doplot_alphafe then plot_feh_alpha_byage,sciall
 stop
 end
