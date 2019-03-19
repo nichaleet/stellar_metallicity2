@@ -3440,8 +3440,10 @@ pro sps_fit::getscience, files=files
         wgoodmass = where(scienceall.logmstar gt 6.)
         scienceall(wgoodmass).logmstar = scienceall(wgoodmass).logmstar-alog10(0.52^2) ;fix for the wrong calculation (should be divide by h^2 not multiply by h^2)
         ;choose quiescent only (all sn)
-        wgood = where(scienceall.oiiew gt -6. and (scienceall.fuv_v_rest gt 3. or scienceall.nuv_mag eq -99.) and scienceall.logmstar gt 0., cgood)
-        scienceall = scienceall[wgood]
+        if copynum ne '99' then begin
+           wgood = where(scienceall.oiiew gt -6. and (scienceall.fuv_v_rest gt 3. or scienceall.nuv_mag eq -99.) and scienceall.logmstar gt 0., cgood)
+           scienceall = scienceall[wgood]
+        endif else cgood=n_elements(sciall)
         ptr_free, self.science
         self.science = ptr_new(scienceall)
         self.nspec = cgood

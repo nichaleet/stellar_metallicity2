@@ -66,7 +66,7 @@ function linfitprobgrid_mc_mgh,x,y1,y2,dxarr,dy1arr,dy2arr,probcube,sigmaout
    meanerr,pararr[1,*],sigmapararr[1,*],xmeanp1,sigmamp1,sigmadp1,sigmasp1
    returnval = [xmeanp0,xmeanp1]
    sigmaout = [sigmasp0,sigmasp1]
-   stop
+;   stop
    return,returnval
 
 end

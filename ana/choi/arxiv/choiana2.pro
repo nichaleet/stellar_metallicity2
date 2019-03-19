@@ -35,25 +35,22 @@ pro choiana2
   sci12 = mrdfits(dir+'sps_fit12.fits.gz',1,/silent);6para, alpha = Mg,Fe
   ;test if the str match
   if total(sci1.fehchoi-choi.feh) ne 0. then stop, 'structure might not matched'
-  ;those with Feh measurements have to deal with them accordingly
- ; sci11.feh = sci11.pfit[0]+sci11.pfit[6]
- ; sci11.alphafe = sci11.pfit[4]-sci11.pfit[6]+interpol(miles.mgfe,miles.feh,sci11.pfit[0])
-  sci12.feh = sci12.pfit[0]+sci11.pfit[5]
-  sci12.alphafe = sci12.pfit[4]-sci11.pfit[5]+interpol(miles.mgfe,miles.feh,sci11.pfit[0])
- 
+
   ;fix the library abundance
- ; sci1.alphafe = sci1.alphafe+interpol(miles.mgfe,miles.feh,sci1.feh)
- ; sci3.alphafe = sci3.alphafe+interpol(miles.mgfe,miles.feh,sci3.feh)
- ; sci9.alphafe = sci9.alphafe+interpol(miles.mgfe,miles.feh,sci9.feh)
- ; sci10.alphafe = sci10.alphafe+interpol(miles.mgfe,miles.feh,sci10.feh)
+;  sci1.alphafe = sci1.alphafe+interpol(miles.mgfe,miles.feh,sci1.feh)
+;  sci3.alphafe = sci3.alphafe+interpol(miles.mgfe,miles.feh,sci3.feh)
+;  sci9.alphafe = sci9.alphafe+interpol(miles.mgfe,miles.feh,sci9.feh)
+;  sci10.alphafe = sci10.alphafe+interpol(miles.mgfe,miles.feh,sci10.feh)
+;  sci11.alphafe = sci11.alphafe+interpol(miles.mgfe,miles.feh,sci11.feh)
+;  sci11.pfit[4] = sci11.pfit[4]+interpol(miles.mgfe,miles.feh,sci11.feh)
+;  sci11.pfit[11] = sci11.pfit[11]+interpol(miles.cafe,miles.feh,sci11.feh)
 
   sci1.age = alog10(sci1.age)+9.
   sci3.age = alog10(sci3.age)+9.
   sci9.age = alog10(sci9.age)+9.
   sci10.age = alog10(sci10.age)+9.
   sci11.age = alog10(sci11.age)+9.
-  sci12.age = alog10(sci12.age)+9.  
-   
+ 
   sci1.ageupper = alog10(sci1.ageupper)+9.
   sci3.ageupper = alog10(sci3.ageupper)+9.
   sci9.ageupper = alog10(sci9.ageupper)+9.
@@ -104,7 +101,8 @@ pro choiana2
     cgplot,logagejc,sci9.age,/overplot,psym=16,color=fsc_color('blu5')
     cgplot,logagejc,sci10.age,/overplot,psym=14,color=fsc_color('lightseagreen')
     cgplot,logagejc,sci11.age,/overplot,psym=46,color=fsc_color('darkorchid')
-    cgplot,logagejc,sci12.age,/overplot,psym=43,color=fsc_color('black')
+    
+    oplot,!x.crange,!x.crange,linestyle=2	
   device,/close
 
   psname = 'all_choicompare_feh.eps'
@@ -126,7 +124,7 @@ pro choiana2
     cgplot,choi.feh,sci9.feh,/overplot,psym=16,color=fsc_color('blu5')
     cgplot,choi.feh,sci10.feh,/overplot,psym=14,color=fsc_color('lightseagreen')
     cgplot,choi.feh,sci11.feh,/overplot,psym=46,color=fsc_color('darkorchid')
-    cgplot,choi.feh,sci12.feh,/overplot,psym=43,color=fsc_color('black')
+    
     oplot,!x.crange,!x.crange,linestyle=2	
   device,/close
 
@@ -147,10 +145,9 @@ pro choiana2
     cgplot,choi.mgfe,sci3.alphafe,/overplot,psym=15,color=fsc_color('chocolate')
     cgplot,choi.mgfe,sci9.alphafe,/overplot,psym=16,color=fsc_color('blu5')
     cgplot,choi.mgfe,sci10.alphafe,/overplot,psym=14,color=fsc_color('lightseagreen')
-    ;cgplot,choi.mgfe,sci11.pfit[4],/overplot,psym=46,color=fsc_color('darkorchid')
-    cgplot,choi.mgfe,sci11.alphafe,/overplot,psym=46,color=fsc_color('darkorchid')
-    cgplot,choi.mgfe,sci12.alphafe,/overplot,psym=43,color=fsc_color('black')
+    cgplot,choi.mgfe,sci11.pfit[4],/overplot,psym=46,color=fsc_color('darkorchid')
+
     oplot,!x.crange,!x.crange,linestyle=2
   device,/close
-stop
+
 end

@@ -1,6 +1,7 @@
 function get_refvalue,dummy,leetho18=leetho18,gallazzi05=gallazzi05,choi14=choi14,$
               conroy14=conroy14,derossi17=derossi17,sybilska17=sybilska17,$
-              naiman18=naiman18,saracco19=saracco19,vincenzo18=vincenzo18
+              naiman18=naiman18,saracco19=saracco19,vincenzo18=vincenzo18,$
+              zahid12=zahid12,nelson19=nelson19
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
    ;REFERENCE VALUES FOR PLOTTING
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -27,19 +28,24 @@ function get_refvalue,dummy,leetho18=leetho18,gallazzi05=gallazzi05,choi14=choi1
    if keyword_set(choi14) then begin
       Choi14z01 = {zlow:0.1,zhigh:0.2,mass:[9.9,10.2,10.4,10.7,11.0],$
                    Feh:[-0.05,-0.06,-0.01,-0.03,0.02],Feherr:[0.04,0.02,0.01,0.01,0.01],$
-                   mgfe:[0.04,0.13,0.16,0.21,0.23],mgfeerr:[0.05,0.03,0.01,0.01,0.02]}
+                   mgfe:[0.04,0.13,0.16,0.21,0.23],mgfeerr:[0.05,0.03,0.01,0.01,0.02],$
+                   age:[2.8,3.57,4.25,5.5,5.84],ageerr:[0.13,0.17,0.10,0.6,0.14]}
       Choi14z02 = {zlow:0.2,zhigh:0.3,mass:[10.2,10.5,10.7,11.0,11.3],$
                    Feh:[-0.08,-0.06,-0.03,-0.01,-0.05],Feherr:[0.04,0.02,0.01,0.01,0.02],$
-                   mgfe:[0.17,0.19,0.20,0.22,0.23],mgfeerr:[0.06,0.02,0.01,0.02,0.04]}
+                   mgfe:[0.17,0.19,0.20,0.22,0.23],mgfeerr:[0.06,0.02,0.01,0.02,0.04],$
+                   age:[3.05,3.16,4.24,4.72,6.24],ageerr:[0.24,0.12,0.11,0.14,0.23]}
       Choi14z03 = {zlow:0.3,zhigh:0.4,mass:[10.5,10.8,11.0,11.3,-99],$
                    Feh:[-0.11,-0.05,-0.02,-0.03,-99],Feherr:[0.03,0.01,0.01,0.02,-99],$
-                   mgfe:[0.18,0.22,0.21,0.29,-99],mgfeerr:[0.04,0.02,0.01,0.03,-99]}
+                   mgfe:[0.18,0.22,0.21,0.29,-99],mgfeerr:[0.04,0.02,0.01,0.03,-99],$
+                   age:[3.27,3.47,4.55,5.61,-99],ageerr:[0.21,0.12,0.13,0.15,-99]}
       Choi14z04 = {zlow:0.4,zhigh:0.55,mass:[10.8,11.1,11.3,-99,-99],$
                    Feh:[-0.07,-0.04,-0.05,-99,-99],Feherr:[0.02,0.01,0.02,-99,-99],$
-                   mgfe:[0.23,0.23,0.30,-99,-99],mgfeerr:[0.04,0.02,0.03,-99,-99]}
+                   mgfe:[0.23,0.23,0.30,-99,-99],mgfeerr:[0.04,0.02,0.03,-99,-99],$
+                   age:[2.99,3.28,4.00,-99,-99],ageerr:[0.15,0.13,0.18,-99,-99]}
       Choi14z06 = {zlow:0.55,zhigh:0.7,mass:[10.9,11.0,11.3,-99,-99],$
                    Feh:[-0.15,-0.02,-0.05,-99,-99],Feherr:[0.07,0.03,0.03,-99,-99],$
-                   mgfe:[0.05,0.09,0.19,-99,-99],mgfeerr:[0.13,0.05,0.04,-99,-99]}
+                   mgfe:[0.05,0.09,0.19,-99,-99],mgfeerr:[0.13,0.05,0.04,-99,-99],$
+                   age:[2.67,2.49,3.06,-99,-99],ageerr:[0.2,0.12,0.11,-99,-99]}
       return, [Choi14z01,Choi14z02,Choi14z03,Choi14z04,Choi14z06]
    endif
    
@@ -127,6 +133,18 @@ function get_refvalue,dummy,leetho18=leetho18,gallazzi05=gallazzi05,choi14=choi1
                   mgfe:[0.35,0.33,0.30,0.28,0.26,0.25,0.23,0.21,0.19,$
                         0.17,0.15,0.13,0.11,0.09,0.07,0.047,-0.04]}
       return, vincenzo
+   endif
+   ;zahid et al. 2012
+   if keyword_set(zahid12) then begin
+      readcol,'zahid12_eta.txt',mass_low,eta_low,mass_high,eta_high
+      zahid = {mass_low:mass_low,eta_low:eta_low,mass_high:mass_high,eta_high:eta_high} 
+      return, zahid
+   endif
+
+   if keyword_set(nelson19) then begin
+      readcol,'nelson19_eta.txt',massv0,etav0,massv150,etav150,massv250,etav250
+      return, {massv0:massv0,etav0:10.^(etav0),massv150:massv150,etav150:10.^(etav150),$
+               massv250:massv250,etav250:10.^(etav250)}      
    endif
 end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -231,6 +249,7 @@ pro prepdata,sdssfile=sdssfile,cl0024file=cl0024file,ms0451file=ms0451file,$
             ofe:[0.6,0.5,0.5,0.4,0.3,0.2,0.2,0.1,0.0,0.0],$
             mgfe:[0.4,0.4,0.4,0.4,0.34,0.22,0.14,0.11,0.05,0.04],$
             cafe:[0.32,0.30,0.28,0.26,0.26,0.17,0.12,0.06,0.00,0.00]}
+
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
    ;fix the library abundance
     tofix = interpol(miles.mgfe,miles.feh,sciall.feh)
@@ -754,8 +773,14 @@ end
 
 pro deviation_fromz0line,sciall,proball,fehcoeff,mghcoeff,fileout=fileout
 ;calculate deviation as a function of formation age
-   fehideal = fehcoeff[0]+(sciall.logmstar-10.)*fehcoeff[1]
-   good = where(sciall.ageform gt 0.5,cgood,complement=bad,ncomplement=cbad)
+   ;calculate FEH IDEAL
+   fehideal = fltarr(n_Elements(sciall))
+   separate_cluster,sciall,wonsdss,woncl0024,wonms0451,cwonsdss,cwoncl0024,cwonms0451 
+   fehideal(wonsdss) = fehcoeff[0]+(sciall(wonsdss).logmstar-10.)*fehcoeff[1]
+   fehideal(woncl0024) = fehcoeff[0]+(sciall(woncl0024).logmstar-10.)*(fehcoeff[1]+fehcoeff[2])
+   fehideal(wonms0451) = fehcoeff[0]+(sciall(wonms0451).logmstar-10.)*(fehcoeff[1]+fehcoeff[3])
+
+   good = where(sciall.ageform gt 0.5 and sciall.goodsn eq 1,cgood,complement=bad,ncomplement=cbad)
    print,'number of outliers (feh deviation) is', cbad
    x=sciall(good).ageform
    y=sciall(good).feh-fehideal(good)
@@ -847,11 +872,27 @@ common color_pallete, clustercolor, shadecolor, meancolor
              cgplot,[sciall[i].ageform],[sciall[i].feh-fehideal[i]],psym=46,/overplot,symsize=symsize[i],color=colornow
           endif
       endfor
-;      bad = where(sciall.goodsn eq 0)
-;      cgplot,sciall(bad).ageform,sciall(ms0451).feh-fehideal(ms0451),psym=16,/overplot,symsize=1,color='gray'
 
-      oplot,[0,14],feh_dev_par(0)+feh_dev_par(1)*[0,14],thick=1,linestyle=1
+;      oplot,[0,14],feh_dev_par(0)+feh_dev_par(1)*[0,14],thick=1,linestyle=1
       oplot,[0,14],mc_feh_dev_par(0)+mc_feh_dev_par(1)*[0,14],thick=1,linestyle=2;,color=fsc_color('red') 
+      ;typical uncertainties
+      zmin =[0.,0.3,0.45]
+      zmax =[0.3,0.45,0.7]
+      yplot = [0.29]
+      xplot = [1.7,5,8.]
+      
+      for i=0,2 do begin
+         sel = where(sciall.goodsn eq 1 and sciall.ageform gt 0.5 and $
+                     sciall.zspec gt zmin[i] and sciall.zspec le zmax[i])
+         upperlim = [median(sciall(sel).fehupper-sciall(sel).feh)]
+         lowerlim = [median(sciall(sel).feh-sciall(sel).fehlower)]
+         leftlim  = [median(sciall(sel).ageupper-sciall(sel).age)]
+         rightlim = [median(sciall(sel).age-sciall(sel).agelower)]
+         cgplot,[xplot[i]],yplot,err_xhigh=rightlim,err_xlow=leftlim,$
+                err_yhigh=upperlim,err_ylow=lowerlim,psym=46,$
+                color=clustercolor[i],/overplot,symsize=1.2,err_thick=2
+      endfor
+      ;;;;;;;;;;;;;;;;;;;;;
 
       xyouts,1,-0.38,'older galaxies',charsize=0.8
       xyouts,9.4,-0.38,'younger galaxies',charsize=0.8
@@ -859,12 +900,11 @@ common color_pallete, clustercolor, shadecolor, meancolor
       arrow,12.1,-0.37,12.7,-0.37,/data
    device,/close
 
-
    set_plot,'ps'
    psname = 'mgh_deviation_fromz0line.eps'
    device, filename = psname,xsize = 15,ysize = 10,decomposed=1,color=1, $
               xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated;
-      yfitrange=[-0.5,0.6]
+      yfitrange=[-0.5,0.8]
       plot,sciall.ageform,sciall.ah-ahideal,psym=1,xtitle='Age of the universe at galaxy formation',ytitle='!9'+string(deltaletter)+'!x[Mg/H]',xrange=xfitrange,xstyle=9,yrange=yfitrange,/nodata,position=plotposition,/noerase,ystyle=1
 
       axis,xaxis=1,xticks=4,xtickv=[1.513,3.223, 5.747,8.422 ,12.161],xtickn=['4','2','1','0.5','0.1'],xtitle='z'
@@ -879,15 +919,33 @@ common color_pallete, clustercolor, shadecolor, meancolor
 ;      bad = where(sciall.goodsn eq 0)
 ;      cgplot,sciall(bad).ageform,sciall(ms0451).ah-ahideal(ms0451),psym=16,/overplot,symsize=1,color='gray'
 
-      oplot,[0,14],simple_mgh_dev_par(0)+simple_mgh_dev_par(1)*[0,14],thick=1,linestyle=0
-      oplot,[0,14],mc_mgh_dev_par(0)+mc_mgh_dev_par(1)*[0,14],thick=1,linestyle=2
+ ;     oplot,[0,14],simple_mgh_dev_par(0)+simple_mgh_dev_par(1)*[0,14],thick=1,linestyle=2
+      oplot,[0,14],mc_mgh_dev_par(0)-0.1+mc_mgh_dev_par(1)*[0,14],thick=1,linestyle=2
       ;oplot,[0,14],ah_dev_par_sdss(0)+ah_dev_par_sdss(1)*[0,14],thick=2,linestyle=2,color=fsc_color('blu5')
       ;oplot,[0,14],ah_dev_par_cl(0)+ah_dev_par_cl(1)*[0,14],thick=2,linestyle=2,color=fsc_color('org6')
+;typical uncertainties
+      zmin =[0.,0.3,0.45]
+      zmax =[0.3,0.45,0.7]
+      yplot = [0.65]
+      xplot = [1.7,5,8.]
+
+      for i=0,2 do begin
+         sel = where(sciall.goodsn eq 1 and sciall.ageform gt 0.5 and $
+                     sciall.zspec gt zmin[i] and sciall.zspec le zmax[i])
+         upperlim = [median(sciall(sel).ahupper-sciall(sel).ah)]
+         lowerlim = [median(sciall(sel).ah-sciall(sel).ahlower)]
+         leftlim  = [median(sciall(sel).ageupper-sciall(sel).age)]
+         rightlim = [median(sciall(sel).age-sciall(sel).agelower)]
+         cgplot,[xplot[i]],yplot,err_xhigh=rightlim,err_xlow=leftlim,$
+                err_yhigh=upperlim,err_ylow=lowerlim,psym=46,$
+                color=clustercolor[i],/overplot,symsize=1.2,err_thick=2
+      endfor
+      ;;;;;;;;;;;;;;;;;;;;;
 
       xyouts,1,-0.48,'older galaxies',charsize=0.8
-      xyouts,9.4,-0.48,'younger galaxies',charsize=0.8
-      arrow,0.9,-0.37,0.3,-0.37,/data
-      arrow,12.1,-0.37,12.7,-0.37,/data
+      xyouts,9.3,-0.48,'younger galaxies',charsize=0.8
+      arrow,0.9,-0.46,0.3,-0.46,/data
+      arrow,12.1,-0.46,12.7,-0.46,/data
    device,/close
 end
 
@@ -1024,7 +1082,7 @@ common color_pallete, clustercolor, shadecolor, meancolor
       axis,xaxis=1,xrange=xrange,xstyle=1,xtickformat='(A1)'
       axis,yaxis=1,yrange=yrange,ystyle=1,ytickformat='(A1)'
 
-      al_legend,['z~0 SDSS','z~0.4 Cl0024','z~0.55 MS0451'],psym=cgsymcat(46),$
+      al_legend,['z~0 SDSS','z~0.4 Cl0024','z~0.54 MS0451'],psym=cgsymcat(46),$
                  box=0,colors=['skyblue','goldenrod','crimson'],$
                  /bottom,/right,charsize=1,symsize=2
    device,/close
@@ -1107,6 +1165,8 @@ common color_pallete, clustercolor, shadecolor, meancolor
    choi = get_refvalue(5,/choi14)
    choi14z01 = choi[where(choi.zlow eq 0.1)]
    choi14z04 = choi[where(choi.zlow eq 0.4)]
+   choi14z02 = choi[where(choi.zlow eq 0.2)]
+   choi14z06 = choi[where(choi.zlow eq 0.55)]
    
    if plotfixslope then begin
      sdssmzrpar = sdssmzrpar_fixslope
@@ -1170,9 +1230,11 @@ common color_pallete, clustercolor, shadecolor, meancolor
          oplot,!x.crange,(!x.crange-10.)*sdssmzrpar[1]+sdssmzrpar[0],linestyle=0,thick=2,color=fsc_color('navyblue')
          oplot,!x.crange,(!x.crange-10.)*cl0024mzrpar[1]+cl0024mzrpar[0],linestyle=0,thick=2,color=fsc_color('peru')
          oplot,!x.crange,(!x.crange-10.)*ms0451mzrpar[1]+ms0451mzrpar[0],linestyle=0,thick=2,color=fsc_color('darkred')
-         oplot,naiman.mass_feh,naiman.feh,color=fsc_color('darkorchid'),thick=2      
+         oplot,naiman.mass_feh,naiman.feh,color=fsc_color('darkorchid'),thick=3, linestyle=2 
          oplot,choi14z01.mass,choi14z01.feh,psym=cgsymcat(16),color=fsc_color('ygb5'),symsize=1
          oplot,choi14z04.mass,choi14z04.feh,psym=cgsymcat(16),color=fsc_color('darkgoldenrod'),symsize=1
+         ;add Kriek2016
+         oploterror,[11.5],[-0.25],[0.1],[0.11],color=fsc_color('firebrick'),psym=16,symsize=1.5
          ;oplot,choi14z04.mass,choi14z04.feh,color=fsc_color('darkgoldenrod'),linestyle=0
 ;         cgerrplot,saracco.mass,saracco.zh_lower,saracco.zh_upper,color='darkred',psym=16
 ;         oplot,saracco.mass,saracco.zh,psym=cgsymcat(16),color=fsc_color('darkred'),symsize=1
@@ -1181,7 +1243,7 @@ common color_pallete, clustercolor, shadecolor, meancolor
 
          ;typical error bars
          locsdss = where(goodness eq 1 and sci.zspec lt 0.3)
-         uppersdss = median(sci(locsdss).fehupper-sci(locsdss).feh)
+         uppersdss= median(sci(locsdss).fehupper-sci(locsdss).feh)
          lowersdss = median(sci(locsdss).feh-sci(locsdss).fehlower)
          loccl0024 = where(goodness eq 1 and sci.zspec gt 0.3 and sci.zspec lt 0.5)
          uppercl0024 = median(sci(loccl0024).fehupper-sci(loccl0024).feh)
@@ -1202,10 +1264,10 @@ common color_pallete, clustercolor, shadecolor, meancolor
          xlab = 11.2
          cgplot,[xlab],[ylab],err_xhigh=[0.1],err_xlow=[0.1],err_yhigh=upperms0451,err_ylow=lowerms0451,$
                 color='crimson',psym=46,symsize=2,/overplot
-         xyouts,xlab+0.15,ylab-0.025,'z~0.55',charsize=1
+         xyouts,xlab+0.15,ylab-0.025,'z~0.54',charsize=1
          ;label
-;         al_legend,['z~0 SDSS','z~0.4 Cl0024','z~0.55 MS0451'],psym=cgsymcat(46),box=0,colors=['skyblue','goldenrod','crimson'],$
-;                   charsize=1,symsize=2,position=[10.6,-0.6]
+;      Fraction under estimatedymcat(46),box=0,colors=['skyblue','goldenrod','crimson'],$,psym=1
+;                   charsize=1,sy!xmsize=2,position=[10.6,-0.6]
 
       device,/close
       vincenzo = get_refvalue(55,/vincenzo18) 
@@ -1270,8 +1332,10 @@ common color_pallete, clustercolor, shadecolor, meancolor
  
    ;      oploterror,choi14z04.mass,choi14z04.feh+choi14z04.mgfe,sqrt(choi14z04.feherr^2+choi14z04.mgfe^2),color=fsc_color('darkgoldenrod'),linethick=2,errcolor=fsc_color('darkgoldenrod')
          oplot,choi14z04.mass,choi14z04.feh+choi14z04.mgfe,psym=cgsymcat(16),color=fsc_color('darkgoldenrod'),symsize=1.
-
-         oplot,naiman.mass_mgh,naiman.mgh,color=fsc_color('darkorchid'),thick=2      
+         
+         ;add Kriek2016
+         oploterror,[11.5],[0.59-0.25],[0.1],[0.16],color=fsc_color('firebrick'),psym=16,symsize=1.5
+         oplot,naiman.mass_mgh,naiman.mgh,color=fsc_color('darkorchid'),thick=3,linestyle=2      
          ;add best fit lines
          oplot,!x.crange,(!x.crange-10.)*sdssmarpar[1]+sdssmarpar[0],linestyle=0,thick=2,color=fsc_color('navyblue')
          oplot,!x.crange,(!x.crange-10.)*cl0024marpar[1]+cl0024marpar[0],linestyle=0,thick=2,color=fsc_color('peru')
@@ -1301,7 +1365,7 @@ common color_pallete, clustercolor, shadecolor, meancolor
          xlab = 11.2
          cgplot,[xlab],[ylab],err_xhigh=[0.1],err_xlow=[0.1],err_yhigh=upperms0451,err_ylow=lowerms0451,$
                 color='crimson',psym=46,symsize=2,/overplot
-         xyouts,xlab+0.15,ylab-0.025,'z~0.55',charsize=1
+         xyouts,xlab+0.15,ylab-0.025,'z~0.54',charsize=1
 
 
       device,/close
@@ -1357,6 +1421,13 @@ common color_pallete, clustercolor, shadecolor, meancolor
          ;overplot with walcher 2016
          oplot,[0,9],[0,9]*0.009-0.01,thick=2
          oplot,[9,13],[9,13]*0.031-0.199,thick=2
+         ;overplot with choi14
+         oplot,choi14z01.age,choi14z01.mgfe,psym=cgsymcat(16),color=fsc_color('ygb5'),symsize=1.2
+;         oplot,choi14z02.age,choi14z02.mgfe,psym=cgsymcat(16),color=fsc_color('darkgreen'),symsize=1.
+         oplot,choi14z04.age,choi14z04.mgfe,psym=cgsymcat(16),color=fsc_color('darkgoldenrod'),symsize=1.2
+;         oplot,choi14z06.age,choi14z06.mgfe,psym=cgsymcat(16),color=fsc_color('indianred'),symsize=1.
+         ;add Kriek2016
+         oploterror,[2.71],[0.59],[0.22],[0.11],color=fsc_color('firebrick'),psym=16,symsize=1.5
       device,/close
    endfor
 end
@@ -1417,7 +1488,7 @@ pro calculate_nta_data, sciall,proball,coeff,coeff_err
    ;solar abundances from asplund2009 (number of atoms)
    solarmgh = 10^(7.64-12.)*24. ;times 24 to convert number of atoms to mass. cause Mg is 24 mass number.
    yieldmgh = 3.*solarmgh
-
+;   yieldmgh = 6.*solarmgh
    ;prep data
    won = where(sciall.goodsn eq 1,cwon)
    sci = sciall[won]
@@ -1456,6 +1527,7 @@ pro calculate_nta_data, sciall,proball,coeff,coeff_err
 
    nmc = 1000
    linparmc = fltarr(2,nmc)
+   ntaarray = fltarr(nobjs,nmc)
    for i = 0,nmc-1 do begin
       logmghrdm = fltarr(nobjs)
       randomarr = randomu(seed,nobjs)
@@ -1464,10 +1536,13 @@ pro calculate_nta_data, sciall,proball,coeff,coeff_err
       endfor
 
       mghrdm = (solarmgh*10.^(logmghrdm))<(yieldmgh*0.999)
-      ntardm = alog10((1.-R)*(yieldmgh/mghrdm-1.))
+      ntardm = (1.-R)*(yieldmgh/mghrdm-1.)
+      ntaarray[*,i] = ntardm
+      ntardm = alog10(ntardm)
       linpar_rdm = linfit(mass-10.,ntardm)
       linparmc[*,i] = linpar_rdm
    endfor
+   ntaerr = stddev(ntaarray,dimension=2)
    linparmgh = mean(linparmc,dimension=2)
    linparmgh_err = stddev(linparmc,dimension=2)
    print, 'CALCULATING NTA FROM DATA DIRECTLY'
@@ -1507,6 +1582,8 @@ pro calculate_nta_data, sciall,proball,coeff,coeff_err
    nta_bulatto = [3.2]
    ntaupper_bulatto = [10.7]
    ntalower_bulatto = [1.1]
+
+   nelson = get_refvalue(55,/nelson19) 
    ;;;;;;;;;;;;;;;;;;
    set_plot,'ps'
    !p.font = 0
@@ -1536,16 +1613,30 @@ pro calculate_nta_data, sciall,proball,coeff,coeff_err
 
       oplot,massline,10.^fitlogntamgh,color=fsc_color('darkred')
       oplot,logmass_lu, 10.^logeta_lu,linestyle=2,color=fsc_color('navy')
-      oplot,mass_muratov,nta_muratov,psym=0,linestyle=1
+      oplot,mass_muratov,nta_muratov,psym=0,linestyle=1,thick=2
+;      zahid=get_refvalue(55,/zahid12)
+;      oplot,zahid.mass_low,zahid.eta_low,linestyle=2,color=fsc_color('darkorchid')
+;      oplot,zahid.mass_high,zahid.eta_high,linestyle=2,color=fsc_color('darkorchid')
       oploterror,mass_jc,nta_jc,ntaerr_jc,psym=1,color=fsc_color('navy')
       cgplot,mass_jc,nta_jc,psym=16,color=fsc_color('navy'),/overplot
-      xyouts,9.1,0.02,'!9'+string(ntaletter)+' !9'+string(proptoletter)+' !xM!D*!N!E'+sigfig(linparmgh(1),2)+string(pmsymbol)+sigfig(linparmgh_err(1),1),charsize=1.5
+      
+;      oplot,nelson.massv0,nelson.etav0,color=fsc_color('blue')
+      oplot,nelson.massv150,nelson.etav150,color=fsc_color('orange'),linestyle=3
+      oplot,nelson.massv250,nelson.etav250,color=fsc_color('darkred'),linestyle=3
+      xyouts,9.1,0.02,'!9'+string(ntaletter)+' !9'+string(proptoletter)+' !xM!D*!N!E'+sigfig(linparmgh(1),2)+'!9'+string(pmsymbol)+'!x'+sigfig(linparmgh_err(1),1),charsize=1.5
       axis,xaxis=0,xrange=xrange,xtitle='Log(M!L*!N/M'+sunsym+')'
       axis,xaxis=1,xrange=xrange,xtickformat='(A1)'
       axis,yaxis=0,yrange=yrange,ytitle='!9'+string(ntaletter)+'!x'
       axis,yaxis=1,yrange=yrange,ytickformat='(A1)'
    device,/close
-;stop
+;calculate median uncertainties
+separate_cluster,sci,wonsdss,woncl0024,wonms0451,cwonsdss,cwoncl0024,cwonms0451  
+print, 'uncertainties in nta, mean ,median'
+print,'all',alog10(mean(ntaerr/ntamgh)),alog10(median(ntaerr/ntamgh))
+print,'sdss',alog10(mean(ntaerr(wonsdss)/ntamgh(wonsdss))),alog10(median(ntaerr(wonsdss)/ntamgh(wonsdss)))
+print,'cl0024',alog10(mean(ntaerr(woncl0024)/ntamgh(woncl0024))),alog10(median(ntaerr(woncl0024)/ntamgh(woncl0024)))
+print,'ms0451',alog10(mean(ntaerr(wonms0451)/ntamgh(wonms0451))),alog10(median(ntaerr(wonms0451)/ntamgh(wonms0451)))
+stop
 end
 
 pro calculate_nta_function, coeff, coefferr
@@ -1634,6 +1725,100 @@ pro calculate_nta_function, coeff, coefferr
 
 end
 
+pro writetable,sciall
+    separate_cluster,sciall,wonsdss,woncl0024,wonms0451,cwonsdss,cwoncl0024,cwonms0451 
+    cl0024 = sciall(woncl0024)
+    ms0451 = sciall(wonms0451)
+    wbad1 = where(strmatch(strtrim(cl0024.objname,2),'p30i4c3') eq 1,cbad1)
+    if cbad1 eq 1 then begin
+       cl0024(wbad1).ra= 6.6246667
+       cl0024(wbad1).dec= 17.168556
+    endif
+    wbad2 = where(strmatch(strtrim(cl0024.objname,2),'p35i143c2') eq 1,cbad2)
+    if cbad2 eq 1 then begin
+       cl0024(wbad2).ra= 6.6552917
+       cl0024(wbad2).dec=  17.166722
+    endif
+    for jj=0,1 do begin
+       if jj eq 0 then sci = cl0024
+       if jj eq 1 then sci = ms0451
+       ra = sci.ra
+       ord = sort(ra)
+       ra = sci(ord).ra
+       dec = sci(ord).dec
+       logmstar = sci(ord).logmstar
+       feh = sci(ord).feh
+       fehupper = sci(ord).fehupper
+       fehlower = sci(ord).fehlower
+       age = sci(ord).age
+       ageupper = sci(ord).ageupper
+       agelower = sci(ord).agelower    
+       mgfe = sci(ord).alphafe
+       mgfeupper = sci(ord).alphafeupper
+       mgfelower = sci(ord).alphafelower
+       redshift = sci(ord).zfit
+       if jj eq 0 then begin
+          openw, lun2, 'table2_paper2.tex', /get_lun
+          printf, lun2, '\begin{deluxetable*}{llllCCC}'
+          printf, lun2, '\tablewidth{0pt}'
+          printf, lun2, '\tablecolumns{9}'
+          printf, lun2, '\tablecaption{Catalog of Measured Age and Metalicities\label{tab:catalog}}'
+          printf, lun2, '\tablehead{\colhead{No.} & \colhead{RA} & \colhead{DEC} & \colhead{$log(M_*/M_\odot)$} & \colhead{[Fe/H]} & \colhead{Age (Gyr)} & \colhead{S/N}'
+          printf, lun2, '\startdata'
+       endif
+ 
+       for i=0,9 do begin
+           fes = string(feh[i],fehupper[i],fehlower[i], format='("$",D+5.2,"^{",D+5.2,"}_{",D+5.2,"}$")')
+           ages = string(age[i],ageupper[i],agelower[i],format='("$",D5.1,"^{",D5.1,"}_{",D5.1,"}$")')
+           mgfes = string(mgfe[i],mgfeupper[i],mgfelower[i],format='("$",D+5.2,"^{",D+5.2,"}_{",D+5.2,"}$")')
+           radec, ra[i], dec[i], r1, r2, r3, d1, d2, d3
+           ras = string(r1, r2, r3, format='(I02,1X,I02,1X,D05.2)')
+           decs = (dec[i] lt 0 ? '-' : '+')+string(abs(d1), abs(d2), abs(d3), format='(I02,1X,I02,1X,D04.1)')
+           mass = string(logmstar[i],format='(D4.1)')
+           if i ge 9 then nos = string(i+1,format='(I02)') else nos= string(i+1,format='(I01)')
+   
+           printf, lun2,nos,ras,decs,mass,ages,fes,mgfes, format='(A3,2(" & ",A11)," & ",A5,4(" & ",A24),"\\")'
+       endfor
+    endfor
+    close,lun2
+    free_lun, lun2
+
+    openw, lun2, 'table1_catalog.txt', /get_lun
+    printf, lun2, 'No.    RA    DEC    logM    FeH50   FeH84   FeH16    AgeGyr50   '+$
+                     'AgeGyr84 AgeGyr16 Mgfe50  MgFe84   Mgfe16'
+    for jj=0,1 do begin
+       if jj eq 0 then sci = cl0024
+       if jj eq 1 then sci = ms0451
+       ra = sci.ra
+       ord = sort(ra)
+       ra = sci(ord).ra
+       dec = sci(ord).dec
+       logmstar = sci(ord).logmstar
+       feh = sci(ord).feh
+       fehupper = sci(ord).fehupper
+       fehlower = sci(ord).fehlower
+       age = sci(ord).age
+       ageupper = sci(ord).ageupper
+       agelower = sci(ord).agelower
+       mgfe = sci(ord).alphafe
+       mgfeupper = sci(ord).alphafeupper
+       mgfelower = sci(ord).alphafelower
+       redshift = sci(ord).zfit
+
+       n = n_elements(ra)
+       for i=0, n-1 do begin
+           radec, ra[i], dec[i], r1, r2, r3, d1, d2, d3
+           ras = string(r1, r2, r3, format='(I02,1X,I02,1X,D05.2)')
+           decs = (dec[i] lt 0 ? '-' : '+')+string(abs(d1), abs(d2), abs(d3), format='(I02,1X,I02,1X,D04.1)')
+           printf,lun2,i+1,ras,decs,logmstar[i],feh[i],fehupper[i],fehlower[i],age[i],ageupper[i],agelower[i],$
+                  mgfe[i],mgfeupper[i],mgfelower[i],$
+                  format='(I02,1x,A,1x,A,1x,D4.1,1x,D+5.2,1x,D+5.2,1x,D+5.2,1x,D5.1,1x,D5.1,1x,D5.1,1x,D+5.2,1x,D+5.2,1x,D+5.2)'
+       endfor          
+    endfor
+    close,lun2
+    free_lun, lun2
+    stop
+end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;MAIN PROGRAM;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1657,6 +1842,7 @@ common color_pallete, clustercolor, shadecolor, meancolor
    doplot_byage = 1
    doplot_deviation = 0
    doplot_alphafe = 0
+   dowritetable = 0
 
    clustercolor = ['skyblue','goldenrod','crimson']
    shadecolor = ['honeydew','wt3','red1']
@@ -1684,7 +1870,10 @@ common color_pallete, clustercolor, shadecolor, meancolor
    linfitparam_fixslope_file = 'linfitpar_fixslope_'+prefix+'.sav'
    fileancova = 'ancova_outstr_'+prefix+'.fits'
    fileanova = 'anova_evolution_outstr_'+prefix+'.fits'
-   deviationparam_file = 'deviationparam_'+prefix+'.sav'
+;   deviationparam_file = 'deviationparam_'+prefix+'.sav'
+   deviationparam_file = 'deviationparam_mgn_realz0.sav' ;model with interaction terms
+;  deviationparam_file = 'deviationparam_mgn_model1.sav' ;model without interaction terms
+;   deviationparam_file = 'deviationparam_mgn_rmmass.sav' ;model with interaction terms, remove all mass
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    ;;;PREP DATA;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1728,7 +1917,6 @@ common color_pallete, clustercolor, shadecolor, meancolor
    sciall(newgood).goodsn = 1
 ;   sciall([185,213,178,195]).goodsn = 0
    sciall([185,213,195]).goodsn = 0
-
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    ;average and get the highlight
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1847,7 +2035,12 @@ common color_pallete, clustercolor, shadecolor, meancolor
    print, ';;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;'
    print, ':::TEST EVOLUTION WITH ANCOVA (FULL METHOD):::'
    if redoancova then ancova,sciall,proball,fileancova=fileancova
-   restore, fileancova
+   restore, fileancova   
+;   goodmass = where(sciall.logmstar gt 9.6)
+;   sciall = sciall(goodmass)
+;   proball = proball(goodmass)
+;   if redoancova then ancova,sciall,proball,fileancova='ancova_outstr_limmass9.6.fits'
+;   restore, 'ancova_outstr_limmass9.6.fits'
    fchange_mo1_feh = (rsq_feh_mo1/df1_mo1)/((1.-rsq_feh_mo1)/df2_mo1)
    fchange_mo2_feh = ((rsq_feh_mo2-rsq_feh_mo1)/(df1_mo2-df1_mo1))/((1.-rsq_feh_mo2)/df2_mo2)
    dummy = mpftest(fchange_mo1_feh,df1_mo1,df2_mo1)
@@ -1940,10 +2133,13 @@ common color_pallete, clustercolor, shadecolor, meancolor
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    ;DEVIATION FROM Z0 LINE
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   fehcoeff = [const_feh_mo2,coeff_feh_mo2[0]]
+;   fehcoeff = [const_feh_mo2,coeff_feh_mo2[0],coeff_feh_mo2[3],coeff_feh_mo2[4]] ;(rmmass)
+;   fehcoeff = [const_feh_mo1,coeff_feh_mo2[0],0.,0.] ;model with interaction terms (realz0)
+   fehcoeff = [const_feh_mo1,coeff_feh_mo1[0],0.,0.] ;model with no interaction terms (model1)
    mghcoeff = [const_mgh_mo3,coeff_mgh_mo3[0]]
    if redodeviation_fromz0line then deviation_fromz0line,sciall,proball,fehcoeff,$
                                     mghcoeff,fileout=deviationparam_file
+   print, 'RESTORING ',deviationparam_file
    restore,deviationparam_file
    print,';;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;'
    print,'DEVIATION FROM Z0 LINE'
@@ -1964,7 +2160,7 @@ common color_pallete, clustercolor, shadecolor, meancolor
    meanage_sdss = mean(sciall(wonsdss).ageform)
    meanage_cl0024 = mean(sciall(woncl0024).ageform)
    meanage_ms0451 = mean(sciall(wonms0451).ageform)
-   print, 'sample          mean age          (mean age-SDSS age)*Feh_slope     (meanage-SDSS)*Mgh slope'
+   print, 'sample          mean age form          (mean age-SDSS age)*Feh_slope     (meanage-SDSS)*Mgh slope'
    print, 'SDSS',meanage_sdss
    print, 'Cl0024',meanage_cl0024,(meanage_cl0024-meanage_sdss)*feh_dev_par[1],(meanage_cl0024-meanage_sdss)*simple_mgh_dev_par[1]
    print, 'MS0451',meanage_ms0451,(meanage_ms0451-meanage_sdss)*feh_dev_par[1],(meanage_ms0451-meanage_sdss)*simple_mgh_dev_par[1]
@@ -1980,12 +2176,11 @@ common color_pallete, clustercolor, shadecolor, meancolor
    endif
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
    if doplot_masshist then plot_masshist,sciall
    if doplot_mzr then plot_mzr,sciall,prefix=prefix
    if doplot_byage then plot_byage,sciall,prefix=prefix
    if doplot_deviation then plot_deviation_fromz0line,sciall
    if doplot_alphafe then plot_feh_alpha_byage,sciall
+   if dowritetable then writetable,sciall 
 stop
 end
