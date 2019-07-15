@@ -1205,7 +1205,7 @@ common color_pallete, clustercolor, shadecolor, meancolor
      goodfit = where(goodness eq 1,cgoodfit, complement=badfit,ncomplement=cbadfit)
      name = 'univage_'+strtrim(string(agerange(n),format='(I)'),2)+'_'+strtrim(string(agerange(n+1),format='(I)'),2) 
      ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
-      psname= name+'_feh_mass.eps'
+      psname= name+'_feh_mass_revised.eps'
       device, filename = psname,xsize = 15,ysize = 10, $
                    xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
          xrange=[9.,12]
@@ -1231,11 +1231,11 @@ common color_pallete, clustercolor, shadecolor, meancolor
          oplot,!x.crange,(!x.crange-10.)*cl0024mzrpar[1]+cl0024mzrpar[0],linestyle=0,thick=2,color=fsc_color('peru')
          oplot,!x.crange,(!x.crange-10.)*ms0451mzrpar[1]+ms0451mzrpar[0],linestyle=0,thick=2,color=fsc_color('darkred')
          oplot,naiman.mass_feh,naiman.feh,color=fsc_color('darkorchid'),thick=3, linestyle=2 
-         oplot,choi14z01.mass,choi14z01.feh,psym=cgsymcat(16),color=fsc_color('ygb5'),symsize=1
-         oplot,choi14z04.mass,choi14z04.feh,psym=cgsymcat(16),color=fsc_color('darkgoldenrod'),symsize=1
+         oplot,choi14z01.mass,choi14z01.feh,psym=cgsymcat(16),color=fsc_color('ygb5'),symsize=1.2
+         oplot,choi14z04.mass,choi14z04.feh,psym=cgsymcat(16),color=fsc_color('saddlebrown'),symsize=1.2
          ;add Kriek2016
          oploterror,[11.5],[-0.25],[0.1],[0.11],color=fsc_color('firebrick'),psym=16,symsize=1.5
-         ;oplot,choi14z04.mass,choi14z04.feh,color=fsc_color('darkgoldenrod'),linestyle=0
+         ;oplot,choi14z04.mass,choi14z04.feh,color=fsc_color('saddlebrown'),linestyle=0
 ;         cgerrplot,saracco.mass,saracco.zh_lower,saracco.zh_upper,color='darkred',psym=16
 ;         oplot,saracco.mass,saracco.zh,psym=cgsymcat(16),color=fsc_color('darkred'),symsize=1
             
@@ -1271,7 +1271,7 @@ common color_pallete, clustercolor, shadecolor, meancolor
 
       device,/close
       vincenzo = get_refvalue(55,/vincenzo18) 
-      psname=name+'_feh_alpha.eps'
+      psname=name+'_feh_alpha_revised.eps'
       device, filename = psname,xsize = 15,ysize = 10, $
                    xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
          xrange=[-0.6,0.3]
@@ -1300,11 +1300,11 @@ common color_pallete, clustercolor, shadecolor, meancolor
          ;add Kriek2016
          oploterror,[-0.25],[0.59],[0.11],[0.11],color=fsc_color('firebrick'),psym=16,symsize=1.5
          oplot,choi14z01.feh,choi14z01.mgfe,psym=cgsymcat(16),color=fsc_color('ygb5'),symsize=1.5
-         oplot,choi14z04.feh,choi14z04.mgfe,psym=cgsymcat(16),color=fsc_color('darkgoldenrod'),symsize=1.5
+         oplot,choi14z04.feh,choi14z04.mgfe,psym=cgsymcat(16),color=fsc_color('saddlebrown'),symsize=1.5
 ;         xyouts,-0.9,-0.4,strtrim(string(agerange(n),format='(I)'),2)+'-'+strtrim(string(agerange(n+1),format='(I)'),2)+'Gyr'
       device,/close
    
-      psname = name+'_alpha_mass.eps'
+      psname = name+'_alpha_mass_revised.eps'
       device,filename = psname,xsize = 15,ysize = 10, $
                    xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
          xrange=[9.,12]
@@ -1328,10 +1328,10 @@ common color_pallete, clustercolor, shadecolor, meancolor
          endfor
          ;Add Choi's data
    ;      oploterror,choi14z01.mass,choi14z01.feh+choi14z01.mgfe,sqrt(choi14z01.feherr^2+choi14z01.mgfe^2),color=fsc_color('ygb5'),linethick=2,errcolor=fsc_color('ygb5')
-         oplot,choi14z01.mass,choi14z01.feh+choi14z01.mgfe,psym=cgsymcat(16),color=fsc_color('ygb5'),symsize=1.
+         oplot,choi14z01.mass,choi14z01.feh+choi14z01.mgfe,psym=cgsymcat(16),color=fsc_color('ygb5'),symsize=1.2
  
-   ;      oploterror,choi14z04.mass,choi14z04.feh+choi14z04.mgfe,sqrt(choi14z04.feherr^2+choi14z04.mgfe^2),color=fsc_color('darkgoldenrod'),linethick=2,errcolor=fsc_color('darkgoldenrod')
-         oplot,choi14z04.mass,choi14z04.feh+choi14z04.mgfe,psym=cgsymcat(16),color=fsc_color('darkgoldenrod'),symsize=1.
+   ;      oploterror,choi14z04.mass,choi14z04.feh+choi14z04.mgfe,sqrt(choi14z04.feherr^2+choi14z04.mgfe^2),color=fsc_color('saddlebrown'),linethick=2,errcolor=fsc_color('saddlebrown')
+         oplot,choi14z04.mass,choi14z04.feh+choi14z04.mgfe,psym=cgsymcat(16),color=fsc_color('saddlebrown'),symsize=1.2
          
          ;add Kriek2016
          oploterror,[11.5],[0.59-0.25],[0.1],[0.16],color=fsc_color('firebrick'),psym=16,symsize=1.5
@@ -1370,7 +1370,7 @@ common color_pallete, clustercolor, shadecolor, meancolor
 
       device,/close
 
-      psname=name+'_mass_alphafe.eps'
+      psname=name+'_mass_alphafe_revised.eps'
       device, filename = psname,xsize = 15,ysize = 10, $
                    xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
          xrange=[9.5,12]
@@ -1398,7 +1398,7 @@ common color_pallete, clustercolor, shadecolor, meancolor
          xyouts,-0.9,-0.4,strtrim(string(agerange(n),format='(I)'),2)+'-'+strtrim(string(agerange(n+1),format='(I)'),2)+'Gyr'
       device,/close
 
-      psname=name+'_age_alphafe.eps'
+      psname=name+'_age_alphafe_revised.eps'
       device, filename = psname,xsize = 15,ysize = 10, $
                    xoffset = 0,yoffset = 0,scale_factor = 1.0,/encapsulated,/color
          xrange=[0,13]
@@ -1424,12 +1424,13 @@ common color_pallete, clustercolor, shadecolor, meancolor
          ;overplot with choi14
          oplot,choi14z01.age,choi14z01.mgfe,psym=cgsymcat(16),color=fsc_color('ygb5'),symsize=1.2
 ;         oplot,choi14z02.age,choi14z02.mgfe,psym=cgsymcat(16),color=fsc_color('darkgreen'),symsize=1.
-         oplot,choi14z04.age,choi14z04.mgfe,psym=cgsymcat(16),color=fsc_color('darkgoldenrod'),symsize=1.2
+         oplot,choi14z04.age,choi14z04.mgfe,psym=cgsymcat(16),color=fsc_color('saddlebrown'),symsize=1.2
 ;         oplot,choi14z06.age,choi14z06.mgfe,psym=cgsymcat(16),color=fsc_color('indianred'),symsize=1.
          ;add Kriek2016
          oploterror,[2.71],[0.59],[0.22],[0.11],color=fsc_color('firebrick'),psym=16,symsize=1.5
       device,/close
    endfor
+   stop
 end
 
 pro plot_feh_alpha_byage,sciall
@@ -1924,7 +1925,7 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;MAIN PROGRAM;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-pro all_alphaage_ana,domgo=domgo
+pro all_alphaage_ana_revised,domgo=domgo
 common filenames, aveparam_file,linfitparam_file,linfitparam_fixslope_file,fileanova,$
                 fileancova,deviationparam_file
 
@@ -1941,10 +1942,10 @@ common color_pallete, clustercolor, shadecolor, meancolor
 
    doplot_masshist = 0
    doplot_mzr = 0
-   doplot_byage = 0
+   doplot_byage = 1
    doplot_deviation = 0
    doplot_alphafe = 0
-   dowritetable = 1
+   dowritetable = 0
 
    clustercolor = ['skyblue','goldenrod','crimson']
    shadecolor = ['honeydew','wt3','red1']
